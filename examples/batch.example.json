@@ -1,0 +1,19 @@
+{
+  "task_name": "三国奇幻首批图标",
+  "project_context": "三国奇幻",
+  "asset_domain": "game_icon_assets",
+  "items": [
+    {
+      "asset_type": "skill_icon",
+      "title": "雷暴",
+      "description": "对敌人造成雷电伤害并附带麻痹效果",
+      "category": "combat"
+    },
+    {
+      "asset_type": "buff_icon",
+      "title": "灼烧",
+      "description": "持续造成火焰伤害",
+      "category": "status"
+    }
+  ]
+}

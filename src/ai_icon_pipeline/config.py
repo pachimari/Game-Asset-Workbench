@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+TASKS_DIR = PROJECT_ROOT / "tasks"
+
+STEP_BRIEF_GENERATION = "brief_generation"
+STEP_IMAGE_PROMPT = "image_prompt"
+STEP_IMAGE_GENERATION = "image_generation"
+
+STATUS_DRAFT = "draft"
+STATUS_BRIEF_GENERATED = "brief_generated"
+STATUS_BRIEF_APPROVED = "brief_approved"
+STATUS_PROMPT_GENERATED = "prompt_generated"
+STATUS_PROMPT_APPROVED = "prompt_approved"
+STATUS_IMAGE_GENERATED = "image_generated"
+STATUS_COMPLETED = "completed"
+STATUS_FAILED = "failed"
+STATUS_ARCHIVED = "archived"
+
+DEFAULT_STYLE_SPEC = {
+    "style_preset_id": "default",
+    "style_tags": ["fantasy", "high contrast", "clean silhouette"],
+    "forbidden_elements": ["text", "watermark", "complex background"],
+    "composition_rules": [
+        "single centered subject",
+        "clear silhouette",
+        "sufficient negative space",
+    ],
+    "background_rules": {
+        "mode": "simple_or_removable",
+        "transparent_preferred": False,
+    },
+    "post_process_rules": ["resize_512", "optional_bg_cleanup"],
+}
+
+DEFAULT_RUNTIME_CONFIG = {
+    "brief_provider": "mock",
+    "prompt_provider": "mock",
+    "image_provider": "mock",
+    "candidate_count": 2,
+    "image_size": "512x512",
+}
+
+# 1x1 transparent PNG.
+PLACEHOLDER_PNG_BASE64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+    "/w8AAgMBAp0X7xwAAAAASUVORK5CYII="
+)

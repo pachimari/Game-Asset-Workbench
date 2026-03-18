@@ -1,13 +1,13 @@
-# AI 技能图标生成流水线 - 产品需求文档 (PRD)
+# AI 游戏图标资产生成流水线 - 产品需求文档 (PRD)
 
 ## 1. 执行摘要
 
 ### 问题陈述
-游戏开发过程中，技能图标设计流程繁琐：需要人工撰写技能名称/描述、转化为图像Prompt、协调美术资源、反复修改迭代。每个技能图标从需求提出到最终产出需要1-2周时间，且在迭代过程中存在大量返工。
+游戏开发过程中，图标资产设计流程繁琐：需要人工整理需求、转化为图像 Prompt、协调美术资源、反复修改迭代。技能图标、Buff 图标、道具图标、货币图标等都存在类似问题。每个图标从需求提出到最终产出需要 1-2 周时间，且在迭代过程中存在大量返工。
 
 ### 解决方案
-构建一套 AI 驱动的多 Agent 技能图标生成流水线，通过“主控编排 + 子 Agent（文案优化、出图指令生成）+ 图像生成 API（Gemini）”实现：
-"输入技能描述 → AI 分步产出 → 人工审核/重跑/手改 → 输出图标 + 全过程记录" 的闭环。
+构建一套 AI 驱动的多 Agent 游戏图标资产生成流水线，通过“主控编排 + 子 Agent（需求整理、出图指令生成）+ 图像生成 API（Gemini）”实现：
+"输入批量图标需求 → AI 分步产出 → 人工审核/重跑/手改 → 输出图标 + 全过程记录" 的闭环。
 
 本 PRD 以“本地可跑通 Demo”为目标：优先让 SOP 可重复、可演示、可迭代，不追求一次性把所有智能化（例如 Meta-Agent 自动调优）做满。
 
@@ -30,23 +30,23 @@
 
 | 角色 | 特点 | 使用场景 |
 |------|------|----------|
-| 游戏策划 | 不懂技术，了解游戏背景和需求 | 输入技能描述、审核AI输出 |
+| 游戏策划 | 不懂技术，了解游戏背景和需求 | 输入批量图标需求、审核AI输出 |
 | 美术对接 | 了解美术规范 | 审核图标、提出修改意见 |
 | 运营人员 | 需要快速产出测试用图标 | 批量生成、筛选 |
 
 ### 2.2 用户故事
 
-**故事1: 技能图标生成**
-- 作为一个游戏策划，我想要输入技能效果描述，然后自动生成技能图标，这样不需要等待美术排期
+**故事1: 批量图标资产生成**
+- 作为一个游戏策划，我想要提交一批游戏内图标需求，然后自动生成候选图标，这样不需要逐条等待美术排期
 - 验收标准：
-  - 输入技能描述后，系统自动依次执行：文案优化Agent → 出图指令生成Agent → 出图程序（Gemini Image API）
-  - 每个环节结果可见可审核
-  - 支持批量生成多个图标
+  - 输入批量需求后，系统按 item 自动依次执行：需求整理Agent → 出图指令生成Agent → 出图程序（Gemini Image API）
+  - 每个 item 的每个环节结果可见可审核
+  - 支持一个 task 内包含多个 item
 
 **故事2: 人工审核与迭代**
 - 作为一个游戏策划，我想要在每个AI生成环节审核并决定是否通过，这样可以在早期发现问题避免后续浪费
 - 验收标准：
-  - 文案优化Agent结果展示后，用户可选择"通过"、"重跑"、"手动修改"
+  - 需求整理Agent结果展示后，用户可选择"通过"、"重跑"、"手动修改"
   - 出图指令生成Agent结果展示后，用户可选择"通过"、"重跑"、"手动修改"
   - 图片结果展示后，用户可选择"通过"、"重跑出图"、"返回修改出图指令"
   - 所有操作记录到聊天记录
@@ -54,7 +54,7 @@
 **故事3: 自然语言交互**
 - 作为一个游戏策划，我想要通过自然语言告诉AI需要重做或修改某个部分，这样操作更直观
 - 验收标准：
-  - 用户在聊天窗口输入"重跑文案优化Agent"、"把颜色改成蓝色"等指令
+  - 用户在聊天窗口输入"重跑需求整理"、"把颜色改成蓝色"等指令
   - 主控编排层理解指令并执行相应操作
   - 支持混合使用按钮和聊天两种方式
   - MVP 阶段优先支持有限 action 集，自由聊天作为增强层存在，解析失败时可回退到按钮操作
@@ -99,17 +99,17 @@
               └───────────────┬───────────────┘
                               ↓
 ┌─────────────────────────┐  ┌─────────────────────────┐  ┌─────────────┐
-│  文案优化Agent          │  │  出图指令生成Agent      │  │  出图程序   │
-│  - 优化技能名称/描述     │  │  - 生成出图指令/Prompt  │  │  - 调用Gemini│
-│  - 理解游戏背景          │  │  - 适配美术规范         │  │  - 批量生成 │
+│  需求整理Agent          │  │  出图指令生成Agent      │  │  出图程序   │
+│  - 整理标题/描述/关键词   │  │  - 生成出图指令/Prompt  │  │  - 调用Gemini│
+│  - 理解项目上下文         │  │  - 适配美术规范         │  │  - 批量生成 │
 │  + Prompt模板配置       │  │  + Prompt模板配置       │  │  + 后处理(可选)│
 └─────────────────────────┘  └─────────────────────────┘  └─────────────┘
 ```
 
 **说明：**
 - **主控编排（本地代码）**：负责任务目录、状态机、按钮动作、落盘、导出与指标采集；MVP 不依赖“一个全能 Agent”来承担编排。
-- **Claude Code CLI（可选但推荐）**：用于把自然语言指令（如“重跑文案”“改成蓝色”）转换为结构化 action，让编排层可稳定执行；API Key 等由本机 Claude Code 管理，Demo 项目不管理。
-- **文案优化Agent**：负责将粗糙的技能效果描述转化为优雅的技能名称和描述。
+- **Claude Code CLI（可选但推荐）**：用于把自然语言指令（如“重跑需求整理”“改成蓝色”）转换为结构化 action，让编排层可稳定执行；API Key 等由本机 Claude Code 管理，Demo 项目不管理。
+- **需求整理Agent**：负责将粗糙的图标需求转化为适合后续出图的标题、描述、关键词和视觉重点。
 - **出图指令生成Agent**：负责将文案转化为图像生成模型可理解的出图指令/Prompt，并适配美术规范。
 - **出图程序**：纯代码实现，循环调用 Gemini Image API 生成图片，不涉及 LLM；可选做后处理（例如背景清理、统一尺寸）。
 
@@ -124,13 +124,13 @@
 
 ### 3.3 Prompt模板与美术规范接口设计
 
-**文案优化Agent Prompt模板**
-- 输入：技能原始效果描述、技能类型、槽位、游戏背景
-- 输出：优化后的技能名称、描述、关键词
-- 配置项：游戏风格、规范约束
+**需求整理Agent Prompt模板**
+- 输入：资产类型、原始描述、分类、项目背景、额外上下文
+- 输出：整理后的标题、描述、关键词、视觉重点
+- 配置项：项目风格、规范约束
 
 **出图指令生成Agent Prompt模板**
-- 输入：优化后的名称、描述、关键词、游戏美术规范
+- 输入：整理后的标题、描述、关键词、视觉重点、游戏美术规范
 - 输出：面向 Gemini Image API 的图像生成指令（prompt/约束/候选数量等）
 - 配置项：色调规则、禁止元素、风格定义、构图约束（图标居中、留白、无文字等）
 
@@ -161,8 +161,8 @@
 
 | 模块 | 负责内容 | 不负责内容 |
 |------|----------|------------|
-| 主控编排层 | 状态机、任务目录、重跑、回退、导出、指标、错误恢复 | 直接生成文案/Prompt/图片 |
-| 文案优化Agent | 生成名称、描述、关键词 | 修改任务状态、直接落盘控制逻辑 |
+| 主控编排层 | 状态机、任务目录、批量任务与 item 调度、重跑、回退、导出、指标、错误恢复 | 直接生成需求摘要/Prompt/图片 |
+| 需求整理Agent | 生成标题、描述、关键词、视觉重点 | 修改任务状态、直接落盘控制逻辑 |
 | 出图指令生成Agent | 生成图像 Prompt、约束、候选策略 | 直接调用 UI 或管理文件版本 |
 | 聊天意图路由Agent | 把自然语言转成结构化 action | 执行真实业务动作 |
 | 出图程序 | 调用 Gemini Image API、重试、落盘图片 | 决定产品流程与审核逻辑 |
@@ -188,10 +188,10 @@ MVP 不要求自由聊天覆盖所有需求，而是先支持有限 action 集�
 
 | action | 含义 |
 |--------|------|
-| rerun_copywriter | 重跑文案优化 |
+| rerun_brief_generation | 重跑需求整理 |
 | rerun_prompt | 重跑出图指令生成 |
 | rerun_image | 使用当前 prompt 重跑出图 |
-| edit_copy | 手动修改名称/描述/关键词 |
+| edit_brief | 手动修改标题/描述/关键词/视觉重点 |
 | edit_prompt | 手动修改 prompt 或约束 |
 | change_color | 修改主色调/辅色 |
 | change_element | 增加或移除视觉元素 |
@@ -206,7 +206,7 @@ MVP 不要求自由聊天覆盖所有需求，而是先支持有限 action 集�
 
 | 维度 | 评估方式 |
 |------|----------|
-| 名称准确性 | 用户审核通过率 |
+| 需求整理准确性 | 用户审核通过率 |
 | Prompt有效性 | 出图成功率、图片符合度 |
 | 调度智能性 | 用户需要重跑的次数、是否需要手动修改 |
 | 成本控制 | Token消耗、API调用次数 |
@@ -240,10 +240,10 @@ MVP 不要求自由聊天覆盖所有需求，而是先支持有限 action 集�
 ┌─────────────────────────────────────────────────────────────────┐
 │                         数据层 (本地文件系统)                     │
 │  projects/ai-icon-pipeline/tasks/task_XXX/                    │
-│  ├── task.json      (当前任务快照)                              │
-│  ├── events.jsonl   (结构化事件日志)                            │
-│  ├── artifacts/     (各步骤历史版本)                             │
-│  └── images/        (生成图片与最终结果)                         │
+│  ├── task.json      (批任务快照)                                │
+│  ├── events.jsonl   (task级事件日志)                            │
+│  ├── configs/       (风格与运行配置)                             │
+│  └── items/         (各 item 的版本、图片、指标)                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -253,14 +253,14 @@ MVP 不要求自由聊天覆盖所有需求，而是先支持有限 action 集�
 
 | 状态 | 含义 | 允许动作 |
 |------|------|----------|
-| draft | 任务刚创建，尚未执行 | generate_copy |
-| copy_generated | 文案结果已生成，待审核 | approve_copy, rerun_copy, edit_copy |
-| copy_approved | 文案已确认 | generate_prompt, rollback_to_copy |
+| draft | item 刚创建，尚未执行 | generate_brief |
+| brief_generated | 需求整理结果已生成，待审核 | approve_brief, rerun_brief, edit_brief |
+| brief_approved | 需求整理已确认 | generate_prompt, rollback_to_brief |
 | prompt_generated | 出图指令已生成，待审核 | approve_prompt, rerun_prompt, edit_prompt |
 | prompt_approved | 出图指令已确认 | generate_image, rollback_to_prompt |
 | image_generated | 图片已生成，待审核 | approve_image, rerun_image, rollback_to_prompt |
-| completed | 最终结果通过审核 | export_task, archive_task |
-| failed | 当前步骤失败，需要人工处理 | retry_step, rollback_step, archive_task |
+| completed | 当前 item 最终结果通过审核 | export_item, archive_task |
+| failed | 当前 item 某一步失败，需要人工处理 | retry_step, rollback_step, archive_task |
 | archived | 已归档 | view_only |
 
 **状态机原则：**
@@ -274,73 +274,48 @@ MVP 不要求自由聊天覆盖所有需求，而是先支持有限 action 集�
 
 ```
 任务目录: tasks/task_{序号}/
-├── task.json          # 当前任务快照（当前采用版本、当前状态）
+├── task.json          # 批任务快照（item列表、汇总状态）
 │   {
-│     "task_id": "001",
-│     "status": "prompt_generated",
-│     "skill_desc": "对敌人造成雷电伤害",
-│     "skill_type": "主动",
-│     "slot_type": "技能1",
-│     "game_background": "三国",
-│     "current_versions": {
-│       "copywriter": "v002",
-│       "image_prompt": "v001",
-│       "image_generation": null
-│     },
+│     "task_id": "task_001",
+│     "task_name": "三国奇幻首批图标",
+│     "project_context": "三国奇幻",
+│     "status": "in_progress",
+│     "items": ["item_001", "item_002"],
 │     "style_spec_ref": "configs/style_spec.json"
 │   }
-├── chat.json          # 聊天记录（原始对话）
-│   [
-│     {"role": "user", "content": "重跑文案优化Agent", "timestamp": "..."},
-│     {"role": "assistant", "content": "好的...", "timestamp": "..."}
-│   ]
-├── events.jsonl       # 结构化事件日志（按钮/聊天/系统动作）
-│   {"timestamp": "...", "source": "button", "action": "generate_copy", "from": "draft", "to": "copy_generated"}
+├── events.jsonl       # task级结构化事件日志（按钮/聊天/系统动作）
+│   {"timestamp": "...", "source": "button", "action": "generate_brief", "item_id": "item_001", "from": "draft", "to": "brief_generated"}
 │   {"timestamp": "...", "source": "chat", "action": "change_color", "target_step": "image_prompt", "result": "accepted"}
-├── metrics.json       # 量化指标
-│   {
-│     "start_time": "2024-01-01T10:00:00",
-│     "end_time": "2024-01-01T10:04:32",
-│     "iterations": {"copywriter": 2, "image_prompt": 1, "image_generation": 3},
-│     "api_calls": 5,
-│     "token_usage": 15000,
-│     "estimated_cost_usd": 0.12,
-│     "status": "completed"
-│   }
 ├── configs/
 │   ├── style_spec.json      # 美术规范接口数据
 │   └── runtime_config.json  # 模型、候选数、重试次数等运行配置
-├── artifacts/
-│   ├── copywriter/
-│   │   ├── v001.json
-│   │   └── v002_manual.json
-│   ├── image_prompt/
-│   │   ├── v001.json
-│   │   └── v002.json
-│   └── image_generation/
-│       ├── v001.json
-│       └── v002.json
-├── images/
-│   ├── v001_candidate_01.png
-│   ├── v001_candidate_02.png
-│   └── approved.png
+├── items/
+│   ├── item_001/
+│   │   ├── item.json
+│   │   ├── metrics.json
+│   │   ├── events.jsonl
+│   │   ├── artifacts/
+│   │   │   ├── brief_generation/
+│   │   │   ├── image_prompt/
+│   │   │   └── image_generation/
+│   │   └── images/
+│   └── item_002/
 └── exports/
-    ├── approved_prompt.txt
     └── task_bundle.zip
 ```
 
 **数据结构原则：**
-- `task.json` 只记录“当前事实”，不承担历史归档职责。
-- 所有 AI 输出都进入 `artifacts/`，并保留版本号。
-- 所有用户操作和系统动作都记录到 `events.jsonl`，用于可追溯性和回放。
-- 聊天文本保留在 `chat.json`，结构化动作保留在 `events.jsonl`。
+- `task.json` 记录批任务层面的事实和 item 列表，不承担 item 级历史归档职责。
+- 所有 AI 输出都进入各 item 的 `artifacts/`，并保留版本号。
+- task 级和 item 级操作都记录事件日志，保证可追溯性和回放。
+- item 是最小执行单元；task 是批量调度和展示单元。
 
 ### 4.4 审核与回退规则
 
 | 阶段 | 审核项 | 通过后动作 | 不通过后动作 |
 |------|--------|------------|--------------|
-| 文案审核 | 名称是否清晰、描述是否准确、关键词是否有效 | 锁定当前文案版本并进入 Prompt 生成 | 重跑或手动修改 |
-| Prompt审核 | 是否包含主体、风格、构图、禁用元素、候选策略 | 锁定当前 Prompt 版本并进入出图 | 重跑、手改或回退文案 |
+| 需求整理审核 | 标题是否清晰、描述是否准确、关键词和视觉重点是否有效 | 锁定当前需求整理版本并进入 Prompt 生成 | 重跑或手动修改 |
+| Prompt审核 | 是否包含主体、风格、构图、禁用元素、候选策略 | 锁定当前 Prompt 版本并进入出图 | 重跑、手改或回退需求整理 |
 | 图片审核 | 主体是否清晰、构图是否适合作为图标、背景是否可控、是否符合预期风格 | 标记为 approved 并可导出 | 重跑图片或回退 Prompt |
 
 ### 4.5 集成点
@@ -395,7 +370,7 @@ MVP 不要求自由聊天覆盖所有需求，而是先支持有限 action 集�
 - `main` 分支始终保持“当前可演示”状态，不在 `main` 上直接堆叠未完成功能。
 - 每个里程碑使用独立功能分支，例如 `codex/m1-cli-pipeline`、`codex/m4-chat-routing`。
 - 每完成一个里程碑，打一个可回退的 tag，例如 `v0.1-cli`、`v0.2-review`、`v0.3-chat`。
-- Prompt 模板、style spec、任务 schema 与代码一样纳入版本管理，避免“代码可回退、配置不可回退”。
+- Prompt 模板、style spec、task/item schema 与代码一样纳入版本管理，避免“代码可回退、配置不可回退”。
 - 保留一组固定样例任务作为回归测试集，用于比较不同版本的效果、稳定性和成本。
 
 ### 5.5 推荐执行顺序

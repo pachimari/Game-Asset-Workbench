@@ -1,142 +1,216 @@
-# AI 技能图标生成流水线
+# AI 游戏图标资产生成流水线
 
-## 目标
-Demo级别：能演示、可跑通、面试可用
+本项目的目标是做一个**本地可跑通、可演示、可迭代**的 Demo：输入一批游戏内图标资产需求，经过多阶段 AI 处理和人工审核，最终产出可用的图标，并保留全过程记录。
 
-## 整体架构
+详细设计见 [PRD.md](./PRD.md)。README 只保留项目概览和执行方向。
 
-```
-输入：技能效果描述
-   ↓
-┌─────────────────────────────────────────┐
-│  Agent 1: 文案优化                       │
-│  - 输入: 技能效果 + 原始名称              │
-│  - 输出: 优化后的技能名称 + 描述          │
-└─────────────────────────────────────────┘
-   ↓
-┌─────────────────────────────────────────┐
-│  Agent 2: Prompt生成                     │
-│  - 输入: 优化后的名称 + 游戏美术规范       │
-│  - 输出: Stable Diffusion Prompt        │
-└─────────────────────────────────────────┘
-   ↓
-┌─────────────────────────────────────────┐
-│  Agent 3: 图像生成 (调用SD API)          │
-│  - 输入: SD Prompt                      │
-│  - 输出: 生成的图标图片                   │
-└─────────────────────────────────────────┘
-   ↓
-┌─────────────────────────────────────────┐
-│  人工审核                               │
-│  - 选择: 保留 / 重新生成 / 修改Prompt    │
-└─────────────────────────────────────────┘
-   ↓
-输出：审核通过的图标
+## 项目目标
+
+- 跑通一条完整 SOP：批量任务输入 -> 需求整理 -> 出图指令生成 -> 图片生成 -> 人工审核 -> 落盘/导出
+- 强调 Human-in-the-Loop，而不是一开始追求全自动
+- 支持演示、复盘、回放和后续 Prompt 迭代
+
+## 当前技术路线
+
+- **编排层**：Python 本地编排代码
+- **界面层**：Streamlit
+- **文本 Agent**：需求整理 Agent、出图指令生成 Agent
+- **聊天意图路由**：Claude Code CLI（可选，用于自然语言转结构化 action）
+- **图像生成**：Gemini Image API
+- **存储**：本地文件系统
+
+当前统一以 **Gemini Image API** 为图像生成后端，不再以 Stable Diffusion 作为主线方案。
+
+## 快速开始
+
+开发阶段推荐直接运行：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline --help
 ```
 
-## 三个Agent的Prompt设计
+如果你想把它安装成命令：
 
-### Agent 1: 文案优化
-
-**职责：** 把粗糙的技能描述优化成优雅的名字和文案
-
-**输入信息：**
-- 技能原始效果描述
-- 原始名称（可选）
-- 游戏背景/世界观
-- 技能槽位/类型
-
-**Prompt模板：**
+```bash
+python3 -m pip install -e .
 ```
-你是一个游戏文案设计师，负责为游戏技能设计优雅的名称和描述。
 
-## 游戏背景
-{{game_background}}
+创建一个单 item 批任务：
 
-## 技能信息
-- 技能槽位: {{slot_type}}
-- 技能类型: {{skill_type}} (主动/被动/终极)
-- 原始效果: {{raw_effect}}
-- 原始名称: {{raw_name}}
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline create-task \
+  --task-name "三国奇幻首批图标" \
+  --project-context "三国奇幻" \
+  --asset-type "skill_icon" \
+  --title "雷暴" \
+  --description "对敌人造成雷电伤害并附带麻痹效果" \
+  --category "combat"
+```
 
-## 要求
-1. 名称要简洁、有记忆点，契合游戏风格
-2. 描述要清晰表达技能效果
-3. 如果有同类型技能，保持命名风格一致
-4. 输出JSON格式：
+查看任务：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline show-task task_001
+```
+
+直接跑完整个 task 的 mock 流水线：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline run-pipeline task_001
+```
+
+查看某个 item：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline show-item task_001 item_001
+```
+
+如果你想停在每个生成节点做人工检查：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline run-pipeline task_001 --no-auto-approve
+PYTHONPATH=src python3 -m ai_icon_pipeline approve-step task_001 item_001 brief_generation
+PYTHONPATH=src python3 -m ai_icon_pipeline run-step task_001 item_001 image_prompt
+```
+
+也可以直接从 JSON 文件批量创建：
+
+```json
 {
-  "name": "优化后的名称",
-  "description": "技能描述",
-  "keywords": ["关键词1", "关键词2"]
+  "task_name": "三国奇幻首批图标",
+  "project_context": "三国奇幻",
+  "asset_domain": "game_icon_assets",
+  "items": [
+    {
+      "asset_type": "skill_icon",
+      "title": "雷暴",
+      "description": "对敌人造成雷电伤害并附带麻痹效果",
+      "category": "combat"
+    },
+    {
+      "asset_type": "buff_icon",
+      "title": "灼烧",
+      "description": "持续造成火焰伤害",
+      "category": "status"
+    }
+  ]
 }
 ```
 
-### Agent 2: SD Prompt生成
-
-**职责：** 把文案转化为Stable Diffusion可以理解的图像Prompt
-
-**输入信息：**
-- 优化后的技能名称
-- 技能描述
-- 关键词
-- 游戏美术规范（色调、风格、元素）
-
-**Prompt模板：**
-```
-你是一个AI图像Prompt工程师，负责为游戏技能图标生成Stable Diffusion的Prompt。
-
-## 游戏美术规范
-- 整体风格: {{style}}
-- 主色调: {{primary_color}}
-- 辅助色调: {{secondary_color}}
-- 禁止元素: {{forbidden_elements}}
-
-## 技能信息
-- 名称: {{skill_name}}
-- 描述: {{skill_description}}
-- 关键词: {{keywords}}
-- 技能类型: {{skill_type}}
-
-## 要求
-1. 生成正面提示词(positive prompt)：描述图标的视觉元素、风格、色彩
-2. 生成负面提示词(negative prompt)：避免出现的元素
-3. 保持图标简洁，适合作为UI图标使用
-4. 输出JSON格式：
-{
-  "positive_prompt": "...",
-  "negative_prompt": "...",
-  "建议参数": {
-    "width": 512,
-    "height": 512,
-    "steps": 25,
-    "cfg_scale": 7
-  }
-}
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline create-task --input-file batch.json
 ```
 
-### Agent 3: 图像生成 (可选扩展)
+## 核心流程
 
-**职责：** 实际调用SD API生成图像
+```text
+输入：批量任务上下文 + 多个图标 item
+   ↓
+需求整理 Agent
+   - 输出：标题、描述、关键词、视觉重点
+   ↓
+人工审核
+   - 通过 / 重跑 / 手动修改
+   ↓
+出图指令生成 Agent
+   - 输出：Gemini 可用的图像 prompt 与约束
+   ↓
+人工审核
+   - 通过 / 重跑 / 手动修改 / 回退
+   ↓
+图像生成程序
+   - 调用 Gemini Image API
+   - 生成多个候选图
+   ↓
+人工审核
+   - 通过 / 重跑出图 / 返回修改 prompt
+   ↓
+输出：审核通过的图标 + 全过程记录
+```
 
-这个可以用现成工具或简单脚本实现，不一定需要是Agent。
+## 设计原则
 
-## 技术实现 (Demo级别)
+- **CLI First**：先做命令行流水线，跑通核心链路，再做 Streamlit 包装层
+- **按钮保底**：所有关键动作都可通过按钮完成
+- **聊天增强**：自然语言交互存在，但 MVP 先支持有限 action 集
+- **版本可追溯**：每次重跑、手改、审核、回退都要可记录、可回放
+- **Prompt 可演进**：不在 README/PRD 中写死最终美术 Prompt，只预留规范接口
 
-### 方案A: 完全用LLM串联
-- 用一个主Prompt让LLM按步骤执行
-- 简单，但可控性弱
+## MVP 范围
 
-### 方案B: 多Agent编排 (推荐)
-- 用LangChain / AutoGen / 直接用Claude API
-- 每个Agent独立，可单独调试
+MVP 重点不是“最聪明的 Agent”，而是“最稳定的闭环”：
 
-### 方案C: 简单脚本 + Prompt模板
-- 最轻量，适合Demo
-- 人工串联各环节
+- 批任务创建与执行
+- item 级需求整理、Prompt 生成、图片生成三阶段
+- 每阶段人工审核
+- 单步重跑和手动修改
+- 本地落盘
+- 基础指标记录
 
-## 下一步
+MVP 暂不追求：
 
-1. 确定技术选型（用哪个方案？）
-2. 填写Prompt模板中的变量
-3. 先跑通一版最简单的流程
-4. 迭代优化Prompt效果
+- 复杂图像编辑
+- SaaS 化部署
+- 多人协作
+- 全自动 Meta-Agent 调优
+
+## 聊天能力定位
+
+聊天是本项目里更重、也更有实验价值的形态，但不是唯一入口。
+
+MVP 先支持有限结构化 action，例如：
+
+- `rerun_brief_generation`
+- `rerun_prompt`
+- `rerun_image`
+- `edit_brief`
+- `edit_prompt`
+- `change_color`
+- `rollback_step`
+- `approve_current_step`
+
+如果聊天意图识别失败，系统应回退到按钮操作，而不是阻断流程。
+
+## 数据落盘思路
+
+每个 task 保存为独立目录，核心是两层：
+
+- `task.json`：批任务快照
+- `items/item_xxx/`：每个子任务的状态、产物、日志
+
+典型目录结构：
+
+```text
+tasks/task_001/
+├── task.json
+├── events.jsonl
+├── configs/
+├── items/
+│   ├── item_001/
+│   │   ├── item.json
+│   │   ├── metrics.json
+│   │   ├── events.jsonl
+│   │   ├── artifacts/
+│   │   └── images/
+│   └── item_002/
+└── exports/
+```
+
+## 推荐执行顺序
+
+1. 先补齐任务 schema、状态机、action schema
+2. 实现 CLI 核心流水线
+3. 加入版本化、审核和回退
+4. 再做 Streamlit 工作台
+5. 最后叠加受控聊天和展示能力
+
+## 里程碑
+
+- **M0**：设计定版
+- **M1**：CLI 核心流水线
+- **M2**：版本化与审核能力
+- **M3**：Streamlit 工作台
+- **M4**：受控聊天 Agent
+- **M5**：Demo 打磨与展示
+
+每个里程碑都应保持可演示、可回退。
