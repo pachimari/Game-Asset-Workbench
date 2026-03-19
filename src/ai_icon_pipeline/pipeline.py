@@ -124,7 +124,8 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             title=item.get("title", ""),
             description=item["description"],
             category=item.get("category", ""),
-            project_context=task["project_context"],
+            project_background=task.get("project_background", task.get("project_context", "")),
+            style_requirements=task.get("style_requirements", ""),
             extra_context=item.get("extra_context", ""),
         )
         payload = {
@@ -136,7 +137,8 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 "title": item.get("title", ""),
                 "description": item["description"],
                 "category": item.get("category", ""),
-                "project_context": task["project_context"],
+                "project_background": task.get("project_background", task.get("project_context", "")),
+                "style_requirements": task.get("style_requirements", ""),
                 "extra_context": item.get("extra_context", ""),
             },
             "output": output,

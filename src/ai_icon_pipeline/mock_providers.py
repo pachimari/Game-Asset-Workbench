@@ -24,20 +24,25 @@ def generate_brief(
     title: str,
     description: str,
     category: str,
-    project_context: str,
+    project_background: str,
+    style_requirements: str,
     extra_context: str,
 ) -> dict:
     resolved_title = _derive_title(description, title, asset_type)
     resolved_description = (
-        f"{resolved_title}：面向{project_context}项目中的{asset_type}，"
+        f"{resolved_title}：面向{asset_type}，"
         f"围绕“{description}”整理成适合图标生成的简明需求。"
     )
+    if project_background:
+        resolved_description += f" 项目背景参考：{project_background}"
+    if style_requirements:
+        resolved_description += f" 统一风格要求参考：{style_requirements}"
     if extra_context:
         resolved_description += f" 额外上下文：{extra_context}"
     keywords = [
         asset_type,
         category or "general",
-        project_context,
+        project_background[:8] or "project",
         description[:8] or "icon",
     ]
     return {

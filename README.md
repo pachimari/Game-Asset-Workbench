@@ -47,12 +47,19 @@ python3 -m pip install "streamlit>=1.36"
 python3 -m streamlit run src/ai_icon_pipeline/ui.py
 ```
 
-创建一个单 item 批任务：
+先创建一个空批次：
 
 ```bash
 PYTHONPATH=src python3 -m ai_icon_pipeline create-task \
   --task-name "三国奇幻首批图标" \
-  --project-context "三国奇幻" \
+  --project-background "三国奇幻，强调武将与雷电元素" \
+  --style-requirements "高对比、单主体、避免文字"
+```
+
+再在批次里新增一个条目：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline create-item task_001 \
   --asset-type "skill_icon" \
   --title "雷暴" \
   --description "对敌人造成雷电伤害并附带麻痹效果" \
@@ -114,12 +121,13 @@ PYTHONPATH=src python3 -m ai_icon_pipeline set-current-version task_001 item_001
 PYTHONPATH=src python3 -m ai_icon_pipeline rollback-step task_001 item_001 image_prompt
 ```
 
-也可以直接从 JSON 文件批量创建：
+也可以直接从 JSON 文件创建批次并附带条目：
 
 ```json
 {
   "task_name": "三国奇幻首批图标",
-  "project_context": "三国奇幻",
+  "project_background": "三国奇幻",
+  "style_requirements": "高对比、单主体、避免文字",
   "asset_domain": "game_icon_assets",
   "items": [
     {
@@ -145,7 +153,7 @@ PYTHONPATH=src python3 -m ai_icon_pipeline create-task --input-file batch.json
 ## 核心流程
 
 ```text
-输入：批量任务上下文 + 多个图标 item
+输入：批次设定（项目背景 + 统一风格要求）+ 多个图标条目
    ↓
 需求整理 Agent
    - 输出：标题、描述、关键词、视觉重点

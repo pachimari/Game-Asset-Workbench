@@ -46,7 +46,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     create = subparsers.add_parser("create-task", help="Create a batch task")
     create.add_argument("--task-name", default="Untitled icon batch")
-    create.add_argument("--project-context", default="通用项目")
+    create.add_argument("--project-background", default="")
+    create.add_argument("--style-requirements", default="")
     create.add_argument("--asset-domain", default="game_icon_assets")
     create.add_argument("--task-id")
     create.add_argument("--input-file", help="JSON file containing task metadata and optional items")
@@ -153,7 +154,8 @@ def _create_task_from_args(args: argparse.Namespace) -> dict:
         payload = _load_task_payload(args.input_file)
         return create_task(
             task_name=payload.get("task_name", args.task_name),
-            project_context=payload.get("project_context", args.project_context),
+            project_background=payload.get("project_background", payload.get("project_context", args.project_background)),
+            style_requirements=payload.get("style_requirements", args.style_requirements),
             asset_domain=payload.get("asset_domain", args.asset_domain),
             items=payload["items"],
             style_spec=payload.get("style_spec"),
@@ -163,7 +165,8 @@ def _create_task_from_args(args: argparse.Namespace) -> dict:
 
     return create_task(
         task_name=args.task_name,
-        project_context=args.project_context,
+        project_background=args.project_background,
+        style_requirements=args.style_requirements,
         asset_domain=args.asset_domain,
         task_id=args.task_id,
     )

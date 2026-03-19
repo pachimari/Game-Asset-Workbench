@@ -100,7 +100,8 @@ def _normalize_item(raw_item: dict, item_id: str, timestamp: str) -> dict:
 def create_task(
     *,
     task_name: str,
-    project_context: str,
+    project_background: str = "",
+    style_requirements: str = "",
     items: list[dict] | None = None,
     asset_domain: str = "game_icon_assets",
     style_spec: dict | None = None,
@@ -128,7 +129,8 @@ def create_task(
     task = {
         "task_id": resolved_task_id,
         "task_name": task_name,
-        "project_context": project_context,
+        "project_background": project_background,
+        "style_requirements": style_requirements,
         "asset_domain": asset_domain,
         "created_at": now,
         "updated_at": now,
@@ -301,6 +303,36 @@ def update_item(
     )
     refresh_task_summary(task_id)
     return load_item(task_id, item_id)
+
+
+def update_task_settings(
+    task_id: str,
+    *,
+    task_name: str | None = None,
+    project_background: str | None = None,
+    style_requirements: str | None = None,
+    asset_domain: str | None = None,
+) -> dict:
+    task = load_task(task_id)
+    task["task_name"] = task_name if task_name is not None else task.get("task_name", "")
+    task["project_background"] = (
+        project_background if project_background is not None else task.get("project_background", "")
+    )
+    task["style_requirements"] = (
+        style_requirements if style_requirements is not None else task.get("style_requirements", "")
+    )
+    task["asset_domain"] = asset_domain if asset_domain is not None else task.get("asset_domain", "game_icon_assets")
+    save_task(task)
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": "user",
+            "action": "update_task_settings",
+            "to": task.get("status", STATUS_DRAFT),
+        },
+    )
+    return load_task(task_id)
 
 
 def load_task(task_id: str) -> dict:
