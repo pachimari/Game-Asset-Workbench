@@ -35,6 +35,18 @@ PYTHONPATH=src python3 -m ai_icon_pipeline --help
 python3 -m pip install -e .
 ```
 
+如果你要启动 M3 工作台，安装 UI 依赖：
+
+```bash
+python3 -m pip install "streamlit>=1.36"
+```
+
+启动 Streamlit 工作台：
+
+```bash
+python3 -m streamlit run src/ai_icon_pipeline/ui.py
+```
+
 创建一个单 item 批任务：
 
 ```bash
@@ -233,6 +245,18 @@ tasks/task_001/
 3. 加入版本化、审核和回退
 4. 再做 Streamlit 工作台
 5. 最后叠加受控聊天和展示能力
+
+## M3 工作台
+
+M3 提供了一个基于 Streamlit 的本地工作台，核心能力包括：
+
+- 批任务列表与恢复
+- item 详情查看
+- 当前 brief / prompt / image 结果预览
+- 版本历史查看与切换
+- 手动编辑 brief / prompt
+- 回退到 brief 或 prompt 阶段
+- 任务创建表单
 
 ## 里程碑
 
