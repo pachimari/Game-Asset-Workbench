@@ -184,6 +184,11 @@ def load_task(task_id: str) -> dict:
     return read_json(path)  # type: ignore[return-value]
 
 
+def list_items(task_id: str) -> list[dict]:
+    task = load_task(task_id)
+    return [load_item(task_id, item_id) for item_id in task["items"]]
+
+
 def save_task(task: dict) -> None:
     task["updated_at"] = utc_now()
     write_json(task_dir(task["task_id"]) / "task.json", task)
@@ -298,3 +303,25 @@ def load_artifact(task_id: str, item_id: str, step: str, version: str) -> dict:
     if manual.exists():
         return read_json(manual)  # type: ignore[return-value]
     raise ValueError(f"Artifact not found: {task_id} {item_id} {step} {version}")
+
+
+def list_artifacts(task_id: str, item_id: str, step: str) -> list[dict]:
+    root = artifact_dir(task_id, item_id, step)
+    if not root.exists():
+        return []
+
+    artifacts = []
+    for path in sorted(root.glob("v*.json")):
+        payload = read_json(path)
+        artifacts.append(
+            {
+                "version": payload["version"],
+                "step": step,
+                "manual": path.stem.endswith("_manual"),
+                "path": str(path),
+                "created_at": payload.get("created_at"),
+            }
+        )
+
+    artifacts.sort(key=lambda artifact: (artifact["version"], artifact["manual"]))
+    return artifacts

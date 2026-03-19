@@ -5,8 +5,24 @@ import json
 from pathlib import Path
 
 from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
-from .pipeline import approve_step, run_pipeline, run_step
-from .storage import create_task, load_item, load_task, task_dir
+from .pipeline import (
+    approve_step,
+    edit_brief,
+    edit_prompt,
+    rollback_step,
+    run_pipeline,
+    run_step,
+    set_current_version,
+)
+from .storage import (
+    create_task,
+    list_artifacts,
+    list_items,
+    load_artifact,
+    load_item,
+    load_task,
+    task_dir,
+)
 
 
 STEP_CHOICES = [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]
@@ -14,6 +30,12 @@ STEP_CHOICES = [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]
 
 def _load_task_payload(path: str) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def _parse_keywords(raw_keywords: str | None) -> list[str] | None:
+    if raw_keywords is None:
+        return None
+    return [keyword.strip() for keyword in raw_keywords.split(",") if keyword.strip()]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,9 +76,58 @@ def build_parser() -> argparse.ArgumentParser:
     show = subparsers.add_parser("show-task", help="Show current task snapshot")
     show.add_argument("task_id")
 
+    list_items_parser = subparsers.add_parser("list-items", help="List items in a task")
+    list_items_parser.add_argument("task_id")
+
     show_item = subparsers.add_parser("show-item", help="Show one item snapshot")
     show_item.add_argument("task_id")
     show_item.add_argument("item_id")
+
+    list_artifacts_parser = subparsers.add_parser(
+        "list-artifacts", help="List artifact versions for one step"
+    )
+    list_artifacts_parser.add_argument("task_id")
+    list_artifacts_parser.add_argument("item_id")
+    list_artifacts_parser.add_argument("step", choices=STEP_CHOICES)
+
+    show_artifact_parser = subparsers.add_parser(
+        "show-artifact", help="Show one artifact payload"
+    )
+    show_artifact_parser.add_argument("task_id")
+    show_artifact_parser.add_argument("item_id")
+    show_artifact_parser.add_argument("step", choices=STEP_CHOICES)
+    show_artifact_parser.add_argument("version")
+
+    edit_brief_parser = subparsers.add_parser("edit-brief", help="Create a manual brief version")
+    edit_brief_parser.add_argument("task_id")
+    edit_brief_parser.add_argument("item_id")
+    edit_brief_parser.add_argument("--title")
+    edit_brief_parser.add_argument("--description")
+    edit_brief_parser.add_argument("--keywords")
+    edit_brief_parser.add_argument("--visual-focus")
+    edit_brief_parser.add_argument("--note")
+
+    edit_prompt_parser = subparsers.add_parser("edit-prompt", help="Create a manual prompt version")
+    edit_prompt_parser.add_argument("task_id")
+    edit_prompt_parser.add_argument("item_id")
+    edit_prompt_parser.add_argument("--prompt")
+    edit_prompt_parser.add_argument("--negative-prompt")
+    edit_prompt_parser.add_argument("--note")
+
+    set_current_parser = subparsers.add_parser(
+        "set-current-version", help="Switch the active version for one step"
+    )
+    set_current_parser.add_argument("task_id")
+    set_current_parser.add_argument("item_id")
+    set_current_parser.add_argument("step", choices=STEP_CHOICES)
+    set_current_parser.add_argument("version")
+
+    rollback_parser = subparsers.add_parser(
+        "rollback-step", help="Move an item back to a previous stage using the latest version there"
+    )
+    rollback_parser.add_argument("task_id")
+    rollback_parser.add_argument("item_id")
+    rollback_parser.add_argument("step", choices=[STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT])
 
     return parser
 
@@ -125,8 +196,75 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(load_task(args.task_id), ensure_ascii=False, indent=2))
         return 0
 
+    if args.command == "list-items":
+        print(json.dumps(list_items(args.task_id), ensure_ascii=False, indent=2))
+        return 0
+
     if args.command == "show-item":
         print(json.dumps(load_item(args.task_id, args.item_id), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "list-artifacts":
+        print(
+            json.dumps(
+                list_artifacts(args.task_id, args.item_id, args.step),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "show-artifact":
+        print(
+            json.dumps(
+                load_artifact(args.task_id, args.item_id, args.step, args.version),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    if args.command == "edit-brief":
+        result = edit_brief(
+            args.task_id,
+            args.item_id,
+            title=args.title,
+            description=args.description,
+            keywords=_parse_keywords(args.keywords),
+            visual_focus=args.visual_focus,
+            note=args.note,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "edit-prompt":
+        result = edit_prompt(
+            args.task_id,
+            args.item_id,
+            prompt=args.prompt,
+            negative_prompt=args.negative_prompt,
+            note=args.note,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "set-current-version":
+        result = set_current_version(
+            args.task_id,
+            args.item_id,
+            args.step,
+            args.version,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "rollback-step":
+        result = rollback_step(
+            args.task_id,
+            args.item_id,
+            args.step,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
 
     parser.error(f"Unknown command: {args.command}")

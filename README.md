@@ -73,6 +73,35 @@ PYTHONPATH=src python3 -m ai_icon_pipeline approve-step task_001 item_001 brief_
 PYTHONPATH=src python3 -m ai_icon_pipeline run-step task_001 item_001 image_prompt
 ```
 
+M2 常用命令：
+
+```bash
+# 列出 task 下的所有 item
+PYTHONPATH=src python3 -m ai_icon_pipeline list-items task_001
+
+# 查看某一步的历史版本
+PYTHONPATH=src python3 -m ai_icon_pipeline list-artifacts task_001 item_001 brief_generation
+
+# 查看某个具体版本
+PYTHONPATH=src python3 -m ai_icon_pipeline show-artifact task_001 item_001 image_prompt v001
+
+# 手动修改 brief
+PYTHONPATH=src python3 -m ai_icon_pipeline edit-brief task_001 item_001 \
+  --description "对敌人造成高压雷电伤害并附带短暂麻痹效果" \
+  --keywords "thunder,stun,burst" \
+  --visual-focus "闪电束与爆裂电弧"
+
+# 手动修改 prompt
+PYTHONPATH=src python3 -m ai_icon_pipeline edit-prompt task_001 item_001 \
+  --prompt "game icon asset, 雷暴, centered lightning arc, blue-white energy burst"
+
+# 切换当前采用版本
+PYTHONPATH=src python3 -m ai_icon_pipeline set-current-version task_001 item_001 image_generation v001
+
+# 回退到上一个阶段继续迭代
+PYTHONPATH=src python3 -m ai_icon_pipeline rollback-step task_001 item_001 image_prompt
+```
+
 也可以直接从 JSON 文件批量创建：
 
 ```json
@@ -146,6 +175,7 @@ MVP 重点不是“最聪明的 Agent”，而是“最稳定的闭环”：
 - 单步重跑和手动修改
 - 本地落盘
 - 基础指标记录
+- 手动编辑与版本切换
 
 MVP 暂不追求：
 

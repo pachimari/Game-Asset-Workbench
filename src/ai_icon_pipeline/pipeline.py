@@ -21,6 +21,7 @@ from .storage import (
     append_item_event,
     load_artifact,
     load_item,
+    list_artifacts,
     load_metrics,
     load_runtime_config,
     load_style_spec,
@@ -33,6 +34,19 @@ from .storage import (
     item_dir,
 )
 from .utils import utc_now
+
+
+GENERATED_STATUS_BY_STEP = {
+    STEP_BRIEF_GENERATION: STATUS_BRIEF_GENERATED,
+    STEP_IMAGE_PROMPT: STATUS_PROMPT_GENERATED,
+    STEP_IMAGE_GENERATION: STATUS_IMAGE_GENERATED,
+}
+
+DOWNSTREAM_STEPS = {
+    STEP_BRIEF_GENERATION: [STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION],
+    STEP_IMAGE_PROMPT: [STEP_IMAGE_GENERATION],
+    STEP_IMAGE_GENERATION: [],
+}
 
 
 def _touch_metrics(task_id: str, item_id: str, step: str) -> None:
@@ -48,6 +62,55 @@ def _mark_completed(task_id: str, item_id: str) -> None:
     metrics["status"] = STATUS_COMPLETED
     metrics["end_time"] = utc_now()
     save_metrics(task_id, item_id, metrics)
+
+
+def _set_metrics_status(task_id: str, item_id: str, status: str) -> None:
+    metrics = load_metrics(task_id, item_id)
+    metrics["status"] = status
+    if status != STATUS_COMPLETED:
+        metrics["end_time"] = None
+    save_metrics(task_id, item_id, metrics)
+
+
+def _reset_downstream(item: dict, step: str) -> None:
+    for downstream_step in DOWNSTREAM_STEPS[step]:
+        item["current_versions"][downstream_step] = None
+
+
+def _select_current_version(
+    task_id: str,
+    item_id: str,
+    step: str,
+    version: str,
+    *,
+    source: str,
+    action: str,
+) -> dict:
+    item = load_item(task_id, item_id)
+    load_artifact(task_id, item_id, step, version)
+    item["current_versions"][step] = version
+    _reset_downstream(item, step)
+    item["status"] = GENERATED_STATUS_BY_STEP[step]
+    save_item(task_id, item)
+    _set_metrics_status(task_id, item_id, item["status"])
+    event = {
+        "timestamp": utc_now(),
+        "source": source,
+        "action": action,
+        "step": step,
+        "version": version,
+        "to": item["status"],
+    }
+    append_item_event(task_id, item_id, event)
+    append_event(task_id, {"item_id": item_id, **event})
+    refresh_task_summary(task_id)
+    return {
+        "task_id": task_id,
+        "item_id": item_id,
+        "step": step,
+        "version": version,
+        "status": item["status"],
+    }
 
 
 def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> dict:
@@ -210,6 +273,136 @@ def approve_step(task_id: str, item_id: str, step: str, *, source: str = "cli") 
     )
     refresh_task_summary(task_id)
     return {"task_id": task_id, "item_id": item_id, "step": step, "status": next_status}
+
+
+def edit_brief(
+    task_id: str,
+    item_id: str,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    keywords: list[str] | None = None,
+    visual_focus: str | None = None,
+    note: str | None = None,
+    source: str = "cli",
+) -> dict:
+    item = load_item(task_id, item_id)
+    current_version = item["current_versions"][STEP_BRIEF_GENERATION]
+    base_output = {}
+    base_input = {}
+    if current_version:
+        artifact = load_artifact(task_id, item_id, STEP_BRIEF_GENERATION, current_version)
+        base_output = artifact.get("output", {})
+        base_input = artifact.get("input", {})
+
+    payload = {
+        "step": STEP_BRIEF_GENERATION,
+        "provider": "manual",
+        "created_at": utc_now(),
+        "input": base_input,
+        "note": note or "manual brief edit",
+        "output": {
+            "title": title if title is not None else base_output.get("title", item.get("title", "")),
+            "description": (
+                description if description is not None else base_output.get("description", item["description"])
+            ),
+            "keywords": keywords if keywords is not None else base_output.get("keywords", []),
+            "visual_focus": visual_focus if visual_focus is not None else base_output.get("visual_focus", ""),
+        },
+    }
+    version = write_artifact(task_id, item_id, STEP_BRIEF_GENERATION, payload, manual=True)
+    return _select_current_version(
+        task_id,
+        item_id,
+        STEP_BRIEF_GENERATION,
+        version,
+        source=source,
+        action="edit_brief",
+    )
+
+
+def edit_prompt(
+    task_id: str,
+    item_id: str,
+    *,
+    prompt: str | None = None,
+    negative_prompt: str | None = None,
+    note: str | None = None,
+    source: str = "cli",
+) -> dict:
+    item = load_item(task_id, item_id)
+    current_version = item["current_versions"][STEP_IMAGE_PROMPT]
+    base_output = {}
+    base_input = {}
+    if current_version:
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_PROMPT, current_version)
+        base_output = artifact.get("output", {})
+        base_input = artifact.get("input", {})
+
+    payload = {
+        "step": STEP_IMAGE_PROMPT,
+        "provider": "manual",
+        "created_at": utc_now(),
+        "input": base_input,
+        "note": note or "manual prompt edit",
+        "output": {
+            "prompt": prompt if prompt is not None else base_output.get("prompt", ""),
+            "negative_prompt": (
+                negative_prompt
+                if negative_prompt is not None
+                else base_output.get("negative_prompt", "")
+            ),
+            "constraints": base_output.get("constraints", {}),
+        },
+    }
+    version = write_artifact(task_id, item_id, STEP_IMAGE_PROMPT, payload, manual=True)
+    return _select_current_version(
+        task_id,
+        item_id,
+        STEP_IMAGE_PROMPT,
+        version,
+        source=source,
+        action="edit_prompt",
+    )
+
+
+def set_current_version(
+    task_id: str,
+    item_id: str,
+    step: str,
+    version: str,
+    *,
+    source: str = "cli",
+) -> dict:
+    return _select_current_version(
+        task_id,
+        item_id,
+        step,
+        version,
+        source=source,
+        action="set_current_version",
+    )
+
+
+def rollback_step(
+    task_id: str,
+    item_id: str,
+    step: str,
+    *,
+    source: str = "cli",
+) -> dict:
+    artifacts = list_artifacts(task_id, item_id, step)
+    if not artifacts:
+        raise ValueError(f"No artifacts available for rollback: {task_id} {item_id} {step}")
+    latest_version = artifacts[-1]["version"]
+    return _select_current_version(
+        task_id,
+        item_id,
+        step,
+        latest_version,
+        source=source,
+        action="rollback_step",
+    )
 
 
 def run_item_pipeline(
