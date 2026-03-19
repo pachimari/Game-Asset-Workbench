@@ -19,6 +19,7 @@ if __package__ in (None, ""):
         set_current_version,
     )
     from ai_icon_pipeline.storage import (
+        create_item,
         create_task,
         item_dir,
         list_artifacts,
@@ -29,6 +30,7 @@ if __package__ in (None, ""):
         load_item_events,
         load_task,
         load_task_events,
+        update_item,
     )
 else:
     from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
@@ -42,6 +44,7 @@ else:
         set_current_version,
     )
     from .storage import (
+        create_item,
         create_task,
         item_dir,
         list_artifacts,
@@ -52,13 +55,14 @@ else:
         load_item_events,
         load_task,
         load_task_events,
+        update_item,
     )
 
 
 STEP_LABELS = {
-    STEP_BRIEF_GENERATION: "Brief",
-    STEP_IMAGE_PROMPT: "Prompt",
-    STEP_IMAGE_GENERATION: "Image",
+    STEP_BRIEF_GENERATION: "设计说明",
+    STEP_IMAGE_PROMPT: "出图指令",
+    STEP_IMAGE_GENERATION: "候选图",
 }
 
 
@@ -155,88 +159,34 @@ def _artifact_or_none(task_id: str, item_id: str, step: str, version: str | None
 
 
 def _render_task_creation() -> None:
-    with st.sidebar.expander("Create Task", expanded=False):
-        create_mode = st.radio("Mode", ["Single Item", "Batch JSON"], key="create_mode")
-
-        if create_mode == "Single Item":
-            with st.form("create_single_task_form"):
-                task_name = st.text_input("Task Name", value="Untitled icon batch")
-                project_context = st.text_input("Project Context", value="通用项目")
-                asset_domain = st.text_input("Asset Domain", value="game_icon_assets")
-                asset_type = st.text_input("Asset Type", value="generic_icon")
-                title = st.text_input("Title")
-                description = st.text_area("Description", height=120)
-                category = st.text_input("Category")
-                extra_context = st.text_area("Extra Context", height=80)
-                submitted = st.form_submit_button("Create Task", use_container_width=True)
-            if submitted:
-                if not description.strip():
-                    st.sidebar.error("Description is required.")
-                else:
-                    task = create_task(
-                        task_name=task_name,
-                        project_context=project_context,
-                        asset_domain=asset_domain,
-                        items=[
-                            {
-                                "asset_type": asset_type,
-                                "title": title,
-                                "description": description,
-                                "category": category,
-                                "extra_context": extra_context,
-                            }
-                        ],
-                    )
-                    st.sidebar.success(f"Created {task['task_id']}")
-                    st.session_state["selected_task_id"] = task["task_id"]
-                    _rerun()
-        else:
-            with st.form("create_batch_task_form"):
-                example = {
-                    "task_name": "三国奇幻首批图标",
-                    "project_context": "三国奇幻",
-                    "asset_domain": "game_icon_assets",
-                    "items": [
-                        {
-                            "asset_type": "skill_icon",
-                            "title": "雷暴",
-                            "description": "对敌人造成雷电伤害并附带麻痹效果",
-                            "category": "combat",
-                        }
-                    ],
-                }
-                batch_text = st.text_area(
-                    "Batch JSON",
-                    value=json.dumps(example, ensure_ascii=False, indent=2),
-                    height=260,
+    with st.sidebar.expander("创建 Task", expanded=False):
+        with st.form("create_task_form"):
+            task_name = st.text_input("Task 名称", value="未命名图标批次")
+            project_context = st.text_input("项目上下文", value="通用项目")
+            asset_domain = st.text_input("资产域", value="game_icon_assets")
+            submitted = st.form_submit_button("创建空 Task", use_container_width=True)
+        if submitted:
+            try:
+                task = create_task(
+                    task_name=task_name,
+                    project_context=project_context,
+                    asset_domain=asset_domain,
                 )
-                submitted = st.form_submit_button("Create Batch Task", use_container_width=True)
-            if submitted:
-                try:
-                    payload = json.loads(batch_text)
-                    task = create_task(
-                        task_name=payload.get("task_name", "Untitled icon batch"),
-                        project_context=payload.get("project_context", "通用项目"),
-                        asset_domain=payload.get("asset_domain", "game_icon_assets"),
-                        items=payload["items"],
-                        style_spec=payload.get("style_spec"),
-                        runtime_config=payload.get("runtime_config"),
-                    )
-                except Exception as exc:
-                    st.sidebar.error(str(exc))
-                else:
-                    st.sidebar.success(f"Created {task['task_id']}")
-                    st.session_state["selected_task_id"] = task["task_id"]
-                    _rerun()
+            except Exception as exc:
+                st.sidebar.error(str(exc))
+            else:
+                st.sidebar.success(f"已创建 {task['task_id']}")
+                st.session_state["selected_task_id"] = task["task_id"]
+                _rerun()
 
 
 def _render_sidebar(tasks: list[dict]) -> str | None:
-    st.sidebar.title("Workspace")
-    st.sidebar.caption("Task list, item selector, and quick actions.")
+    st.sidebar.title("工作台")
+    st.sidebar.caption("Task 列表、批次选择和基础操作。")
     _render_task_creation()
 
     if not tasks:
-        st.sidebar.info("No batch tasks found yet. Create one from the form above.")
+        st.sidebar.info("还没有 task，可以先从上面的表单创建。")
         return None
 
     task_lookup = {task["task_id"]: task for task in tasks}
@@ -258,6 +208,133 @@ def _render_sidebar(tasks: list[dict]) -> str | None:
     return selected_label
 
 
+def _artifact_source_label(artifact: dict) -> str:
+    provider = artifact.get("provider")
+    if provider == "manual":
+        return "手动编辑"
+    if provider:
+        return f"自动生成 · {provider}"
+    return "自动生成"
+
+
+def _render_artifact_preview(task_id: str, item_id: str, step: str, artifact: dict) -> None:
+    if step == STEP_IMAGE_GENERATION:
+        image_root = item_dir(task_id, item_id) / "images"
+        candidates = artifact.get("output", {}).get("candidates", [])
+        if not candidates:
+            st.info("当前版本还没有候选图。")
+            return
+        cols = st.columns(min(3, len(candidates)))
+        for idx, candidate in enumerate(candidates):
+            image_path = image_root / candidate["image_path"]
+            if image_path.exists():
+                cols[idx % len(cols)].image(
+                    str(image_path),
+                    caption=candidate["candidate_id"],
+                    use_container_width=True,
+                )
+        return
+
+    output = artifact.get("output", {})
+    st.code(json.dumps(output, ensure_ascii=False, indent=2), language="json")
+
+
+def _render_task_actions(task_id: str) -> None:
+    st.markdown("### Task 操作")
+    left, mid, right = st.columns(3)
+    with left:
+        if st.button("批量自动跑完整个 Task", key=f"run-task-{task_id}", use_container_width=True):
+            try:
+                run_pipeline(task_id)
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.success("已批量跑完整个 task。")
+                _rerun()
+    with mid:
+        if st.button("批量跑到待审核", key=f"run-task-review-{task_id}", use_container_width=True):
+            try:
+                run_pipeline(task_id, auto_approve=False)
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.success("已推进到待审核节点。")
+                _rerun()
+    with right:
+        if st.button("刷新 Task", key=f"refresh-task-{task_id}", use_container_width=True):
+            _rerun()
+
+
+def _render_item_management(task: dict) -> None:
+    task_id = task["task_id"]
+    create_tab, import_tab = st.tabs(["新增 Item", "批量导入 Items"])
+
+    with create_tab:
+        with st.form(f"create-item-form-{task_id}"):
+            asset_type = st.text_input("资产类型", value="generic_icon")
+            title = st.text_input("名称")
+            description = st.text_area("需求描述", height=120)
+            category = st.text_input("分类")
+            extra_context = st.text_area("额外上下文", height=80)
+            submitted = st.form_submit_button("新增 Item", use_container_width=True)
+        if submitted:
+            try:
+                item = create_item(
+                    task_id,
+                    asset_type=asset_type,
+                    title=title,
+                    description=description,
+                    category=category,
+                    extra_context=extra_context,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.success(f"已创建 {item['item_id']}")
+                st.session_state[f"selected-item-{task_id}"] = item["item_id"]
+                _rerun()
+
+    with import_tab:
+        example = {
+            "items": [
+                {
+                    "asset_type": "skill_icon",
+                    "title": "雷暴",
+                    "description": "对敌人造成雷电伤害并附带麻痹效果",
+                    "category": "combat",
+                }
+            ]
+        }
+        with st.form(f"import-items-form-{task_id}"):
+            batch_text = st.text_area(
+                "Items JSON",
+                value=json.dumps(example, ensure_ascii=False, indent=2),
+                height=220,
+            )
+            submitted = st.form_submit_button("批量导入", use_container_width=True)
+        if submitted:
+            try:
+                payload = json.loads(batch_text)
+                raw_items = payload["items"] if isinstance(payload, dict) else payload
+                created = []
+                for raw_item in raw_items:
+                    created.append(
+                        create_item(
+                            task_id,
+                            asset_type=raw_item.get("asset_type", "generic_icon"),
+                            title=raw_item.get("title", ""),
+                            description=raw_item.get("description", ""),
+                            category=raw_item.get("category", ""),
+                            extra_context=raw_item.get("extra_context", ""),
+                        )["item_id"]
+                    )
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.success(f"已导入 {len(created)} 个 item。")
+                _rerun()
+
+
 def _render_task_summary(task: dict, items: list[dict]) -> None:
     summary = task.get("items_summary", {})
     st.markdown(
@@ -272,10 +349,10 @@ def _render_task_summary(task: dict, items: list[dict]) -> None:
     )
     cols = st.columns(4)
     stats = [
-        ("Task Status", task.get("status", "unknown")),
-        ("Items", str(task.get("item_count", len(items)))),
-        ("Completed", str(summary.get("completed", 0))),
-        ("In Progress", str(summary.get("in_progress", 0))),
+        ("Task 状态", task.get("status", "unknown")),
+        ("Item 数量", str(task.get("item_count", len(items)))),
+        ("已完成", str(summary.get("completed", 0))),
+        ("进行中", str(summary.get("in_progress", 0))),
     ]
     for col, (label, value) in zip(cols, stats):
         col.markdown(
@@ -285,13 +362,13 @@ def _render_task_summary(task: dict, items: list[dict]) -> None:
 
     task_rows = [
         {
-            "item_id": item["item_id"],
-            "title": item.get("title"),
-            "asset_type": item.get("asset_type"),
-            "status": item.get("status"),
-            "brief": item["current_versions"].get("brief_generation"),
-            "prompt": item["current_versions"].get("image_prompt"),
-            "image": item["current_versions"].get("image_generation"),
+            "Item ID": item["item_id"],
+            "名称": item.get("title"),
+            "资产类型": item.get("asset_type"),
+            "状态": item.get("status"),
+            "设计说明": item["current_versions"].get("brief_generation"),
+            "出图指令": item["current_versions"].get("image_prompt"),
+            "候选图": item["current_versions"].get("image_generation"),
         }
         for item in items
     ]
@@ -318,27 +395,27 @@ def _render_action_bar(task_id: str, item: dict) -> None:
 
     left, mid, right = st.columns([1.2, 1.2, 1.4])
     with left:
-        if st.button("Auto Run Item", key=f"autorun-{item_id}", use_container_width=True):
+        if st.button("自动跑完整个 Item", key=f"autorun-{item_id}", use_container_width=True):
             try:
                 run_pipeline(task_id, item_id=item_id)
             except Exception as exc:
                 st.error(str(exc))
             else:
-                st.success("Item pipeline completed.")
+                st.success("Item 已跑完。")
                 _rerun()
     with mid:
         if action_kind == "run":
-            if st.button(f"Run {STEP_LABELS[step]}", key=f"run-{item_id}-{step}", use_container_width=True):
+            if st.button(f"运行{STEP_LABELS[step]}", key=f"run-{item_id}-{step}", use_container_width=True):
                 try:
                     run_step(task_id, item_id, step)
                 except Exception as exc:
                     st.error(str(exc))
                 else:
-                    st.success(f"Ran {step}.")
+                    st.success(f"已运行 {STEP_LABELS[step]}。")
                     _rerun()
         elif action_kind == "approve":
             if st.button(
-                f"Approve {STEP_LABELS[step]}",
+                f"通过{STEP_LABELS[step]}",
                 key=f"approve-{item_id}-{step}",
                 use_container_width=True,
             ):
@@ -347,12 +424,12 @@ def _render_action_bar(task_id: str, item: dict) -> None:
                 except Exception as exc:
                     st.error(str(exc))
                 else:
-                    st.success(f"Approved {step}.")
+                    st.success(f"已通过 {STEP_LABELS[step]}。")
                     _rerun()
         else:
-            st.button("No Direct Action", disabled=True, use_container_width=True, key=f"idle-{item_id}")
+            st.button("当前无直接操作", disabled=True, use_container_width=True, key=f"idle-{item_id}")
     with right:
-        if st.button("Refresh Item", key=f"refresh-{item_id}", use_container_width=True):
+        if st.button("刷新 Item", key=f"refresh-{item_id}", use_container_width=True):
             _rerun()
 
 
@@ -364,22 +441,24 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
 
     left, right = st.columns([1.05, 0.95])
     with left:
-        st.markdown("### Current Brief")
+        st.markdown("### 当前设计说明")
         if brief:
+            st.caption("设计说明是原始需求和出图指令之间的结构化中间层，会把名称、主体、关键词和视觉重点整理清楚。")
             _show_json(brief)
         else:
-            st.info("No brief selected yet.")
-        st.markdown("### Current Prompt")
+            st.info("还没有设计说明版本。")
+        st.markdown("### 当前出图指令")
         if prompt:
+            st.caption("这里能看到名称如何进入最终 prompt，包括名称本身和图标主体。")
             _show_json(prompt)
         else:
-            st.info("No prompt selected yet.")
+            st.info("还没有出图指令版本。")
     with right:
-        st.markdown("### Current Images")
+        st.markdown("### 当前候选图")
         image_root = item_dir(task_id, item_id) / "images"
         approved_path = image_root / "approved.png"
         if approved_path.exists():
-            st.image(str(approved_path), caption="Approved Image", use_container_width=True)
+            st.image(str(approved_path), caption="已通过图片", use_container_width=True)
         if image and image.get("output", {}).get("candidates"):
             cols = st.columns(min(3, len(image["output"]["candidates"])))
             for idx, candidate in enumerate(image["output"]["candidates"]):
@@ -391,40 +470,66 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
                         use_container_width=True,
                     )
         elif not approved_path.exists():
-            st.info("No image candidates generated yet.")
+            st.info("还没有生成候选图。")
 
 
 def _render_versions(task_id: str, item: dict) -> None:
     item_id = item["item_id"]
-    st.markdown("### Versions")
+    st.markdown("### 版本历史")
     for step in [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]:
         artifacts = list_artifacts(task_id, item_id, step)
         current = item["current_versions"].get(step)
         with st.expander(f"{STEP_LABELS[step]} Versions", expanded=bool(artifacts)):
             if not artifacts:
-                st.info("No versions yet.")
+                st.info("还没有版本。")
                 continue
-            st.dataframe(artifacts, use_container_width=True, hide_index=True)
+            version_map = {artifact["version"]: artifact for artifact in artifacts}
             version_options = [artifact["version"] for artifact in artifacts]
             default_index = version_options.index(current) if current in version_options else 0
-            selected_version = st.selectbox(
-                f"Active {STEP_LABELS[step]} Version",
+            selected_version = st.radio(
+                f"选择 {STEP_LABELS[step]} 版本",
                 options=version_options,
                 index=default_index,
+                horizontal=True,
+                format_func=lambda version: (
+                    f"{version}"
+                    f" · {_artifact_source_label(load_artifact(task_id, item_id, step, version))}"
+                    f"{' · 当前使用' if version == current else ''}"
+                ),
                 key=f"select-{item_id}-{step}",
             )
-            if st.button(
-                f"Use {selected_version}",
-                key=f"use-version-{item_id}-{step}",
-                use_container_width=True,
-            ):
-                try:
-                    set_current_version(task_id, item_id, step, selected_version)
-                except Exception as exc:
-                    st.error(str(exc))
+            selected_artifact = load_artifact(task_id, item_id, step, selected_version)
+            meta_left, meta_right = st.columns([1.1, 1.4])
+            with meta_left:
+                st.markdown(
+                    f"""
+                    <div class="panel">
+                      <div class="kicker">版本信息</div>
+                      <p style="margin:0.2rem 0;color:#0f172a;"><strong>{selected_version}</strong></p>
+                      <p style="margin:0.2rem 0;color:#475569;">来源：{_artifact_source_label(selected_artifact)}</p>
+                      <p style="margin:0.2rem 0;color:#475569;">创建时间：{selected_artifact.get('created_at', '未知')}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if selected_version != current:
+                    if st.button(
+                        f"切换为当前版本",
+                        key=f"use-version-{item_id}-{step}",
+                        use_container_width=True,
+                    ):
+                        try:
+                            set_current_version(task_id, item_id, step, selected_version)
+                        except Exception as exc:
+                            st.error(str(exc))
+                        else:
+                            st.success(f"已切换到 {selected_version}。")
+                            _rerun()
                 else:
-                    st.success(f"Switched {step} to {selected_version}.")
-                    _rerun()
+                    st.button("当前已选中", disabled=True, use_container_width=True, key=f"current-{item_id}-{step}")
+            with meta_right:
+                st.markdown("#### 预览")
+                _render_artifact_preview(task_id, item_id, step, selected_artifact)
 
 
 def _render_manual_edits(task_id: str, item: dict) -> None:
@@ -444,25 +549,29 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
 
     left, right = st.columns(2)
     with left:
-        st.markdown("### Edit Brief")
+        st.markdown("### 编辑设计说明")
         with st.form(f"edit-brief-form-{item_id}"):
             brief_output = brief_artifact.get("output", {}) if brief_artifact else {}
-            title = st.text_input("Title", value=brief_output.get("title", item.get("title", "")))
+            title = st.text_input("名称", value=brief_output.get("title", item.get("title", "")))
             description = st.text_area(
-                "Description",
+                "需求整理",
                 value=brief_output.get("description", item.get("description", "")),
                 height=120,
             )
             keywords = st.text_input(
-                "Keywords (comma separated)",
+                "关键词（逗号分隔）",
                 value=", ".join(brief_output.get("keywords", [])),
             )
+            icon_subject = st.text_input(
+                "图标主体",
+                value=brief_output.get("icon_subject", ""),
+            )
             visual_focus = st.text_input(
-                "Visual Focus",
+                "视觉重点",
                 value=brief_output.get("visual_focus", ""),
             )
-            note = st.text_input("Note", value="manual brief edit")
-            submitted = st.form_submit_button("Save Brief Version", use_container_width=True)
+            note = st.text_input("备注", value="手动编辑设计说明")
+            submitted = st.form_submit_button("保存设计说明版本", use_container_width=True)
         if submitted:
             try:
                 edit_brief(
@@ -471,25 +580,26 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
                     title=title,
                     description=description,
                     keywords=[keyword.strip() for keyword in keywords.split(",") if keyword.strip()],
+                    icon_subject=icon_subject,
                     visual_focus=visual_focus,
                     note=note,
                 )
             except Exception as exc:
                 st.error(str(exc))
             else:
-                st.success("Manual brief version saved.")
+                st.success("已保存设计说明版本。")
                 _rerun()
-        if st.button("Rollback To Brief", key=f"rollback-brief-{item_id}", use_container_width=True):
+        if st.button("回退到设计说明阶段", key=f"rollback-brief-{item_id}", use_container_width=True):
             try:
                 rollback_step(task_id, item_id, STEP_BRIEF_GENERATION)
             except Exception as exc:
                 st.error(str(exc))
             else:
-                st.success("Rolled back to brief stage.")
+                st.success("已回退到设计说明阶段。")
                 _rerun()
 
     with right:
-        st.markdown("### Edit Prompt")
+        st.markdown("### 编辑出图指令")
         with st.form(f"edit-prompt-form-{item_id}"):
             prompt_output = prompt_artifact.get("output", {}) if prompt_artifact else {}
             prompt_text = st.text_area(
@@ -498,12 +608,12 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
                 height=140,
             )
             negative_prompt = st.text_area(
-                "Negative Prompt",
+                "负向 Prompt",
                 value=prompt_output.get("negative_prompt", ""),
                 height=100,
             )
-            note = st.text_input("Prompt Note", value="manual prompt edit")
-            submitted = st.form_submit_button("Save Prompt Version", use_container_width=True)
+            note = st.text_input("备注", value="手动编辑出图指令")
+            submitted = st.form_submit_button("保存出图指令版本", use_container_width=True)
         if submitted:
             try:
                 edit_prompt(
@@ -516,20 +626,20 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
-                st.success("Manual prompt version saved.")
+                st.success("已保存出图指令版本。")
                 _rerun()
-        if st.button("Rollback To Prompt", key=f"rollback-prompt-{item_id}", use_container_width=True):
+        if st.button("回退到出图指令阶段", key=f"rollback-prompt-{item_id}", use_container_width=True):
             try:
                 rollback_step(task_id, item_id, STEP_IMAGE_PROMPT)
             except Exception as exc:
                 st.error(str(exc))
             else:
-                st.success("Rolled back to prompt stage.")
+                st.success("已回退到出图指令阶段。")
                 _rerun()
 
 
 def _render_events(task_id: str, item_id: str) -> None:
-    task_events, item_events = st.tabs(["Task Events", "Item Events"])
+    task_events, item_events = st.tabs(["Task 事件", "Item 事件"])
     with task_events:
         _show_json(load_task_events(task_id))
     with item_events:
@@ -540,16 +650,40 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
     st.markdown(
         f"""
         <div class="panel">
-          <div class="kicker">Selected Item</div>
+          <div class="kicker">当前 Item</div>
           <h3 style="margin:0.15rem 0 0.25rem 0;">{item.get('title') or item['item_id']}</h3>
           <p style="margin:0;color:#475569;">{item.get('asset_type')} · {item.get('category') or 'uncategorized'} · {item.get('status')}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    with st.expander("编辑 Item 原始需求", expanded=False):
+        with st.form(f"update-item-form-{task_id}-{item['item_id']}"):
+            asset_type = st.text_input("资产类型", value=item.get("asset_type", "generic_icon"))
+            title = st.text_input("名称", value=item.get("title", ""))
+            description = st.text_area("原始描述", value=item.get("description", ""), height=120)
+            category = st.text_input("分类", value=item.get("category", ""))
+            extra_context = st.text_area("额外上下文", value=item.get("extra_context", ""), height=80)
+            submitted = st.form_submit_button("保存 Item 并重置下游版本", use_container_width=True)
+        if submitted:
+            try:
+                update_item(
+                    task_id,
+                    item["item_id"],
+                    asset_type=asset_type,
+                    title=title,
+                    description=description,
+                    category=category,
+                    extra_context=extra_context,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.success("已更新 item，相关下游版本已按需重置。")
+                _rerun()
     _render_action_bar(task_id, item)
     current_tab, versions_tab, edits_tab, events_tab = st.tabs(
-        ["Current Output", "Versions", "Manual Edits", "Events"]
+        ["当前输出", "版本历史", "手动编辑", "事件日志"]
     )
     with current_tab:
         _render_current_outputs(task_id, item)
@@ -563,7 +697,7 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="AI Icon Pipeline Workspace",
+        page_title="AI 图标流水线工作台",
         page_icon="🧭",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -577,9 +711,9 @@ def main() -> None:
         st.markdown(
             """
             <div class="hero">
-              <div class="kicker">No Tasks Yet</div>
-              <h1>Start With A Batch</h1>
-              <p>Create a task from the sidebar and the workspace will appear here.</p>
+              <div class="kicker">还没有 Task</div>
+              <h1>先创建一个批次容器</h1>
+              <p>Task 现在只承载批次元数据，创建后再在 Task 内新增或导入 item。</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -589,14 +723,17 @@ def main() -> None:
     task = load_task(selected_task_id)
     items = list_items(selected_task_id)
     _render_task_summary(task, items)
+    _render_task_actions(selected_task_id)
+    with st.expander("Task 内 Item 管理", expanded=not items):
+        _render_item_management(task)
 
     if not items:
-        st.warning("This task has no items.")
+        st.warning("这个 task 还没有 item。先在上面的 Item 管理里新增或导入。")
         st.stop()
 
     item_lookup = {item["item_id"]: item for item in items}
     current_item_id = st.selectbox(
-        "Selected Item",
+        "选择 Item",
         options=[item["item_id"] for item in items],
         format_func=lambda item_id: _item_label(item_lookup[item_id]),
         key=f"selected-item-{selected_task_id}",

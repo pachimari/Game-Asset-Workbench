@@ -42,8 +42,10 @@ def generate_brief(
     ]
     return {
         "title": resolved_title,
+        "name_source": "user_input" if title else "derived_from_description",
         "description": resolved_description,
         "keywords": keywords,
+        "icon_subject": f"{resolved_title} 的核心视觉符号",
         "visual_focus": f"突出{asset_type}的核心视觉识别点",
     }
 
@@ -53,7 +55,9 @@ def generate_image_prompt(*, brief_output: dict, style_spec: dict, runtime_confi
     forbidden = ", ".join(style_spec["forbidden_elements"])
     composition = ", ".join(style_spec["composition_rules"])
     prompt = (
-        f"game icon asset, {brief_output['title']}, {brief_output['description']}, "
+        f"game icon asset, name: {brief_output['title']}, "
+        f"subject: {brief_output.get('icon_subject', brief_output['title'])}, "
+        f"{brief_output['description']}, "
         f"keywords: {', '.join(brief_output['keywords'])}, "
         f"visual focus: {brief_output['visual_focus']}, "
         f"style: {style_tags}, composition: {composition}"

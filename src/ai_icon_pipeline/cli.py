@@ -15,6 +15,7 @@ from .pipeline import (
     set_current_version,
 )
 from .storage import (
+    create_item,
     create_task,
     list_artifacts,
     list_items,
@@ -22,6 +23,7 @@ from .storage import (
     load_item,
     load_task,
     task_dir,
+    update_item,
 )
 
 
@@ -47,12 +49,25 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--project-context", default="通用项目")
     create.add_argument("--asset-domain", default="game_icon_assets")
     create.add_argument("--task-id")
-    create.add_argument("--input-file", help="JSON file containing task metadata and items")
-    create.add_argument("--asset-type")
-    create.add_argument("--title", default="")
-    create.add_argument("--description")
-    create.add_argument("--category", default="")
-    create.add_argument("--extra-context", default="")
+    create.add_argument("--input-file", help="JSON file containing task metadata and optional items")
+
+    create_item_parser = subparsers.add_parser("create-item", help="Create one item inside a task")
+    create_item_parser.add_argument("task_id")
+    create_item_parser.add_argument("--item-id")
+    create_item_parser.add_argument("--asset-type", default="generic_icon")
+    create_item_parser.add_argument("--title", default="")
+    create_item_parser.add_argument("--description", default="")
+    create_item_parser.add_argument("--category", default="")
+    create_item_parser.add_argument("--extra-context", default="")
+
+    update_item_parser = subparsers.add_parser("update-item", help="Update one item source payload")
+    update_item_parser.add_argument("task_id")
+    update_item_parser.add_argument("item_id")
+    update_item_parser.add_argument("--asset-type")
+    update_item_parser.add_argument("--title")
+    update_item_parser.add_argument("--description")
+    update_item_parser.add_argument("--category")
+    update_item_parser.add_argument("--extra-context")
 
     run_single = subparsers.add_parser("run-step", help="Run a single step for one item")
     run_single.add_argument("task_id")
@@ -104,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     edit_brief_parser.add_argument("--title")
     edit_brief_parser.add_argument("--description")
     edit_brief_parser.add_argument("--keywords")
+    edit_brief_parser.add_argument("--icon-subject")
     edit_brief_parser.add_argument("--visual-focus")
     edit_brief_parser.add_argument("--note")
 
@@ -145,21 +161,10 @@ def _create_task_from_args(args: argparse.Namespace) -> dict:
             task_id=args.task_id,
         )
 
-    if not args.description:
-        raise ValueError("Either --input-file or --description is required")
-
-    single_item = {
-        "asset_type": args.asset_type or "generic_icon",
-        "title": args.title,
-        "description": args.description,
-        "category": args.category,
-        "extra_context": args.extra_context,
-    }
     return create_task(
         task_name=args.task_name,
         project_context=args.project_context,
         asset_domain=args.asset_domain,
-        items=[single_item],
         task_id=args.task_id,
     )
 
@@ -176,6 +181,32 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run-step":
         result = run_step(args.task_id, args.item_id, args.step)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "create-item":
+        item = create_item(
+            args.task_id,
+            item_id=args.item_id,
+            asset_type=args.asset_type,
+            title=args.title,
+            description=args.description,
+            category=args.category,
+            extra_context=args.extra_context,
+        )
+        print(json.dumps(item, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "update-item":
+        item = update_item(
+            args.task_id,
+            args.item_id,
+            asset_type=args.asset_type,
+            title=args.title,
+            description=args.description,
+            category=args.category,
+            extra_context=args.extra_context,
+        )
+        print(json.dumps(item, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "approve-step":
@@ -231,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             title=args.title,
             description=args.description,
             keywords=_parse_keywords(args.keywords),
+            icon_subject=args.icon_subject,
             visual_focus=args.visual_focus,
             note=args.note,
         )

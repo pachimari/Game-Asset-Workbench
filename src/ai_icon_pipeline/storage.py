@@ -48,6 +48,16 @@ def append_jsonl(path: Path, payload: dict) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def read_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rows.append(json.loads(line))
+    return rows
+
+
 def next_task_id() -> str:
     ensure_tasks_root()
     max_id = 0
@@ -91,7 +101,7 @@ def create_task(
     *,
     task_name: str,
     project_context: str,
-    items: list[dict],
+    items: list[dict] | None = None,
     asset_domain: str = "game_icon_assets",
     style_spec: dict | None = None,
     runtime_config: dict | None = None,
@@ -102,16 +112,14 @@ def create_task(
     root = task_dir(resolved_task_id)
     if root.exists():
         raise ValueError(f"Task already exists: {resolved_task_id}")
-    if not items:
-        raise ValueError("A task must include at least one item")
-
     ensure_dir(root / "configs")
     ensure_dir(root / "items")
     ensure_dir(root / "exports")
 
     now = utc_now()
+    raw_items = items or []
     normalized_items = []
-    for raw_item in items:
+    for raw_item in raw_items:
         item_id = raw_item.get("item_id") or _next_item_id(normalized_items)
         item = _normalize_item(raw_item, item_id, now)
         normalized_items.append(item)
@@ -177,11 +185,146 @@ def _create_item_files(task_id: str, item: dict) -> None:
     )
 
 
+def create_item(
+    task_id: str,
+    *,
+    asset_type: str = "generic_icon",
+    title: str = "",
+    description: str = "",
+    category: str = "",
+    extra_context: str = "",
+    item_id: str | None = None,
+) -> dict:
+    task = load_task(task_id)
+    now = utc_now()
+    existing_ids = task["items"]
+    resolved_item_id = item_id or _next_item_id(
+        [{"item_id": current_item_id} for current_item_id in existing_ids]
+    )
+    if resolved_item_id in existing_ids:
+        raise ValueError(f"Item already exists: {task_id} {resolved_item_id}")
+
+    item = _normalize_item(
+        {
+            "asset_type": asset_type,
+            "title": title,
+            "description": description,
+            "category": category,
+            "extra_context": extra_context,
+        },
+        resolved_item_id,
+        now,
+    )
+    _create_item_files(task_id, item)
+    task["items"].append(resolved_item_id)
+    task["item_count"] = len(task["items"])
+    save_task(task)
+    append_item_event(
+        task_id,
+        resolved_item_id,
+        {
+            "timestamp": now,
+            "source": "system",
+            "action": "create_item",
+            "to": STATUS_DRAFT,
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": now,
+            "source": "system",
+            "action": "create_item",
+            "item_id": resolved_item_id,
+            "to": STATUS_DRAFT,
+        },
+    )
+    refresh_task_summary(task_id)
+    return load_item(task_id, resolved_item_id)
+
+
+def update_item(
+    task_id: str,
+    item_id: str,
+    *,
+    asset_type: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    category: str | None = None,
+    extra_context: str | None = None,
+) -> dict:
+    item = load_item(task_id, item_id)
+    updated_fields = {
+        "asset_type": asset_type if asset_type is not None else item.get("asset_type", "generic_icon"),
+        "title": title if title is not None else item.get("title", ""),
+        "description": description if description is not None else item.get("description", ""),
+        "category": category if category is not None else item.get("category", ""),
+        "extra_context": extra_context if extra_context is not None else item.get("extra_context", ""),
+    }
+    core_fields = ["asset_type", "title", "description", "category", "extra_context"]
+    source_changed = any(item.get(field, "") != updated_fields[field] for field in core_fields)
+
+    item.update(updated_fields)
+    if source_changed:
+        item["status"] = STATUS_DRAFT
+        item["current_versions"] = {
+            "brief_generation": None,
+            "image_prompt": None,
+            "image_generation": None,
+        }
+        metrics = load_metrics(task_id, item_id)
+        metrics["status"] = STATUS_DRAFT
+        metrics["end_time"] = None
+        save_metrics(task_id, item_id, metrics)
+    save_item(task_id, item)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": "user",
+            "action": "update_item",
+            "to": item["status"],
+            "source_changed": source_changed,
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": "user",
+            "action": "update_item",
+            "item_id": item_id,
+            "to": item["status"],
+            "source_changed": source_changed,
+        },
+    )
+    refresh_task_summary(task_id)
+    return load_item(task_id, item_id)
+
+
 def load_task(task_id: str) -> dict:
     path = task_dir(task_id) / "task.json"
     if not path.exists():
         raise ValueError(f"Task not found: {task_id}")
     return read_json(path)  # type: ignore[return-value]
+
+
+def list_tasks() -> list[dict]:
+    ensure_tasks_root()
+    tasks = []
+    for child in sorted(TASKS_DIR.iterdir()):
+        if not child.is_dir():
+            continue
+        task_path = child / "task.json"
+        if not task_path.exists():
+            continue
+        task = read_json(task_path)
+        if not isinstance(task, dict) or "items" not in task:
+            continue
+        tasks.append(task)
+    tasks.sort(key=lambda task: task.get("updated_at", ""), reverse=True)
+    return tasks
 
 
 def list_items(task_id: str) -> list[dict]:
@@ -239,6 +382,14 @@ def append_event(task_id: str, payload: dict) -> None:
 
 def append_item_event(task_id: str, item_id: str, payload: dict) -> None:
     append_jsonl(item_dir(task_id, item_id) / "events.jsonl", payload)
+
+
+def load_task_events(task_id: str) -> list[dict]:
+    return read_jsonl(task_dir(task_id) / "events.jsonl")
+
+
+def load_item_events(task_id: str, item_id: str) -> list[dict]:
+    return read_jsonl(item_dir(task_id, item_id) / "events.jsonl")
 
 
 def load_style_spec(task_id: str) -> dict:
