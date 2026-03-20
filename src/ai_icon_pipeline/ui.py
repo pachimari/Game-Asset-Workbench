@@ -90,6 +90,41 @@ def _rerun() -> None:
         st.experimental_rerun()
 
 
+def _reset_keys(keys: list[str]) -> None:
+    for key in keys:
+        st.session_state.pop(key, None)
+
+
+def _reset_task_ui_state(task_id: str, item_id: str | None = None) -> None:
+    keys = [
+        f"item-grid-{task_id}",
+        f"bulk-paste-{task_id}",
+        f"batch-task-name-{task_id}",
+        f"batch-project-background-{task_id}",
+        f"batch-style-requirements-{task_id}",
+    ]
+    if item_id:
+        keys.extend(
+            [
+                f"source-asset-type-{item_id}",
+                f"source-title-{item_id}",
+                f"source-description-{item_id}",
+                f"source-category-{item_id}",
+                f"source-extra-context-{item_id}",
+                f"brief-title-{item_id}",
+                f"brief-description-{item_id}",
+                f"brief-keywords-{item_id}",
+                f"brief-icon-subject-{item_id}",
+                f"brief-visual-focus-{item_id}",
+                f"brief-note-{item_id}",
+                f"prompt-text-{item_id}",
+                f"prompt-negative-{item_id}",
+                f"prompt-note-{item_id}",
+            ]
+        )
+    _reset_keys(keys)
+
+
 def _inject_styles() -> None:
     st.markdown(
         """
@@ -343,18 +378,20 @@ def _render_batch_settings(task: dict) -> None:
     task_id = task["task_id"]
     st.markdown("### 批次设定")
     with st.form(f"batch-settings-{task_id}"):
-        task_name = st.text_input("批次名称", value=task.get("task_name", ""))
+        task_name = st.text_input("批次名称", value=task.get("task_name", ""), key=f"batch-task-name-{task_id}")
         project_background = st.text_area(
             "项目背景",
             value=task.get("project_background", ""),
             height=120,
             help="支持多段文本。作为低权重背景信息，不会压过条目自身需求。",
+            key=f"batch-project-background-{task_id}",
         )
         style_requirements = st.text_area(
             "统一风格要求",
             value=task.get("style_requirements", ""),
             height=120,
             help="支持多段文本。用于约束整体风格和禁用项。",
+            key=f"batch-style-requirements-{task_id}",
         )
         submitted = st.form_submit_button("保存批次设定", use_container_width=True)
     if submitted:
@@ -395,22 +432,77 @@ def _render_task_actions(task_id: str) -> None:
                 _rerun()
     with right:
         if st.button("刷新批次", key=f"refresh-task-{task_id}", use_container_width=True):
+            _reset_task_ui_state(task_id, st.session_state.get(f"selected-item-{task_id}"))
             _rerun()
+
+
+def _render_item_selector(task_id: str, items: list[dict]) -> str | None:
+    if not items:
+        return None
+
+    current_selected = st.session_state.get(f"selected-item-{task_id}")
+    if current_selected not in {item["item_id"] for item in items}:
+        current_selected = items[0]["item_id"]
+
+    option_ids = [item["item_id"] for item in items]
+    selected_item_id = st.radio(
+        "当前条目",
+        options=option_ids,
+        index=option_ids.index(current_selected),
+        format_func=lambda item_id: _item_label(next(item for item in items if item["item_id"] == item_id)),
+        key=f"selected-item-radio-{task_id}",
+    )
+    if st.session_state.get(f"selected-item-{task_id}") != selected_item_id:
+        st.session_state[f"selected-item-{task_id}"] = selected_item_id
+        _reset_task_ui_state(task_id, selected_item_id)
+        _rerun()
+    return selected_item_id
 
 
 def _render_item_management(task: dict) -> None:
     task_id = task["task_id"]
     items = list_items(task_id)
-    current_selected = st.session_state.get(f"selected-item-{task_id}")
-    if current_selected not in {item["item_id"] for item in items}:
-        current_selected = items[0]["item_id"] if items else None
 
-    columns = ["选中", "条目ID", "名称", "资产类型", "需求描述", "分类", "额外上下文", "状态"]
+    with st.expander("新增条目", expanded=not items):
+        with st.form(f"quick-create-item-{task_id}"):
+            default_index = 0
+            asset_type_options = ["skill_icon", "buff_icon", "item_icon", "generic_icon"]
+            asset_type = st.selectbox("资产类型", options=asset_type_options, index=default_index)
+            title = st.text_input("名称", placeholder="例如：雷暴")
+            description = st.text_area(
+                "需求描述",
+                placeholder="例如：对敌人造成雷电伤害并附带麻痹效果",
+                height=120,
+            )
+            category = st.text_input("分类", value="combat")
+            extra_context = st.text_area(
+                "额外上下文",
+                placeholder="例如：用于技能栏第一格，强调中心发光和电弧外扩",
+                height=80,
+            )
+            submitted = st.form_submit_button("新增条目并打开详情", use_container_width=True)
+        if submitted:
+            try:
+                item = create_item(
+                    task_id,
+                    asset_type=asset_type,
+                    title=title,
+                    description=description,
+                    category=category,
+                    extra_context=extra_context,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.session_state[f"selected-item-{task_id}"] = item["item_id"]
+                st.success(f"已创建 {item['item_id']}。")
+                _rerun()
+
+    columns = ["条目ID", "名称", "资产类型", "需求描述", "分类", "额外上下文", "状态"]
     rows = []
     for item in items:
         rows.append(
             {
-                "选中": item["item_id"] == current_selected,
                 "条目ID": item["item_id"],
                 "名称": item.get("title", ""),
                 "资产类型": item.get("asset_type", "generic_icon"),
@@ -422,16 +514,15 @@ def _render_item_management(task: dict) -> None:
         )
 
     st.markdown("### 条目表")
-    st.caption("在表格里直接新增、修改条目。勾选“选中”后，右侧详情会切换到该条目。")
+    st.caption("这里用于批量编辑已有条目。当前条目的切换在上方单独处理，避免多选状态混乱。")
     editor_df = pd.DataFrame(rows, columns=columns)
     edited_df = st.data_editor(
         editor_df,
-        num_rows="dynamic",
+        num_rows="fixed",
         hide_index=True,
         use_container_width=True,
         key=f"item-grid-{task_id}",
         column_config={
-            "选中": st.column_config.CheckboxColumn("选中", help="勾选后在右侧查看这个条目"),
             "条目ID": st.column_config.TextColumn("条目ID", disabled=True),
             "名称": st.column_config.TextColumn("名称"),
             "资产类型": st.column_config.TextColumn("资产类型"),
@@ -443,17 +534,11 @@ def _render_item_management(task: dict) -> None:
         disabled=["条目ID", "状态"],
     )
     edited_rows = edited_df.to_dict("records")
-    selected_candidates = [row.get("条目ID", "") for row in edited_rows if row.get("选中") and row.get("条目ID")]
-    if selected_candidates:
-        st.session_state[f"selected-item-{task_id}"] = selected_candidates[0]
-    elif items and f"selected-item-{task_id}" not in st.session_state:
-        st.session_state[f"selected-item-{task_id}"] = items[0]["item_id"]
 
     action_left, action_mid = st.columns([1.1, 1.4])
     with action_left:
         if st.button("保存条目表格变更", key=f"save-item-grid-{task_id}", use_container_width=True):
             try:
-                selected_after_save = None
                 existing_ids = {item["item_id"] for item in items}
                 for row in edited_rows:
                     title = str(row.get("名称", "") or "").strip()
@@ -462,7 +547,6 @@ def _render_item_management(task: dict) -> None:
                     category = str(row.get("分类", "") or "").strip()
                     extra_context = str(row.get("额外上下文", "") or "").strip()
                     item_id = str(row.get("条目ID", "") or "").strip()
-                    is_selected = bool(row.get("选中"))
 
                     if not any([title, description, category, extra_context, item_id]):
                         continue
@@ -477,24 +561,10 @@ def _render_item_management(task: dict) -> None:
                             category=category,
                             extra_context=extra_context,
                         )
-                        if is_selected:
-                            selected_after_save = item_id
-                    else:
-                        created = create_item(
-                            task_id,
-                            asset_type=asset_type,
-                            title=title,
-                            description=description,
-                            category=category,
-                            extra_context=extra_context,
-                        )
-                        if is_selected or selected_after_save is None:
-                            selected_after_save = created["item_id"]
-                if selected_after_save:
-                    st.session_state[f"selected-item-{task_id}"] = selected_after_save
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _reset_task_ui_state(task_id, st.session_state.get(f"selected-item-{task_id}"))
                 st.success("条目表格已保存。")
                 _rerun()
     with action_mid:
@@ -637,6 +707,7 @@ def _render_action_bar(task_id: str, item: dict) -> None:
             st.button("当前无直接操作", disabled=True, use_container_width=True, key=f"idle-{item_id}")
     with right:
         if st.button("刷新条目", key=f"refresh-{item_id}", use_container_width=True):
+            _reset_task_ui_state(task_id, item_id)
             _rerun()
 
 
@@ -759,25 +830,33 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
         st.markdown("### 编辑设计说明")
         with st.form(f"edit-brief-form-{item_id}"):
             brief_output = brief_artifact.get("output", {}) if brief_artifact else {}
-            title = st.text_input("名称", value=brief_output.get("title", item.get("title", "")))
+            title = st.text_input(
+                "名称",
+                value=brief_output.get("title", item.get("title", "")),
+                key=f"brief-title-{item_id}",
+            )
             description = st.text_area(
                 "需求整理",
                 value=brief_output.get("description", item.get("description", "")),
                 height=120,
+                key=f"brief-description-{item_id}",
             )
             keywords = st.text_input(
                 "关键词（逗号分隔）",
                 value=", ".join(brief_output.get("keywords", [])),
+                key=f"brief-keywords-{item_id}",
             )
             icon_subject = st.text_input(
                 "图标主体",
                 value=brief_output.get("icon_subject", ""),
+                key=f"brief-icon-subject-{item_id}",
             )
             visual_focus = st.text_input(
                 "视觉重点",
                 value=brief_output.get("visual_focus", ""),
+                key=f"brief-visual-focus-{item_id}",
             )
-            note = st.text_input("备注", value="手动编辑设计说明")
+            note = st.text_input("备注", value="手动编辑设计说明", key=f"brief-note-{item_id}")
             submitted = st.form_submit_button("保存设计说明版本", use_container_width=True)
         if submitted:
             try:
@@ -794,6 +873,7 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _reset_task_ui_state(task_id, item_id)
                 st.success("已保存设计说明版本。")
                 _rerun()
         if st.button("回退到设计说明阶段", key=f"rollback-brief-{item_id}", use_container_width=True):
@@ -813,13 +893,15 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
                 "出图指令",
                 value=prompt_output.get("prompt", ""),
                 height=140,
+                key=f"prompt-text-{item_id}",
             )
             negative_prompt = st.text_area(
                 "负向指令",
                 value=prompt_output.get("negative_prompt", ""),
                 height=100,
+                key=f"prompt-negative-{item_id}",
             )
-            note = st.text_input("备注", value="手动编辑出图指令")
+            note = st.text_input("备注", value="手动编辑出图指令", key=f"prompt-note-{item_id}")
             submitted = st.form_submit_button("保存出图指令版本", use_container_width=True)
         if submitted:
             try:
@@ -833,6 +915,7 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _reset_task_ui_state(task_id, item_id)
                 st.success("已保存出图指令版本。")
                 _rerun()
         if st.button("回退到出图指令阶段", key=f"rollback-prompt-{item_id}", use_container_width=True):
@@ -866,11 +949,25 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
     )
     with st.expander("编辑条目原始需求", expanded=False):
         with st.form(f"update-item-form-{task_id}-{item['item_id']}"):
-            asset_type = st.text_input("资产类型", value=item.get("asset_type", "generic_icon"))
-            title = st.text_input("名称", value=item.get("title", ""))
-            description = st.text_area("原始描述", value=item.get("description", ""), height=120)
-            category = st.text_input("分类", value=item.get("category", ""))
-            extra_context = st.text_area("额外上下文", value=item.get("extra_context", ""), height=80)
+            asset_type = st.text_input(
+                "资产类型",
+                value=item.get("asset_type", "generic_icon"),
+                key=f"source-asset-type-{item['item_id']}",
+            )
+            title = st.text_input("名称", value=item.get("title", ""), key=f"source-title-{item['item_id']}")
+            description = st.text_area(
+                "原始描述",
+                value=item.get("description", ""),
+                height=120,
+                key=f"source-description-{item['item_id']}",
+            )
+            category = st.text_input("分类", value=item.get("category", ""), key=f"source-category-{item['item_id']}")
+            extra_context = st.text_area(
+                "额外上下文",
+                value=item.get("extra_context", ""),
+                height=80,
+                key=f"source-extra-context-{item['item_id']}",
+            )
             submitted = st.form_submit_button("保存条目并按需重置下游版本", use_container_width=True)
         if submitted:
             try:
@@ -886,6 +983,7 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _reset_task_ui_state(task_id, item["item_id"])
                 st.success("已更新条目，相关下游版本已按需重置。")
                 _rerun()
     _render_action_bar(task_id, item)
@@ -930,26 +1028,30 @@ def main() -> None:
     task = load_task(selected_task_id)
     items = list_items(selected_task_id)
     _render_task_summary(task, items)
-    left_col, right_col = st.columns([1.02, 1.18], gap="large")
+    batch_tab, entry_tab = st.tabs(["批次信息", "条目工作台"])
 
-    with left_col:
-        _render_task_actions(selected_task_id)
+    with batch_tab:
         _render_batch_settings(task)
-        _render_item_management(task)
+        _render_task_actions(selected_task_id)
 
-    if not items:
+    with entry_tab:
+        left_col, right_col = st.columns([0.95, 1.15], gap="large")
+        with left_col:
+            current_item_id = _render_item_selector(selected_task_id, items)
+            _render_item_management(task)
+
+        if not items:
+            with right_col:
+                st.warning("这个批次还没有条目。先在左侧新增条目，或者直接粘贴多行条目。")
+            st.stop()
+
+        item_lookup = {item["item_id"]: item for item in items}
+        if current_item_id not in item_lookup:
+            current_item_id = items[0]["item_id"]
+            st.session_state[f"selected-item-{selected_task_id}"] = current_item_id
+
         with right_col:
-            st.warning("这个批次还没有条目。先在左侧条目表里新增，或者直接粘贴多行条目。")
-        st.stop()
-
-    item_lookup = {item["item_id"]: item for item in items}
-    current_item_id = st.session_state.get(f"selected-item-{selected_task_id}")
-    if current_item_id not in item_lookup:
-        current_item_id = items[0]["item_id"]
-        st.session_state[f"selected-item-{selected_task_id}"] = current_item_id
-
-    with right_col:
-        _render_item_workspace(selected_task_id, item_lookup[current_item_id])
+            _render_item_workspace(selected_task_id, item_lookup[current_item_id])
     st.markdown("</div>", unsafe_allow_html=True)
 
 
