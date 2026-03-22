@@ -82,6 +82,8 @@ STATUS_LABELS = {
     "archived": "已归档",
 }
 
+OVERVIEW_CARD_COLUMNS = 4
+
 
 def _rerun() -> None:
     if hasattr(st, "rerun"):
@@ -190,6 +192,27 @@ def _inject_styles() -> None:
 
 def _show_json(payload: dict | list) -> None:
     st.code(json.dumps(payload, ensure_ascii=False, indent=2), language="json")
+
+
+def _switcher(label: str, options: list[str], *, key: str, default: str) -> str:
+    if key not in st.session_state:
+        st.session_state[key] = default
+    if hasattr(st, "segmented_control"):
+        return st.segmented_control(
+            label,
+            options=options,
+            selection_mode="single",
+            default=st.session_state[key],
+            key=key,
+            label_visibility="collapsed",
+        )
+    return st.radio(
+        label,
+        options=options,
+        horizontal=True,
+        key=key,
+        label_visibility="collapsed",
+    )
 
 
 def _task_label(task: dict) -> str:
@@ -301,6 +324,139 @@ def _render_artifact_preview(task_id: str, item_id: str, step: str, artifact: di
     st.code(json.dumps(output, ensure_ascii=False, indent=2), language="json")
 
 
+def _render_brief_readable(artifact: dict) -> None:
+    output = artifact.get("output", {})
+    keywords = output.get("keywords", [])
+    st.markdown(
+        f"""
+        <div class="panel">
+          <div class="kicker">名称</div>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#0f172a;font-size:1.05rem;"><strong>{output.get('title', '未命名')}</strong></p>
+          <div class="kicker">需求整理</div>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{output.get('description', '暂无')}</p>
+          <div class="kicker">图标主体</div>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;">{output.get('icon_subject', '暂无')}</p>
+          <div class="kicker">视觉重点</div>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;">{output.get('visual_focus', '暂无')}</p>
+          <div class="kicker">关键词</div>
+          <p style="margin:0.15rem 0;color:#334155;">{', '.join(keywords) if keywords else '暂无'}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_prompt_readable(artifact: dict) -> None:
+    output = artifact.get("output", {})
+    st.markdown(
+        f"""
+        <div class="panel">
+          <div class="kicker">出图指令</div>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{output.get('prompt', '暂无')}</p>
+          <div class="kicker">负向指令</div>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{output.get('negative_prompt', '暂无')}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _current_preview_path(task_id: str, item: dict) -> Path | None:
+    item_id = item["item_id"]
+    image_root = item_dir(task_id, item_id) / "images"
+    approved_path = image_root / "approved.png"
+    if approved_path.exists():
+        return approved_path
+
+    image_version = item["current_versions"].get(STEP_IMAGE_GENERATION)
+    if not image_version:
+        return None
+
+    image_artifact = _artifact_or_none(task_id, item_id, STEP_IMAGE_GENERATION, image_version)
+    if not image_artifact:
+        return None
+
+    candidates = image_artifact.get("output", {}).get("candidates", [])
+    if not candidates:
+        return None
+
+    candidate_path = image_root / candidates[0]["image_path"]
+    if candidate_path.exists():
+        return candidate_path
+    return None
+
+
+def _default_output_view(item: dict) -> str:
+    status = item.get("status", "draft")
+    if status in {"draft", "brief_generated", "brief_approved"}:
+        return "设计说明"
+    if status in {"prompt_generated", "prompt_approved"}:
+        return "出图指令"
+    if status in {"image_generated", "completed"}:
+        return "当前候选图"
+    return "总览"
+
+
+def _candidate_paths(task_id: str, item_id: str, image_artifact: dict | None) -> list[tuple[str, Path]]:
+    if not image_artifact:
+        return []
+    image_root = item_dir(task_id, item_id) / "images"
+    candidates = image_artifact.get("output", {}).get("candidates", [])
+    resolved: list[tuple[str, Path]] = []
+    for index, candidate in enumerate(candidates, start=1):
+        path = image_root / candidate["image_path"]
+        if path.exists():
+            resolved.append((f"候选 {index}", path))
+    return resolved
+
+
+def _render_entry_overview(task_id: str, items: list[dict]) -> None:
+    st.markdown("### 条目概览")
+    st.caption("这里直接看每个条目的当前结果。点“选中条目”后，下方会自动切到条目工作台。")
+    if not items:
+        st.info("当前批次还没有条目。")
+        return
+
+    current_selected = st.session_state.get(f"selected-item-{task_id}")
+    for start in range(0, len(items), OVERVIEW_CARD_COLUMNS):
+        row_items = items[start : start + OVERVIEW_CARD_COLUMNS]
+        columns = st.columns(OVERVIEW_CARD_COLUMNS)
+        for col, item in zip(columns, row_items):
+            preview_path = _current_preview_path(task_id, item)
+            is_selected = item["item_id"] == current_selected
+            with col:
+                st.markdown(
+                    f"""
+                    <div class="panel" style="border-width:{'2px' if is_selected else '1px'}; border-color:{'#ef4444' if is_selected else 'rgba(30, 41, 59, 0.12)'};">
+                      <div class="kicker">{item['item_id']}</div>
+                      <h4 style="margin:0.25rem 0 0.35rem 0;color:#0f172a;">{item.get('title') or '未命名条目'}</h4>
+                      <p style="margin:0.15rem 0;color:#475569;">{item.get('asset_type', 'generic_icon')} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if preview_path:
+                    st.image(str(preview_path), width=140)
+                else:
+                    st.info("还没有候选图")
+                summary_lines = [
+                    f"设计说明：{item['current_versions'].get(STEP_BRIEF_GENERATION) or '无'}",
+                    f"出图指令：{item['current_versions'].get(STEP_IMAGE_PROMPT) or '无'}",
+                    f"候选图：{item['current_versions'].get(STEP_IMAGE_GENERATION) or '无'}",
+                ]
+                st.caption(" | ".join(summary_lines))
+                if st.button(
+                    "选中条目" if not is_selected else "当前条目",
+                    key=f"overview-open-{item['item_id']}",
+                    use_container_width=True,
+                    disabled=is_selected,
+                ):
+                    st.session_state[f"selected-item-{task_id}"] = item["item_id"]
+                    st.session_state[f"workspace-view-{task_id}"] = "条目工作台"
+                    _reset_task_ui_state(task_id, item["item_id"])
+                    _rerun()
+
+
 def _parse_pasted_rows(raw_text: str) -> list[dict]:
     text = raw_text.strip()
     if not text:
@@ -321,6 +477,7 @@ def _parse_pasted_rows(raw_text: str) -> list[dict]:
         "asset_type": "asset_type",
         "分类": "category",
         "category": "category",
+        "条目补充说明": "extra_context",
         "额外上下文": "extra_context",
         "extra_context": "extra_context",
     }
@@ -476,9 +633,10 @@ def _render_item_management(task: dict) -> None:
             )
             category = st.text_input("分类", value="combat")
             extra_context = st.text_area(
-                "额外上下文",
+                "条目补充说明",
                 placeholder="例如：用于技能栏第一格，强调中心发光和电弧外扩",
                 height=80,
+                help="这里写这一条素材专属的补充信息。批次共用的规范请写在“项目背景/统一风格要求”里。",
             )
             submitted = st.form_submit_button("新增条目并打开详情", use_container_width=True)
         if submitted:
@@ -498,7 +656,7 @@ def _render_item_management(task: dict) -> None:
                 st.success(f"已创建 {item['item_id']}。")
                 _rerun()
 
-    columns = ["条目ID", "名称", "资产类型", "需求描述", "分类", "额外上下文", "状态"]
+    columns = ["条目ID", "名称", "资产类型", "需求描述", "分类", "条目补充说明", "状态"]
     rows = []
     for item in items:
         rows.append(
@@ -508,7 +666,7 @@ def _render_item_management(task: dict) -> None:
                 "资产类型": item.get("asset_type", "generic_icon"),
                 "需求描述": item.get("description", ""),
                 "分类": item.get("category", ""),
-                "额外上下文": item.get("extra_context", ""),
+                "条目补充说明": item.get("extra_context", ""),
                 "状态": STATUS_LABELS.get(item.get("status", "draft"), item.get("status", "draft")),
             }
         )
@@ -528,7 +686,7 @@ def _render_item_management(task: dict) -> None:
             "资产类型": st.column_config.TextColumn("资产类型"),
             "需求描述": st.column_config.TextColumn("需求描述", width="large"),
             "分类": st.column_config.TextColumn("分类"),
-            "额外上下文": st.column_config.TextColumn("额外上下文", width="medium"),
+            "条目补充说明": st.column_config.TextColumn("条目补充说明", width="medium"),
             "状态": st.column_config.TextColumn("状态", disabled=True),
         },
         disabled=["条目ID", "状态"],
@@ -545,7 +703,7 @@ def _render_item_management(task: dict) -> None:
                     description = str(row.get("需求描述", "") or "").strip()
                     asset_type = str(row.get("资产类型", "") or "generic_icon").strip() or "generic_icon"
                     category = str(row.get("分类", "") or "").strip()
-                    extra_context = str(row.get("额外上下文", "") or "").strip()
+                    extra_context = str(row.get("条目补充说明", "") or "").strip()
                     item_id = str(row.get("条目ID", "") or "").strip()
 
                     if not any([title, description, category, extra_context, item_id]):
@@ -571,8 +729,8 @@ def _render_item_management(task: dict) -> None:
         st.caption("支持增量保存。已存在的条目会更新，空白新行会跳过。")
 
     with st.expander("批量粘贴条目", expanded=not items):
-        st.caption("推荐粘贴 TSV（制表符分隔）或 CSV。顺序建议：名称、需求描述、资产类型、分类、额外上下文。也支持首行表头。")
-        example = "名称\t需求描述\t资产类型\t分类\t额外上下文\n雷暴\t对敌人造成雷电伤害并附带麻痹效果\tskill_icon\tcombat\t用于技能栏第一格"
+        st.caption("推荐粘贴 TSV（制表符分隔）或 CSV。顺序建议：名称、需求描述、资产类型、分类、条目补充说明。也支持首行表头。")
+        example = "名称\t需求描述\t资产类型\t分类\t条目补充说明\n雷暴\t对敌人造成雷电伤害并附带麻痹效果\tskill_icon\tcombat\t用于技能栏第一格"
         pasted = st.text_area(
             "多行粘贴",
             value=example if not items else "",
@@ -637,74 +795,130 @@ def _render_task_summary(task: dict, items: list[dict]) -> None:
             unsafe_allow_html=True,
         )
 
-    task_rows = [
-        {
-            "条目ID": item["item_id"],
-            "名称": item.get("title"),
-            "资产类型": item.get("asset_type"),
-            "状态": STATUS_LABELS.get(item.get("status", "draft"), item.get("status", "draft")),
-            "设计说明": item["current_versions"].get("brief_generation"),
-            "出图指令": item["current_versions"].get("image_prompt"),
-            "候选图": item["current_versions"].get("image_generation"),
-        }
-        for item in items
-    ]
-    st.markdown("### 条目概览")
-    st.dataframe(task_rows, use_container_width=True, hide_index=True)
+    _render_entry_overview(task["task_id"], items)
 
 
-def _current_action(status: str) -> tuple[str | None, str | None]:
+def _item_main_action(item: dict) -> tuple[str | None, str | None]:
+    status = item["status"]
     mapping = {
-        "draft": ("run", STEP_BRIEF_GENERATION),
-        "brief_generated": ("approve", STEP_BRIEF_GENERATION),
-        "brief_approved": ("run", STEP_IMAGE_PROMPT),
-        "prompt_generated": ("approve", STEP_IMAGE_PROMPT),
-        "prompt_approved": ("run", STEP_IMAGE_GENERATION),
-        "image_generated": ("approve", STEP_IMAGE_GENERATION),
+        "draft": ("生成设计说明", "先把原始需求整理成可用于出图的设计说明"),
+        "brief_generated": ("继续生成出图指令", "采纳当前设计说明并继续生成出图指令"),
+        "brief_approved": ("生成出图指令", "基于当前设计说明生成出图指令"),
+        "prompt_generated": ("继续生成候选图", "采纳当前出图指令并继续生成候选图"),
+        "prompt_approved": ("生成候选图", "基于当前出图指令生成候选图"),
+        "image_generated": ("采纳当前候选图", "将当前候选图设为结果并完成条目"),
+        "completed": ("已完成", "当前条目已经完成"),
     }
     return mapping.get(status, (None, None))
+
+
+def _run_main_action(task_id: str, item: dict) -> None:
+    item_id = item["item_id"]
+    status = item["status"]
+
+    if status == "draft":
+        run_step(task_id, item_id, STEP_BRIEF_GENERATION)
+        return
+    if status == "brief_generated":
+        approve_step(task_id, item_id, STEP_BRIEF_GENERATION)
+        run_step(task_id, item_id, STEP_IMAGE_PROMPT)
+        return
+    if status == "brief_approved":
+        run_step(task_id, item_id, STEP_IMAGE_PROMPT)
+        return
+    if status == "prompt_generated":
+        approve_step(task_id, item_id, STEP_IMAGE_PROMPT)
+        run_step(task_id, item_id, STEP_IMAGE_GENERATION)
+        return
+    if status == "prompt_approved":
+        run_step(task_id, item_id, STEP_IMAGE_GENERATION)
+        return
+    if status == "image_generated":
+        approve_step(task_id, item_id, STEP_IMAGE_GENERATION)
+        return
+    if status == "completed":
+        return
+    raise ValueError(f"Unsupported item status: {status}")
+
+
+def _item_secondary_action(item: dict) -> tuple[str | None, str | None]:
+    status = item["status"]
+    mapping = {
+        "brief_generated": ("重新生成设计说明", STEP_BRIEF_GENERATION),
+        "brief_approved": ("返回设计说明", STEP_BRIEF_GENERATION),
+        "prompt_generated": ("重新生成出图指令", STEP_IMAGE_PROMPT),
+        "prompt_approved": ("返回出图指令", STEP_IMAGE_PROMPT),
+        "image_generated": ("重新生成候选图", STEP_IMAGE_GENERATION),
+    }
+    return mapping.get(status, (None, None))
+
+
+def _run_secondary_action(task_id: str, item: dict) -> None:
+    item_id = item["item_id"]
+    status = item["status"]
+
+    if status == "brief_generated":
+        run_step(task_id, item_id, STEP_BRIEF_GENERATION)
+        return
+    if status == "brief_approved":
+        rollback_step(task_id, item_id, STEP_BRIEF_GENERATION)
+        return
+    if status == "prompt_generated":
+        run_step(task_id, item_id, STEP_IMAGE_PROMPT)
+        return
+    if status == "prompt_approved":
+        rollback_step(task_id, item_id, STEP_IMAGE_PROMPT)
+        return
+    if status == "image_generated":
+        run_step(task_id, item_id, STEP_IMAGE_GENERATION)
+        return
+    raise ValueError(f"No secondary action for item status: {status}")
 
 
 def _render_action_bar(task_id: str, item: dict) -> None:
     item_id = item["item_id"]
     status = item["status"]
-    action_kind, step = _current_action(status)
+    action_label, action_hint = _item_main_action(item)
 
-    left, mid, right = st.columns([1.2, 1.2, 1.4])
+    st.markdown(
+        f"""
+        <div class="panel">
+          <div class="kicker">当前阶段</div>
+          <p style="margin:0.15rem 0 0.2rem 0;font-size:1.05rem;color:#0f172a;"><strong>{STATUS_LABELS.get(status, status)}</strong></p>
+          <p style="margin:0;color:#475569;">{action_hint or '当前没有可执行动作。'}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    left, mid, right = st.columns([1.5, 1.15, 1.0])
     with left:
-        if st.button("自动跑完整个条目", key=f"autorun-{item_id}", use_container_width=True):
+        if st.button(
+            action_label or "当前无动作",
+            key=f"main-action-{item_id}",
+            use_container_width=True,
+            disabled=status == "completed",
+        ):
             try:
-                run_pipeline(task_id, item_id=item_id)
+                _run_main_action(task_id, item)
             except Exception as exc:
                 st.error(str(exc))
             else:
-                st.success("条目已跑完。")
+                st.success(f"已执行：{action_label}")
                 _rerun()
     with mid:
-        if action_kind == "run":
-            if st.button(f"运行{STEP_LABELS[step]}", key=f"run-{item_id}-{step}", use_container_width=True):
+        secondary_label, secondary_step = _item_secondary_action(item)
+        if secondary_label:
+            if st.button(secondary_label, key=f"secondary-{item_id}-{secondary_step}", use_container_width=True):
                 try:
-                    run_step(task_id, item_id, step)
+                    _run_secondary_action(task_id, item)
                 except Exception as exc:
                     st.error(str(exc))
                 else:
-                    st.success(f"已运行 {STEP_LABELS[step]}。")
-                    _rerun()
-        elif action_kind == "approve":
-            if st.button(
-                f"通过{STEP_LABELS[step]}",
-                key=f"approve-{item_id}-{step}",
-                use_container_width=True,
-            ):
-                try:
-                    approve_step(task_id, item_id, step)
-                except Exception as exc:
-                    st.error(str(exc))
-                else:
-                    st.success(f"已通过 {STEP_LABELS[step]}。")
+                    st.success(f"已执行：{secondary_label}")
                     _rerun()
         else:
-            st.button("当前无直接操作", disabled=True, use_container_width=True, key=f"idle-{item_id}")
+            st.button("暂无次动作", disabled=True, use_container_width=True, key=f"idle-{item_id}")
     with right:
         if st.button("刷新条目", key=f"refresh-{item_id}", use_container_width=True):
             _reset_task_ui_state(task_id, item_id)
@@ -716,39 +930,102 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
     brief = _artifact_or_none(task_id, item_id, STEP_BRIEF_GENERATION, item["current_versions"].get("brief_generation"))
     prompt = _artifact_or_none(task_id, item_id, STEP_IMAGE_PROMPT, item["current_versions"].get("image_prompt"))
     image = _artifact_or_none(task_id, item_id, STEP_IMAGE_GENERATION, item["current_versions"].get("image_generation"))
+    output_view_key = f"output-view-{task_id}-{item_id}"
+    output_view_status_key = f"{output_view_key}-status"
+    expected_view = _default_output_view(item)
+    if st.session_state.get(output_view_status_key) != item.get("status"):
+        st.session_state[output_view_key] = expected_view
+        st.session_state[output_view_status_key] = item.get("status")
 
-    left, right = st.columns([1.05, 0.95])
-    with left:
-        st.markdown("### 当前设计说明")
+    selected_view = _switcher(
+        "当前输出页签",
+        ["总览", "设计说明", "出图指令", "当前候选图"],
+        key=output_view_key,
+        default=expected_view,
+    )
+
+    image_root = item_dir(task_id, item_id) / "images"
+    approved_path = image_root / "approved.png"
+    approved_exists = approved_path.exists()
+    candidate_paths = _candidate_paths(task_id, item_id, image)
+    candidate_version = item["current_versions"].get(STEP_IMAGE_GENERATION) or "未生成"
+
+    focus_key = f"candidate-focus-{task_id}-{item_id}-{candidate_version}"
+    if approved_exists:
+        default_focus = "已采纳结果"
+    elif candidate_paths:
+        default_focus = candidate_paths[0][0]
+    else:
+        default_focus = ""
+    if focus_key not in st.session_state:
+        st.session_state[focus_key] = default_focus
+    focus_label = st.session_state.get(focus_key, default_focus)
+
+    def render_candidate_area() -> None:
+        st.markdown("### 当前候选图")
+        if not approved_exists and not candidate_paths:
+            st.info("还没有生成候选图。")
+            return
+
+        options = []
+        if approved_exists:
+            options.append(("已采纳结果", approved_path))
+        options.extend(candidate_paths)
+        option_map = {label: path for label, path in options}
+        if focus_label not in option_map:
+            st.session_state[focus_key] = options[0][0]
+        current_focus = st.session_state.get(focus_key, options[0][0])
+        current_path = option_map.get(current_focus, options[0][1])
+
+        st.caption(f"当前候选图版本：{candidate_version}")
+        st.image(str(current_path), caption=current_focus, use_container_width=True)
+        thumb_cols = st.columns(min(4, len(options)))
+        for index, (label, path) in enumerate(options):
+            with thumb_cols[index % len(thumb_cols)]:
+                st.image(str(path), caption=label, width=120)
+                if st.button(
+                    "查看这张",
+                    key=f"candidate-thumb-{item_id}-{label}",
+                    use_container_width=True,
+                    disabled=label == current_focus,
+                ):
+                    st.session_state[focus_key] = label
+                    _rerun()
+
+    if selected_view == "总览":
+        overview_left, overview_right = st.columns([1.0, 1.0], gap="large")
+        with overview_left:
+            st.markdown("### 当前设计说明")
+            if brief:
+                _render_brief_readable(brief)
+            else:
+                st.info("还没有设计说明版本。")
+            st.markdown("### 当前出图指令")
+            if prompt:
+                _render_prompt_readable(prompt)
+            else:
+                st.info("还没有出图指令版本。")
+        with overview_right:
+            render_candidate_area()
+        return
+
+    if selected_view == "设计说明":
+        st.caption("设计说明是原始需求和出图指令之间的中间层。项目背景会作为语义参考，统一风格要求会作为后续出图约束。")
         if brief:
-            st.caption("设计说明是原始需求和出图指令之间的中间层。项目背景和统一风格要求会作为低权重补充信息参与，不会压过条目本身需求。")
-            _show_json(brief)
+            _render_brief_readable(brief)
         else:
             st.info("还没有设计说明版本。")
-        st.markdown("### 当前出图指令")
+        return
+
+    if selected_view == "出图指令":
+        st.caption("这里会显示最终用于出图的主指令和负向指令。统一风格要求会显式进入这里的约束层。")
         if prompt:
-            st.caption("这里能看到名称如何进入最终 prompt，包括名称本身和图标主体。")
-            _show_json(prompt)
+            _render_prompt_readable(prompt)
         else:
             st.info("还没有出图指令版本。")
-    with right:
-        st.markdown("### 当前候选图")
-        image_root = item_dir(task_id, item_id) / "images"
-        approved_path = image_root / "approved.png"
-        if approved_path.exists():
-            st.image(str(approved_path), caption="已通过图片", use_container_width=True)
-        if image and image.get("output", {}).get("candidates"):
-            cols = st.columns(min(3, len(image["output"]["candidates"])))
-            for idx, candidate in enumerate(image["output"]["candidates"]):
-                path = image_root / candidate["image_path"]
-                if path.exists():
-                    cols[idx % len(cols)].image(
-                        str(path),
-                        caption=f"{candidate['candidate_id']} · {item['current_versions'].get('image_generation')}",
-                        use_container_width=True,
-                    )
-        elif not approved_path.exists():
-            st.info("还没有生成候选图。")
+        return
+
+    render_candidate_area()
 
 
 def _render_versions(task_id: str, item: dict) -> None:
@@ -963,7 +1240,7 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
             )
             category = st.text_input("分类", value=item.get("category", ""), key=f"source-category-{item['item_id']}")
             extra_context = st.text_area(
-                "额外上下文",
+                "条目补充说明",
                 value=item.get("extra_context", ""),
                 height=80,
                 key=f"source-extra-context-{item['item_id']}",
@@ -987,9 +1264,7 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
                 st.success("已更新条目，相关下游版本已按需重置。")
                 _rerun()
     _render_action_bar(task_id, item)
-    current_tab, versions_tab, edits_tab, events_tab = st.tabs(
-        ["当前输出", "版本历史", "手动编辑", "事件日志"]
-    )
+    current_tab, versions_tab, edits_tab, events_tab = st.tabs(["当前输出", "版本历史", "手动编辑", "事件日志"])
     with current_tab:
         _render_current_outputs(task_id, item)
     with versions_tab:
@@ -1028,13 +1303,17 @@ def main() -> None:
     task = load_task(selected_task_id)
     items = list_items(selected_task_id)
     _render_task_summary(task, items)
-    batch_tab, entry_tab = st.tabs(["批次信息", "条目工作台"])
+    workspace_view = _switcher(
+        "工作区视图",
+        ["批次信息", "条目工作台"],
+        key=f"workspace-view-{selected_task_id}",
+        default=st.session_state.get(f"workspace-view-{selected_task_id}", "批次信息"),
+    )
 
-    with batch_tab:
+    if workspace_view == "批次信息":
         _render_batch_settings(task)
         _render_task_actions(selected_task_id)
-
-    with entry_tab:
+    else:
         left_col, right_col = st.columns([0.95, 1.15], gap="large")
         with left_col:
             current_item_id = _render_item_selector(selected_task_id, items)

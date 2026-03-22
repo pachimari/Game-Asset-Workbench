@@ -317,6 +317,8 @@ def edit_brief(
                 else base_output.get("icon_subject", item.get("title", "") or "图标主体")
             ),
             "visual_focus": visual_focus if visual_focus is not None else base_output.get("visual_focus", ""),
+            "project_background": base_output.get("project_background", base_input.get("project_background", "")),
+            "style_requirements": base_output.get("style_requirements", base_input.get("style_requirements", "")),
         },
     }
     version = write_artifact(task_id, item_id, STEP_BRIEF_GENERATION, payload, manual=True)
