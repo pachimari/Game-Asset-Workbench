@@ -24,40 +24,60 @@ def generate_brief(
     title: str,
     description: str,
     category: str,
-    project_context: str,
+    project_background: str,
+    style_requirements: str,
     extra_context: str,
 ) -> dict:
     resolved_title = _derive_title(description, title, asset_type)
     resolved_description = (
-        f"{resolved_title}：面向{project_context}项目中的{asset_type}，"
+        f"{resolved_title}：面向{asset_type}，"
         f"围绕“{description}”整理成适合图标生成的简明需求。"
     )
+    if project_background:
+        resolved_description += f" 项目背景参考：{project_background}"
+    if style_requirements:
+        resolved_description += f" 统一风格要求参考：{style_requirements}"
     if extra_context:
         resolved_description += f" 额外上下文：{extra_context}"
     keywords = [
         asset_type,
         category or "general",
-        project_context,
+        project_background[:8] or "project",
         description[:8] or "icon",
     ]
     return {
         "title": resolved_title,
+        "name_source": "user_input" if title else "derived_from_description",
         "description": resolved_description,
         "keywords": keywords,
+        "icon_subject": f"{resolved_title} 的核心视觉符号",
         "visual_focus": f"突出{asset_type}的核心视觉识别点",
+        "project_background": project_background,
+        "style_requirements": style_requirements,
     }
 
 
 def generate_image_prompt(*, brief_output: dict, style_spec: dict, runtime_config: dict) -> dict:
+    project_background = brief_output.get("project_background", "")
+    style_requirements = brief_output.get("style_requirements", "")
     style_tags = ", ".join(style_spec["style_tags"])
     forbidden = ", ".join(style_spec["forbidden_elements"])
     composition = ", ".join(style_spec["composition_rules"])
-    prompt = (
-        f"game icon asset, {brief_output['title']}, {brief_output['description']}, "
-        f"keywords: {', '.join(brief_output['keywords'])}, "
-        f"visual focus: {brief_output['visual_focus']}, "
-        f"style: {style_tags}, composition: {composition}"
-    )
+    prompt_parts = [
+        f"game icon asset",
+        f"name: {brief_output['title']}",
+        f"subject: {brief_output.get('icon_subject', brief_output['title'])}",
+        brief_output["description"],
+        f"keywords: {', '.join(brief_output['keywords'])}",
+        f"visual focus: {brief_output['visual_focus']}",
+    ]
+    if project_background:
+        prompt_parts.append(f"setting reference: {project_background}")
+    prompt_parts.append(f"base style: {style_tags}")
+    if style_requirements:
+        prompt_parts.append(f"style requirements: {style_requirements}")
+    prompt_parts.append(f"composition: {composition}")
+    prompt = ", ".join(prompt_parts)
     negative_prompt = f"forbidden: {forbidden}"
     return {
         "prompt": prompt,
@@ -66,6 +86,10 @@ def generate_image_prompt(*, brief_output: dict, style_spec: dict, runtime_confi
             "candidate_count": runtime_config["candidate_count"],
             "image_size": runtime_config["image_size"],
             "text_allowed": False,
+        },
+        "batch_context": {
+            "project_background": project_background,
+            "style_requirements": style_requirements,
         },
     }
 

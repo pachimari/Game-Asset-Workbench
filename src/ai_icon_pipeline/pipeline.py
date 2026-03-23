@@ -124,7 +124,8 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             title=item.get("title", ""),
             description=item["description"],
             category=item.get("category", ""),
-            project_context=task["project_context"],
+            project_background=task.get("project_background", task.get("project_context", "")),
+            style_requirements=task.get("style_requirements", ""),
             extra_context=item.get("extra_context", ""),
         )
         payload = {
@@ -136,7 +137,8 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 "title": item.get("title", ""),
                 "description": item["description"],
                 "category": item.get("category", ""),
-                "project_context": task["project_context"],
+                "project_background": task.get("project_background", task.get("project_context", "")),
+                "style_requirements": task.get("style_requirements", ""),
                 "extra_context": item.get("extra_context", ""),
             },
             "output": output,
@@ -282,6 +284,7 @@ def edit_brief(
     title: str | None = None,
     description: str | None = None,
     keywords: list[str] | None = None,
+    icon_subject: str | None = None,
     visual_focus: str | None = None,
     note: str | None = None,
     source: str = "cli",
@@ -303,11 +306,19 @@ def edit_brief(
         "note": note or "manual brief edit",
         "output": {
             "title": title if title is not None else base_output.get("title", item.get("title", "")),
+            "name_source": base_output.get("name_source", "manual"),
             "description": (
                 description if description is not None else base_output.get("description", item["description"])
             ),
             "keywords": keywords if keywords is not None else base_output.get("keywords", []),
+            "icon_subject": (
+                icon_subject
+                if icon_subject is not None
+                else base_output.get("icon_subject", item.get("title", "") or "图标主体")
+            ),
             "visual_focus": visual_focus if visual_focus is not None else base_output.get("visual_focus", ""),
+            "project_background": base_output.get("project_background", base_input.get("project_background", "")),
+            "style_requirements": base_output.get("style_requirements", base_input.get("style_requirements", "")),
         },
     }
     version = write_artifact(task_id, item_id, STEP_BRIEF_GENERATION, payload, manual=True)
