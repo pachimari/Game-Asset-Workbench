@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import csv
+import html
 import json
 import io
 import sys
@@ -194,6 +195,11 @@ def _show_json(payload: dict | list) -> None:
     st.code(json.dumps(payload, ensure_ascii=False, indent=2), language="json")
 
 
+def _esc(value: object, fallback: str = "") -> str:
+    text = fallback if value is None else str(value)
+    return html.escape(text, quote=True)
+
+
 def _switcher(label: str, options: list[str], *, key: str, default: str) -> str:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -327,19 +333,24 @@ def _render_artifact_preview(task_id: str, item_id: str, step: str, artifact: di
 def _render_brief_readable(artifact: dict) -> None:
     output = artifact.get("output", {})
     keywords = output.get("keywords", [])
+    title = _esc(output.get("title", "未命名"))
+    description = _esc(output.get("description", "暂无"))
+    icon_subject = _esc(output.get("icon_subject", "暂无"))
+    visual_focus = _esc(output.get("visual_focus", "暂无"))
+    keyword_text = _esc(", ".join(keywords) if keywords else "暂无")
     st.markdown(
         f"""
         <div class="panel">
           <div class="kicker">名称</div>
-          <p style="margin:0.15rem 0 0.8rem 0;color:#0f172a;font-size:1.05rem;"><strong>{output.get('title', '未命名')}</strong></p>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#0f172a;font-size:1.05rem;"><strong>{title}</strong></p>
           <div class="kicker">需求整理</div>
-          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{output.get('description', '暂无')}</p>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{description}</p>
           <div class="kicker">图标主体</div>
-          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;">{output.get('icon_subject', '暂无')}</p>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;">{icon_subject}</p>
           <div class="kicker">视觉重点</div>
-          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;">{output.get('visual_focus', '暂无')}</p>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;">{visual_focus}</p>
           <div class="kicker">关键词</div>
-          <p style="margin:0.15rem 0;color:#334155;">{', '.join(keywords) if keywords else '暂无'}</p>
+          <p style="margin:0.15rem 0;color:#334155;">{keyword_text}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -348,13 +359,15 @@ def _render_brief_readable(artifact: dict) -> None:
 
 def _render_prompt_readable(artifact: dict) -> None:
     output = artifact.get("output", {})
+    prompt = _esc(output.get("prompt", "暂无"))
+    negative_prompt = _esc(output.get("negative_prompt", "暂无"))
     st.markdown(
         f"""
         <div class="panel">
           <div class="kicker">出图指令</div>
-          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{output.get('prompt', '暂无')}</p>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{prompt}</p>
           <div class="kicker">负向指令</div>
-          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{output.get('negative_prompt', '暂无')}</p>
+          <p style="margin:0.15rem 0 0.8rem 0;color:#334155;white-space:pre-wrap;">{negative_prompt}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -424,13 +437,16 @@ def _render_entry_overview(task_id: str, items: list[dict]) -> None:
         for col, item in zip(columns, row_items):
             preview_path = _current_preview_path(task_id, item)
             is_selected = item["item_id"] == current_selected
+            item_id = _esc(item["item_id"])
+            title = _esc(item.get("title") or "未命名条目")
+            item_meta = _esc(f"{item.get('asset_type', 'generic_icon')} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}")
             with col:
                 st.markdown(
                     f"""
                     <div class="panel" style="border-width:{'2px' if is_selected else '1px'}; border-color:{'#ef4444' if is_selected else 'rgba(30, 41, 59, 0.12)'};">
-                      <div class="kicker">{item['item_id']}</div>
-                      <h4 style="margin:0.25rem 0 0.35rem 0;color:#0f172a;">{item.get('title') or '未命名条目'}</h4>
-                      <p style="margin:0.15rem 0;color:#475569;">{item.get('asset_type', 'generic_icon')} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}</p>
+                      <div class="kicker">{item_id}</div>
+                      <h4 style="margin:0.25rem 0 0.35rem 0;color:#0f172a;">{title}</h4>
+                      <p style="margin:0.15rem 0;color:#475569;">{item_meta}</p>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -751,18 +767,20 @@ def _render_item_management(task: dict) -> None:
 
 def _render_task_summary(task: dict, items: list[dict]) -> None:
     summary = task.get("items_summary", {})
+    task_name = _esc(task.get("task_name", task["task_id"]))
+    asset_domain = _esc(task.get("asset_domain", "game_icon_assets"))
     st.markdown(
         f"""
         <div class="hero">
           <div class="kicker">批次工作台</div>
-          <h1>{task.get('task_name', task['task_id'])}</h1>
-          <p>{task.get('asset_domain', 'game_icon_assets')}</p>
+          <h1>{task_name}</h1>
+          <p>{asset_domain}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    background = task.get("project_background", "").strip() or "未填写"
-    style_requirements = task.get("style_requirements", "").strip() or "未填写"
+    background = _esc(task.get("project_background", "").strip() or "未填写")
+    style_requirements = _esc(task.get("style_requirements", "").strip() or "未填写")
     info_left, info_right = st.columns(2)
     info_left.markdown(
         f"""
@@ -808,6 +826,8 @@ def _item_main_action(item: dict) -> tuple[str | None, str | None]:
         "prompt_approved": ("生成候选图", "基于当前出图指令生成候选图"),
         "image_generated": ("采纳当前候选图", "将当前候选图设为结果并完成条目"),
         "completed": ("已完成", "当前条目已经完成"),
+        "failed": ("已失败", "当前条目生成失败，请检查日志或回退后重试。"),
+        "archived": ("已归档", "当前条目已经归档，不再允许继续编辑。"),
     }
     return mapping.get(status, (None, None))
 
@@ -836,7 +856,7 @@ def _run_main_action(task_id: str, item: dict) -> None:
     if status == "image_generated":
         approve_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
-    if status == "completed":
+    if status in {"completed", "failed", "archived"}:
         return
     raise ValueError(f"Unsupported item status: {status}")
 
@@ -872,6 +892,8 @@ def _run_secondary_action(task_id: str, item: dict) -> None:
     if status == "image_generated":
         run_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
+    if status in {"completed", "failed", "archived"}:
+        return
     raise ValueError(f"No secondary action for item status: {status}")
 
 
@@ -884,8 +906,8 @@ def _render_action_bar(task_id: str, item: dict) -> None:
         f"""
         <div class="panel">
           <div class="kicker">当前阶段</div>
-          <p style="margin:0.15rem 0 0.2rem 0;font-size:1.05rem;color:#0f172a;"><strong>{STATUS_LABELS.get(status, status)}</strong></p>
-          <p style="margin:0;color:#475569;">{action_hint or '当前没有可执行动作。'}</p>
+          <p style="margin:0.15rem 0 0.2rem 0;font-size:1.05rem;color:#0f172a;"><strong>{_esc(STATUS_LABELS.get(status, status))}</strong></p>
+          <p style="margin:0;color:#475569;">{_esc(action_hint or '当前没有可执行动作。')}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -897,7 +919,7 @@ def _render_action_bar(task_id: str, item: dict) -> None:
             action_label or "当前无动作",
             key=f"main-action-{item_id}",
             use_container_width=True,
-            disabled=status == "completed",
+            disabled=status in {"completed", "failed", "archived"},
         ):
             try:
                 _run_main_action(task_id, item)
@@ -1214,12 +1236,16 @@ def _render_events(task_id: str, item_id: str) -> None:
 
 
 def _render_item_workspace(task_id: str, item: dict) -> None:
+    title = _esc(item.get("title") or item["item_id"])
+    item_meta = _esc(
+        f"{item.get('asset_type')} · {item.get('category') or '未分类'} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}"
+    )
     st.markdown(
         f"""
         <div class="panel">
           <div class="kicker">当前条目</div>
-          <h3 style="margin:0.15rem 0 0.25rem 0;">{item.get('title') or item['item_id']}</h3>
-          <p style="margin:0;color:#475569;">{item.get('asset_type')} · {item.get('category') or '未分类'} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}</p>
+          <h3 style="margin:0.15rem 0 0.25rem 0;">{title}</h3>
+          <p style="margin:0;color:#475569;">{item_meta}</p>
         </div>
         """,
         unsafe_allow_html=True,
