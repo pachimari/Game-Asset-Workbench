@@ -12,6 +12,7 @@ import streamlit as st
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from ai_icon_pipeline.chat_control import execute_chat_action, parse_chat_action
     from ai_icon_pipeline.config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
     from ai_icon_pipeline.pipeline import (
         approve_step,
@@ -25,11 +26,13 @@ if __package__ in (None, ""):
     from ai_icon_pipeline.storage import (
         create_item,
         create_task,
+        append_item_chat,
         item_dir,
         list_artifacts,
         list_items,
         list_tasks,
         load_artifact,
+        load_item_chat,
         load_item,
         load_item_events,
         load_task,
@@ -49,6 +52,7 @@ if __package__ in (None, ""):
     from ai_icon_pipeline.providers.registry import PROVIDER_LABELS, ProviderRequestError, sync_provider_models
     from ai_icon_pipeline.utils import utc_now
 else:
+    from .chat_control import execute_chat_action, parse_chat_action
     from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
     from .pipeline import (
         approve_step,
@@ -62,11 +66,13 @@ else:
     from .storage import (
         create_item,
         create_task,
+        append_item_chat,
         item_dir,
         list_artifacts,
         list_items,
         list_tasks,
         load_artifact,
+        load_item_chat,
         load_item,
         load_item_events,
         load_task,
@@ -1592,6 +1598,111 @@ def _render_events(task_id: str, item_id: str) -> None:
         _show_json(load_item_events(task_id, item_id))
 
 
+def _render_chat_control(task_id: str, item: dict) -> None:
+    item_id = item["item_id"]
+    history = load_item_chat(task_id, item_id)
+    if history:
+        for row in history[-8:]:
+            role = row.get("role", "assistant")
+            st.markdown(f"**{'你' if role == 'user' else '系统'}**")
+            if row.get("message"):
+                st.write(row["message"])
+            if row.get("action"):
+                st.code(
+                    json.dumps(
+                        {
+                            "action": row.get("action"),
+                            "reason": row.get("reason"),
+                            "confidence": row.get("confidence"),
+                            "status": row.get("status"),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    language="json",
+                )
+            st.divider()
+    else:
+        st.caption("还没有聊天记录。你可以输入“重跑出图指令”“回到设计说明”“通过当前步骤”等指令。")
+
+    with st.form(f"chat-control-{task_id}-{item_id}"):
+        message = st.text_area(
+            "聊天指令",
+            placeholder="例如：重跑出图指令 / 回到设计说明 / 通过当前步骤",
+            height=100,
+        )
+        submitted = st.form_submit_button("发送指令", use_container_width=True)
+    if not submitted or not message.strip():
+        return
+
+    user_message = message.strip()
+    append_item_chat(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "role": "user",
+            "message": user_message,
+        },
+    )
+
+    task = load_task(task_id)
+    settings = load_global_settings()
+    parsed = parse_chat_action(task, load_item(task_id, item_id), settings, user_message)
+
+    if parsed["action"] == "unsupported":
+        append_item_chat(
+            task_id,
+            item_id,
+            {
+                "timestamp": utc_now(),
+                "role": "assistant",
+                "message": "当前最小版聊天只支持重跑、回退和通过当前步骤。",
+                "action": parsed["action"],
+                "reason": parsed.get("reason"),
+                "confidence": parsed.get("confidence"),
+                "status": "ignored",
+            },
+        )
+        st.warning(parsed.get("reason", "当前未识别该指令。"))
+        _rerun()
+
+    try:
+        result = execute_chat_action(task_id, item_id, parsed["action"], source="chat")
+    except Exception as exc:
+        append_item_chat(
+            task_id,
+            item_id,
+            {
+                "timestamp": utc_now(),
+                "role": "assistant",
+                "message": str(exc),
+                "action": parsed["action"],
+                "reason": parsed.get("reason"),
+                "confidence": parsed.get("confidence"),
+                "status": "failed",
+            },
+        )
+        st.error(str(exc))
+    else:
+        append_item_chat(
+            task_id,
+            item_id,
+            {
+                "timestamp": utc_now(),
+                "role": "assistant",
+                "message": f"已执行 {parsed['action']}",
+                "action": parsed["action"],
+                "reason": parsed.get("reason"),
+                "confidence": parsed.get("confidence"),
+                "status": result.get("status"),
+            },
+        )
+        st.success(f"已执行：{parsed['action']}")
+        _reset_task_ui_state(task_id, item_id)
+        _rerun()
+
+
 def _render_item_workspace(task_id: str, item: dict) -> None:
     title = _esc(item.get("title") or item["item_id"])
     item_meta = _esc(
@@ -1650,7 +1761,7 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
     settings = load_global_settings()
     _render_item_model_overrides(task, item, settings)
     _render_action_bar(task_id, item)
-    current_tab, versions_tab, edits_tab, events_tab = st.tabs(["当前输出", "版本历史", "手动编辑", "事件日志"])
+    current_tab, versions_tab, edits_tab, events_tab, chat_tab = st.tabs(["当前输出", "版本历史", "手动编辑", "事件日志", "聊天控制"])
     with current_tab:
         _render_current_outputs(task_id, item)
     with versions_tab:
@@ -1659,6 +1770,8 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
         _render_manual_edits(task_id, item)
     with events_tab:
         _render_events(task_id, item["item_id"])
+    with chat_tab:
+        _render_chat_control(task_id, item)
 
 
 def main() -> None:

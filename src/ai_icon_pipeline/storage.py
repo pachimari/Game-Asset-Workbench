@@ -520,6 +520,23 @@ def load_item_events(task_id: str, item_id: str) -> list[dict]:
     return read_jsonl(item_dir(task_id, item_id) / "events.jsonl")
 
 
+def load_item_chat(task_id: str, item_id: str) -> list[dict]:
+    path = item_dir(task_id, item_id) / "chat.json"
+    if not path.exists():
+        return []
+    payload = read_json(path)
+    if isinstance(payload, list):
+        return payload
+    return []
+
+
+def append_item_chat(task_id: str, item_id: str, payload: dict) -> list[dict]:
+    history = load_item_chat(task_id, item_id)
+    history.append(payload)
+    write_json(item_dir(task_id, item_id) / "chat.json", history)
+    return history
+
+
 def load_style_spec(task_id: str) -> dict:
     return read_json(task_dir(task_id) / "configs" / "style_spec.json")  # type: ignore[return-value]
 
