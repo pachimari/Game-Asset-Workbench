@@ -35,8 +35,19 @@ if __package__ in (None, ""):
         load_task,
         load_task_events,
         update_task_settings,
+        update_task_model_override,
         update_item,
+        update_item_model_override,
     )
+    from ai_icon_pipeline.settings import (
+        load_global_settings,
+        provider_models_for_stage,
+        resolve_stage_selection,
+        set_global_default,
+        update_provider_settings,
+    )
+    from ai_icon_pipeline.providers.registry import PROVIDER_LABELS, ProviderRequestError, sync_provider_models
+    from ai_icon_pipeline.utils import utc_now
 else:
     from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
     from .pipeline import (
@@ -61,8 +72,19 @@ else:
         load_task,
         load_task_events,
         update_task_settings,
+        update_task_model_override,
         update_item,
+        update_item_model_override,
     )
+    from .settings import (
+        load_global_settings,
+        provider_models_for_stage,
+        resolve_stage_selection,
+        set_global_default,
+        update_provider_settings,
+    )
+    from .providers.registry import PROVIDER_LABELS, ProviderRequestError, sync_provider_models
+    from .utils import utc_now
 
 
 STEP_LABELS = {
@@ -185,6 +207,93 @@ def _inject_styles() -> None:
           font-family: Menlo, Monaco, monospace;
           font-size: 0.84rem;
         }
+        [data-testid="stStatusWidget"] {
+          display: none !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        section[data-testid="stSidebar"] div.block-container {
+          height: 100vh;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+          padding-top: 0.12rem;
+          padding-bottom: 0.35rem;
+          padding-left: 0.85rem;
+          padding-right: 0.85rem;
+          overflow: hidden;
+        }
+        section[data-testid="stSidebar"] .sidebar-brand {
+          margin: 0;
+          padding: 0;
+        }
+        section[data-testid="stSidebar"] .sidebar-brand h1 {
+          margin: 0;
+          font-size: 1.75rem;
+          line-height: 1.05;
+          color: var(--text-color);
+        }
+        section[data-testid="stSidebar"] .sidebar-brand p {
+          margin: 0.28rem 0 0 0;
+          color: rgba(148, 163, 184, 0.92);
+          font-size: 0.88rem;
+          line-height: 1.4;
+        }
+        section[data-testid="stSidebar"] .sidebar-section-title {
+          margin-top: 0.38rem;
+          margin-bottom: 0.05rem;
+          font-size: 0.86rem;
+          font-weight: 700;
+          color: rgba(226, 232, 240, 0.88);
+          text-transform: none;
+          letter-spacing: 0.01em;
+        }
+        section[data-testid="stSidebar"] .st-key-sidebar-task-scroll {
+          flex: 1 1 auto;
+          height: calc(100vh - 13.1rem);
+          max-height: calc(100vh - 13.1rem);
+          overflow-y: auto;
+          min-height: 0;
+          padding-right: 0.2rem;
+          padding-bottom: 5rem;
+        }
+        section[data-testid="stSidebar"] .st-key-sidebar-task-scroll [data-testid="stButton"] {
+          margin-bottom: 0.32rem;
+        }
+        section[data-testid="stSidebar"] .st-key-sidebar-task-scroll [data-testid="stButton"] > button {
+          min-height: 0 !important;
+          padding: 0.54rem 0.72rem !important;
+          border-radius: 12px !important;
+          font-size: 0.94rem !important;
+          font-weight: 600 !important;
+          line-height: 1.18 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        section[data-testid="stSidebar"] .st-key-sidebar-footer {
+          position: absolute;
+          left: 0.85rem;
+          right: 0.85rem;
+          bottom: 0;
+          z-index: 20;
+          padding-top: 0.55rem;
+          padding-bottom: 0.1rem;
+          background: var(--background-color);
+          border-top: 1px solid rgba(148, 163, 184, 0.15);
+        }
+        section[data-testid="stSidebar"] .st-key-sidebar-footer [data-testid="stButton"] > button {
+          min-height: 0 !important;
+          padding: 0.58rem 0.68rem !important;
+          border-radius: 12px !important;
+          font-size: 0.94rem !important;
+          font-weight: 700 !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -225,6 +334,12 @@ def _task_label(task: dict) -> str:
     return f"{task['task_id']} · {task.get('task_name', '未命名批次')} · {STATUS_LABELS.get(task.get('status', 'draft'), task.get('status', 'draft'))}"
 
 
+def _sidebar_task_label(task: dict) -> str:
+    task_name = str(task.get("task_name", "未命名批次")).strip() or "未命名批次"
+    status = STATUS_LABELS.get(task.get("status", "draft"), task.get("status", "draft"))
+    return f"{task_name} · {status}"
+
+
 def _item_label(item: dict) -> str:
     title = item.get("title") or item.get("asset_type", "条目")
     return f"{item['item_id']} · {title} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}"
@@ -239,64 +354,306 @@ def _artifact_or_none(task_id: str, item_id: str, step: str, version: str | None
         return None
 
 
-def _render_task_creation() -> None:
-    with st.sidebar.expander("创建批次", expanded=False):
-        with st.form("create_task_form"):
-            task_name = st.text_input("批次名称", value="未命名图标批次")
-            project_background = st.text_area(
-                "项目背景",
-                placeholder="例如：三国奇幻、末日科幻、西幻卡牌",
-                height=120,
-                help="支持多段文本。作为低权重背景信息，帮助系统理解这批图的世界观与用途。",
+def _model_token(provider: str, model: str) -> str:
+    return f"{provider}::{model}"
+
+
+def _decode_model_token(token: str | None) -> tuple[str | None, str | None]:
+    if not token or "::" not in token:
+        return None, None
+    provider, model = token.split("::", 1)
+    return provider, model
+
+
+def _stage_model_options(settings: dict, step: str, *, include_inherit_label: str | None = None) -> list[tuple[str, str]]:
+    options: list[tuple[str, str]] = []
+    if include_inherit_label:
+        options.append(("__inherit__", include_inherit_label))
+    for entry in provider_models_for_stage(settings, step):
+        token = _model_token(entry["provider"], entry["model"])
+        label = f"{PROVIDER_LABELS.get(entry['provider'], entry['provider'])} · {_short_model_name(entry['label'])}"
+        options.append((token, label))
+    return options
+
+
+def _resolve_override_token(selection: dict | None) -> str:
+    if not selection:
+        return "__inherit__"
+    provider = selection.get("provider")
+    model = selection.get("model")
+    if not provider or not model:
+        return "__inherit__"
+    return _model_token(provider, model)
+
+
+def _short_model_name(model: str) -> str:
+    shortened = model.replace("models/", "")
+    shortened = shortened.replace("gemini-", "")
+    shortened = shortened.replace("deepseek-", "")
+    return shortened
+
+
+def _selection_source_label(source: str) -> str:
+    return {
+        "global": "总设置",
+        "task": "批次覆盖",
+        "item": "条目覆盖",
+    }.get(source, source)
+
+
+def _render_stage_selectors(
+    *,
+    prefix: str,
+    settings: dict,
+    selections_source: dict,
+    effective_resolver,
+    inherit_label_builder,
+) -> tuple[dict[str, str], bool]:
+    selections: dict[str, str] = {}
+    with st.form(prefix):
+        for step in [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]:
+            effective = effective_resolver(step)
+            st.markdown(f"#### {STEP_LABELS[step]}")
+            options = _stage_model_options(
+                settings,
+                step,
+                include_inherit_label=inherit_label_builder(effective),
             )
-            style_requirements = st.text_area(
-                "统一风格要求",
-                placeholder="例如：高对比、单主体、清晰轮廓、避免文字",
-                height=120,
-                help="支持多段文本。作为低权重风格补充，不会压过每个条目自身的需求。",
+            option_tokens = [token for token, _label in options]
+            option_labels = {token: label for token, label in options}
+            current_token = _resolve_override_token(selections_source.get(step))
+            if current_token not in option_tokens:
+                current_token = "__inherit__"
+            selections[step] = st.selectbox(
+                f"{prefix}-{step}",
+                options=option_tokens,
+                index=option_tokens.index(current_token),
+                format_func=lambda token, labels=option_labels: labels[token],
+                key=f"{prefix}-{step}",
+                label_visibility="collapsed",
             )
-            submitted = st.form_submit_button("创建空批次", use_container_width=True)
-        if submitted:
-            try:
-                task = create_task(
-                    task_name=task_name,
-                    project_background=project_background,
-                    style_requirements=style_requirements,
+            st.caption(
+                f"当前生效：{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_short_model_name(effective['model'])}（{_selection_source_label(effective['source'])}）"
+            )
+            st.divider()
+        submitted = st.form_submit_button("保存", use_container_width=True)
+    return selections, submitted
+
+
+def _render_global_settings(settings: dict) -> dict:
+    st.markdown("### 设置")
+    st.caption("这里配置全局 API Key、同步可用模型，并设定三个阶段的默认模型。所有批次和条目都可以继承或覆盖这里的默认值。")
+
+    provider_columns = st.columns(2, gap="large")
+    for column, provider_id in zip(provider_columns, ["gemini", "deepseek"]):
+        provider_settings = settings["providers"].get(provider_id, {})
+        with column:
+            st.markdown(f"#### {PROVIDER_LABELS[provider_id]}")
+            with st.form(f"provider-settings-{provider_id}"):
+                api_key = st.text_input(
+                    f"{PROVIDER_LABELS[provider_id]} API Key",
+                    value=provider_settings.get("api_key", ""),
+                    type="password",
+                    key=f"provider-key-{provider_id}",
                 )
-            except Exception as exc:
-                st.sidebar.error(str(exc))
-            else:
-                st.sidebar.success(f"已创建 {task['task_id']}")
-                st.session_state["selected_task_id"] = task["task_id"]
+                save_clicked = st.form_submit_button("保存 Key", use_container_width=True)
+            if save_clicked:
+                update_provider_settings(provider_id, api_key=api_key, last_error=None)
+                settings = load_global_settings()
+                st.success(f"{PROVIDER_LABELS[provider_id]} Key 已保存到本地配置。")
                 _rerun()
+
+            sync_left, sync_right = st.columns([1.2, 1.0])
+            with sync_left:
+                if st.button(f"同步 {PROVIDER_LABELS[provider_id]} 模型", key=f"sync-models-{provider_id}", use_container_width=True):
+                    api_key = load_global_settings()["providers"][provider_id].get("api_key", "")
+                    if not api_key:
+                        st.error("请先保存 API Key。")
+                    else:
+                        try:
+                            models = sync_provider_models(provider_id, api_key)
+                        except ProviderRequestError as exc:
+                            update_provider_settings(provider_id, last_error=str(exc))
+                            st.error(str(exc))
+                        else:
+                            update_provider_settings(
+                                provider_id,
+                                models=models,
+                                last_synced_at=utc_now(),
+                                last_error=None,
+                            )
+                            st.success(f"已同步 {len(models)} 个模型。")
+                            _rerun()
+            with sync_right:
+                st.caption(f"模型数：{len(provider_settings.get('models', []))}")
+            last_synced_at = provider_settings.get("last_synced_at")
+            if last_synced_at:
+                st.caption(f"上次同步：{last_synced_at}")
+            last_error = provider_settings.get("last_error")
+            if last_error:
+                st.warning(last_error)
+
+    st.markdown("#### 默认模型")
+    with st.form("global-default-models"):
+        selections: dict[str, str] = {}
+        for step in [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]:
+            st.markdown(f"#### {STEP_LABELS[step]}")
+            options = _stage_model_options(settings, step)
+            option_tokens = [token for token, _label in options]
+            option_labels = {token: label for token, label in options}
+            current = settings["defaults"].get(step, {})
+            current_token = _model_token(current.get("provider", "mock"), current.get("model", ""))
+            if current_token not in option_tokens and option_tokens:
+                current_token = option_tokens[0]
+            selections[step] = st.selectbox(
+                step,
+                options=option_tokens,
+                index=option_tokens.index(current_token) if current_token in option_tokens else 0,
+                format_func=lambda token, labels=option_labels: labels[token],
+                key=f"global-default-{step}",
+                label_visibility="collapsed",
+            )
+            st.divider()
+        submitted = st.form_submit_button("保存全局默认模型", use_container_width=True)
+    if submitted:
+        for step, token in selections.items():
+            provider, model = _decode_model_token(token)
+            if provider and model:
+                set_global_default(step, provider=provider, model=model)
+        st.success("全局默认模型已保存。")
+        _rerun()
+    return load_global_settings()
+
+
+def _render_task_model_overrides(task: dict, settings: dict) -> None:
+    task_id = task["task_id"]
+    st.markdown("### 批次默认模型")
+    st.caption("这里可以覆盖设置里的默认模型。未选择时表示继续继承全局默认。")
+    selections, submitted = _render_stage_selectors(
+        prefix=f"task-model-override-{task_id}",
+        settings=settings,
+        selections_source=task.get("model_overrides", {}),
+        effective_resolver=lambda step: resolve_stage_selection(task, {"model_overrides": {}}, settings, step),
+        inherit_label_builder=lambda _effective: "继承设置默认",
+    )
+    if submitted:
+        for step, token in selections.items():
+            provider, model = _decode_model_token(token)
+            update_task_model_override(task_id, step, provider=provider, model=model)
+        st.success("批次默认模型已保存。")
+        _rerun()
+
+
+def _render_item_model_overrides(task: dict, item: dict, settings: dict) -> None:
+    task_id = task["task_id"]
+    item_id = item["item_id"]
+    st.markdown("### 当前条目模型")
+    st.caption("这里可以为当前条目的三个阶段单独选择模型。未选择时表示继续继承批次默认模型。")
+    selections, submitted = _render_stage_selectors(
+        prefix=f"item-model-override-{task_id}-{item_id}",
+        settings=settings,
+        selections_source=item.get("model_overrides", {}),
+        effective_resolver=lambda step: resolve_stage_selection(task, item, settings, step),
+        inherit_label_builder=lambda effective: f"继承当前默认（{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_short_model_name(effective['model'])}）",
+    )
+    if submitted:
+        for step, token in selections.items():
+            provider, model = _decode_model_token(token)
+            update_item_model_override(task_id, item_id, step, provider=provider, model=model)
+        st.success("当前条目模型已保存。")
+        _rerun()
+
+
+def _render_task_creation() -> None:
+    with st.form("create_task_form"):
+        task_name = st.text_input("批次名称", value="未命名图标批次")
+        project_background = st.text_area(
+            "项目背景",
+            placeholder="例如：三国奇幻、末日科幻、西幻卡牌",
+            height=120,
+            help="支持多段文本。作为低权重背景信息，帮助系统理解这批图的世界观与用途。",
+        )
+        style_requirements = st.text_area(
+            "统一风格要求",
+            placeholder="例如：高对比、单主体、清晰轮廓、避免文字",
+            height=120,
+            help="支持多段文本。作为低权重风格补充，不会压过每个条目自身的需求。",
+        )
+        submitted = st.form_submit_button("创建空批次", use_container_width=True)
+    if submitted:
+        try:
+            task = create_task(
+                task_name=task_name,
+                project_background=project_background,
+                style_requirements=style_requirements,
+            )
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.session_state["selected_task_id"] = task["task_id"]
+            st.success(f"已创建 {task['task_id']}")
+            _rerun()
+
+
+@st.dialog("创建批次", width="large")
+def _open_create_task_dialog() -> None:
+    _render_task_creation()
+
+
+@st.dialog("设置", width="large")
+def _open_settings_dialog() -> None:
+    settings = load_global_settings()
+    _render_global_settings(settings)
 
 
 def _render_sidebar(tasks: list[dict]) -> str | None:
-    st.sidebar.title("工作台")
-    st.sidebar.caption("批次列表与基础操作。")
-    _render_task_creation()
+    st.sidebar.markdown(
+        """
+        <div class="sidebar-brand">
+          <h1>工作台</h1>
+          <p>切换批次 / 设置</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown('<div class="sidebar-section-title">批次</div>', unsafe_allow_html=True)
+    scroll_shell = st.sidebar.container(key="sidebar-task-scroll")
 
     if not tasks:
-        st.sidebar.info("还没有 task，可以先从上面的表单创建。")
+        with scroll_shell:
+            st.info("还没有批次，可以先创建一个。")
+    else:
+        task_lookup = {task["task_id"]: task for task in tasks}
+        current_task_id = st.session_state.get("selected_task_id")
+        if current_task_id not in task_lookup:
+            current_task_id = tasks[0]["task_id"]
+
+        with scroll_shell:
+            for task in tasks:
+                label = _sidebar_task_label(task)
+                is_current = task["task_id"] == current_task_id
+                if st.button(
+                    label,
+                    key=f"sidebar-task-{task['task_id']}",
+                    use_container_width=True,
+                    disabled=is_current,
+                ):
+                    st.session_state["selected_task_id"] = task["task_id"]
+                    _rerun()
+
+    footer_box = st.sidebar.container(key="sidebar-footer")
+    with footer_box:
+        footer_left, footer_right = st.columns([1.2, 1], gap="small")
+        with footer_left:
+            if st.button("新建批次", use_container_width=True, key="sidebar-create-task"):
+                _open_create_task_dialog()
+        with footer_right:
+            if st.button("设置", use_container_width=True, key="sidebar-open-settings"):
+                _open_settings_dialog()
+
+    if not tasks:
         return None
-
-    task_lookup = {task["task_id"]: task for task in tasks}
-    current_task_id = st.session_state.get("selected_task_id")
-    if current_task_id not in task_lookup:
-        current_task_id = tasks[0]["task_id"]
-
-    selected_label = st.sidebar.selectbox(
-        "选择批次",
-        options=[task["task_id"] for task in tasks],
-        index=[task["task_id"] for task in tasks].index(current_task_id),
-        format_func=lambda task_id: _task_label(task_lookup[task_id]),
-        key="selected_task_id",
-    )
-
-    if st.sidebar.button("刷新批次列表", use_container_width=True):
-        _rerun()
-
-    return selected_label
+    return st.session_state.get("selected_task_id", tasks[0]["task_id"])
 
 
 def _artifact_source_label(artifact: dict) -> str:
@@ -1289,6 +1646,9 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
                 _reset_task_ui_state(task_id, item["item_id"])
                 st.success("已更新条目，相关下游版本已按需重置。")
                 _rerun()
+    task = load_task(task_id)
+    settings = load_global_settings()
+    _render_item_model_overrides(task, item, settings)
     _render_action_bar(task_id, item)
     current_tab, versions_tab, edits_tab, events_tab = st.tabs(["当前输出", "版本历史", "手动编辑", "事件日志"])
     with current_tab:
@@ -1318,8 +1678,8 @@ def main() -> None:
             """
             <div class="hero">
               <div class="kicker">还没有批次</div>
-              <h1>先创建一个批次容器</h1>
-              <p>批次只承载项目背景和统一风格要求，创建后再在批次内新增或粘贴条目。</p>
+              <h1>先在左侧创建一个批次</h1>
+              <p>批次负责项目背景、风格要求和批次级模型覆盖；全局设置请从左侧底部“设置”进入。</p>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1329,6 +1689,7 @@ def main() -> None:
     task = load_task(selected_task_id)
     items = list_items(selected_task_id)
     _render_task_summary(task, items)
+    settings = load_global_settings()
     workspace_view = _switcher(
         "工作区视图",
         ["批次信息", "条目工作台"],
@@ -1338,6 +1699,7 @@ def main() -> None:
 
     if workspace_view == "批次信息":
         _render_batch_settings(task)
+        _render_task_model_overrides(task, settings)
         _render_task_actions(selected_task_id)
     else:
         left_col, right_col = st.columns([0.95, 1.15], gap="large")

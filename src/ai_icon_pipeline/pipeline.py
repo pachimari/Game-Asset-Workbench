@@ -7,6 +7,7 @@ from .config import (
     STATUS_BRIEF_GENERATED,
     STATUS_COMPLETED,
     STATUS_DRAFT,
+    STATUS_FAILED,
     STATUS_IMAGE_GENERATED,
     STATUS_PROMPT_APPROVED,
     STATUS_PROMPT_GENERATED,
@@ -14,7 +15,12 @@ from .config import (
     STEP_IMAGE_GENERATION,
     STEP_IMAGE_PROMPT,
 )
-from .mock_providers import generate_brief, generate_image_prompt, generate_images
+from .provider_runtime import (
+    generate_brief_output,
+    generate_image_candidates,
+    generate_prompt_output,
+)
+from .settings import load_global_settings, resolve_stage_selection
 from .state_machine import TERMINAL_STATUSES, validate_approval, validate_generation
 from .storage import (
     append_event,
@@ -72,6 +78,36 @@ def _set_metrics_status(task_id: str, item_id: str, status: str) -> None:
     save_metrics(task_id, item_id, metrics)
 
 
+def _mark_step_failed(
+    task_id: str,
+    item_id: str,
+    step: str,
+    *,
+    source: str,
+    provider_id: str,
+    model_id: str,
+    error_message: str,
+) -> None:
+    item = load_item(task_id, item_id)
+    item["status"] = STATUS_FAILED
+    save_item(task_id, item)
+    _set_metrics_status(task_id, item_id, STATUS_FAILED)
+    event = {
+        "timestamp": utc_now(),
+        "source": source,
+        "action": f"fail_{step}",
+        "item_id": item_id,
+        "step": step,
+        "provider": provider_id,
+        "model": model_id,
+        "error": error_message,
+        "to": STATUS_FAILED,
+    }
+    append_item_event(task_id, item_id, event)
+    append_event(task_id, event)
+    refresh_task_summary(task_id)
+
+
 def _reset_downstream(item: dict, step: str) -> None:
     for downstream_step in DOWNSTREAM_STEPS[step]:
         item["current_versions"][downstream_step] = None
@@ -116,80 +152,115 @@ def _select_current_version(
 def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> dict:
     task = load_task(task_id)
     item = load_item(task_id, item_id)
+    global_settings = load_global_settings()
+    selected_runtime = resolve_stage_selection(task, item, global_settings, step)
+    provider_id = selected_runtime["provider"]
+    model_id = selected_runtime["model"]
+    provider_settings = global_settings["providers"].get(provider_id, {})
+    api_key = provider_settings.get("api_key", "")
     next_status = validate_generation(step, item["status"])
 
-    if step == STEP_BRIEF_GENERATION:
-        output = generate_brief(
-            asset_type=item["asset_type"],
-            title=item.get("title", ""),
-            description=item["description"],
-            category=item.get("category", ""),
-            project_background=task.get("project_background", task.get("project_context", "")),
-            style_requirements=task.get("style_requirements", ""),
-            extra_context=item.get("extra_context", ""),
+    try:
+        if step == STEP_BRIEF_GENERATION:
+            output = generate_brief_output(
+                provider_id=provider_id,
+                api_key=api_key,
+                model=model_id,
+                asset_type=item["asset_type"],
+                title=item.get("title", ""),
+                description=item["description"],
+                category=item.get("category", ""),
+                project_background=task.get("project_background", task.get("project_context", "")),
+                style_requirements=task.get("style_requirements", ""),
+                extra_context=item.get("extra_context", ""),
+            )
+            payload = {
+                "step": step,
+                "provider": provider_id,
+                "model": model_id,
+                "created_at": utc_now(),
+                "input": {
+                    "asset_type": item["asset_type"],
+                    "title": item.get("title", ""),
+                    "description": item["description"],
+                    "category": item.get("category", ""),
+                    "project_background": task.get("project_background", task.get("project_context", "")),
+                    "style_requirements": task.get("style_requirements", ""),
+                    "extra_context": item.get("extra_context", ""),
+                },
+                "output": output,
+            }
+            version = None
+        elif step == STEP_IMAGE_PROMPT:
+            brief_version = item["current_versions"]["brief_generation"]
+            if not brief_version:
+                raise ValueError("No approved brief version found for prompt generation")
+            brief_artifact = load_artifact(task_id, item_id, STEP_BRIEF_GENERATION, brief_version)
+            runtime_config = load_runtime_config(task_id)
+            style_spec = load_style_spec(task_id)
+            output = generate_prompt_output(
+                provider_id=provider_id,
+                api_key=api_key,
+                model=model_id,
+                brief_output=brief_artifact["output"],
+                style_spec=style_spec,
+                runtime_config=runtime_config,
+            )
+            payload = {
+                "step": step,
+                "provider": provider_id,
+                "model": model_id,
+                "created_at": utc_now(),
+                "input": {
+                    "brief_version": brief_version,
+                    "style_spec": style_spec,
+                    "selected_runtime": selected_runtime,
+                },
+                "output": output,
+            }
+            version = None
+        elif step == STEP_IMAGE_GENERATION:
+            prompt_version = item["current_versions"]["image_prompt"]
+            if not prompt_version:
+                raise ValueError("No approved prompt version found for image generation")
+            runtime_config = load_runtime_config(task_id)
+            version = next_version(task_id, item_id, step)
+            prompt_artifact = load_artifact(task_id, item_id, STEP_IMAGE_PROMPT, prompt_version)
+            candidates = generate_image_candidates(
+                provider_id=provider_id,
+                api_key=api_key,
+                model=model_id,
+                output_dir=item_dir(task_id, item_id) / "images",
+                version=version,
+                candidate_count=runtime_config["candidate_count"],
+                prompt=prompt_artifact["output"].get("prompt", ""),
+                negative_prompt=prompt_artifact["output"].get("negative_prompt", ""),
+            )
+            payload = {
+                "step": step,
+                "provider": provider_id,
+                "model": model_id,
+                "created_at": utc_now(),
+                "input": {
+                    "image_prompt_version": prompt_version,
+                    "candidate_count": runtime_config["candidate_count"],
+                    "selected_runtime": selected_runtime,
+                },
+                "output": {"candidates": candidates},
+            }
+        else:
+            raise ValueError(f"Unsupported step: {step}")
+    except Exception as exc:
+        _mark_step_failed(
+            task_id,
+            item_id,
+            step,
+            source=source,
+            provider_id=provider_id,
+            model_id=model_id,
+            error_message=str(exc),
         )
-        payload = {
-            "step": step,
-            "provider": "mock",
-            "created_at": utc_now(),
-            "input": {
-                "asset_type": item["asset_type"],
-                "title": item.get("title", ""),
-                "description": item["description"],
-                "category": item.get("category", ""),
-                "project_background": task.get("project_background", task.get("project_context", "")),
-                "style_requirements": task.get("style_requirements", ""),
-                "extra_context": item.get("extra_context", ""),
-            },
-            "output": output,
-        }
-        version = None
-    elif step == STEP_IMAGE_PROMPT:
-        brief_version = item["current_versions"]["brief_generation"]
-        if not brief_version:
-            raise ValueError("No approved brief version found for prompt generation")
-        brief_artifact = load_artifact(task_id, item_id, STEP_BRIEF_GENERATION, brief_version)
-        runtime_config = load_runtime_config(task_id)
-        style_spec = load_style_spec(task_id)
-        output = generate_image_prompt(
-            brief_output=brief_artifact["output"],
-            style_spec=style_spec,
-            runtime_config=runtime_config,
-        )
-        payload = {
-            "step": step,
-            "provider": "mock",
-            "created_at": utc_now(),
-            "input": {
-                "brief_version": brief_version,
-                "style_spec": style_spec,
-            },
-            "output": output,
-        }
-        version = None
-    elif step == STEP_IMAGE_GENERATION:
-        prompt_version = item["current_versions"]["image_prompt"]
-        if not prompt_version:
-            raise ValueError("No approved prompt version found for image generation")
-        runtime_config = load_runtime_config(task_id)
-        version = next_version(task_id, item_id, step)
-        candidates = generate_images(
-            output_dir=item_dir(task_id, item_id) / "images",
-            version=version,
-            candidate_count=runtime_config["candidate_count"],
-        )
-        payload = {
-            "step": step,
-            "provider": "mock",
-            "created_at": utc_now(),
-            "input": {
-                "image_prompt_version": prompt_version,
-                "candidate_count": runtime_config["candidate_count"],
-            },
-            "output": {"candidates": candidates},
-        }
-    else:
-        raise ValueError(f"Unsupported step: {step}")
+        raise
 
     version = write_artifact(task_id, item_id, step, payload, version=version)
     item["current_versions"][step] = version

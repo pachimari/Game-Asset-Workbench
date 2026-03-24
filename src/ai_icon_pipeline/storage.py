@@ -9,6 +9,9 @@ from .config import (
     DEFAULT_RUNTIME_CONFIG,
     DEFAULT_STYLE_SPEC,
     STATUS_DRAFT,
+    STEP_BRIEF_GENERATION,
+    STEP_IMAGE_GENERATION,
+    STEP_IMAGE_PROMPT,
     TASKS_DIR,
 )
 from .utils import ensure_dir, utc_now
@@ -16,6 +19,14 @@ from .utils import ensure_dir, utc_now
 
 TASK_ID_PATTERN = re.compile(r"^task_(\d+)$")
 ITEM_ID_PATTERN = re.compile(r"^item_(\d+)$")
+
+
+def default_model_overrides() -> dict:
+    return {
+        STEP_BRIEF_GENERATION: {"provider": None, "model": None},
+        STEP_IMAGE_PROMPT: {"provider": None, "model": None},
+        STEP_IMAGE_GENERATION: {"provider": None, "model": None},
+    }
 
 
 def ensure_tasks_root() -> None:
@@ -94,7 +105,26 @@ def _normalize_item(raw_item: dict, item_id: str, timestamp: str) -> dict:
             "image_prompt": None,
             "image_generation": None,
         },
+        "model_overrides": deepcopy(raw_item.get("model_overrides", default_model_overrides())),
     }
+
+
+def _ensure_task_schema(task: dict) -> dict:
+    task.setdefault("model_overrides", deepcopy(default_model_overrides()))
+    for step, selection in default_model_overrides().items():
+        task["model_overrides"].setdefault(step, deepcopy(selection))
+        task["model_overrides"][step].setdefault("provider", None)
+        task["model_overrides"][step].setdefault("model", None)
+    return task
+
+
+def _ensure_item_schema(item: dict) -> dict:
+    item.setdefault("model_overrides", deepcopy(default_model_overrides()))
+    for step, selection in default_model_overrides().items():
+        item["model_overrides"].setdefault(step, deepcopy(selection))
+        item["model_overrides"][step].setdefault("provider", None)
+        item["model_overrides"][step].setdefault("model", None)
+    return item
 
 
 def create_task(
@@ -139,6 +169,7 @@ def create_task(
         "item_count": len(normalized_items),
         "style_spec_ref": "configs/style_spec.json",
         "runtime_config_ref": "configs/runtime_config.json",
+        "model_overrides": deepcopy(default_model_overrides()),
     }
 
     write_json(root / "task.json", task)
@@ -335,11 +366,76 @@ def update_task_settings(
     return load_task(task_id)
 
 
+def update_task_model_override(
+    task_id: str,
+    step: str,
+    *,
+    provider: str | None,
+    model: str | None,
+) -> dict:
+    task = load_task(task_id)
+    task["model_overrides"][step] = {"provider": provider, "model": model}
+    save_task(task)
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": "user",
+            "action": "update_task_model_override",
+            "step": step,
+            "provider": provider,
+            "model": model,
+            "to": task.get("status", STATUS_DRAFT),
+        },
+    )
+    return load_task(task_id)
+
+
+def update_item_model_override(
+    task_id: str,
+    item_id: str,
+    step: str,
+    *,
+    provider: str | None,
+    model: str | None,
+) -> dict:
+    item = load_item(task_id, item_id)
+    item["model_overrides"][step] = {"provider": provider, "model": model}
+    save_item(task_id, item)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": "user",
+            "action": "update_item_model_override",
+            "step": step,
+            "provider": provider,
+            "model": model,
+            "to": item.get("status", STATUS_DRAFT),
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": "user",
+            "action": "update_item_model_override",
+            "item_id": item_id,
+            "step": step,
+            "provider": provider,
+            "model": model,
+            "to": item.get("status", STATUS_DRAFT),
+        },
+    )
+    return load_item(task_id, item_id)
+
+
 def load_task(task_id: str) -> dict:
     path = task_dir(task_id) / "task.json"
     if not path.exists():
         raise ValueError(f"Task not found: {task_id}")
-    return read_json(path)  # type: ignore[return-value]
+    return _ensure_task_schema(read_json(path))  # type: ignore[return-value]
 
 
 def list_tasks() -> list[dict]:
@@ -392,7 +488,7 @@ def load_item(task_id: str, item_id: str) -> dict:
     path = item_dir(task_id, item_id) / "item.json"
     if not path.exists():
         raise ValueError(f"Item not found: {task_id} {item_id}")
-    return read_json(path)  # type: ignore[return-value]
+    return _ensure_item_schema(read_json(path))  # type: ignore[return-value]
 
 
 def save_item(task_id: str, item: dict) -> None:
