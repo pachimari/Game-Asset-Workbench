@@ -113,6 +113,19 @@ def _reset_downstream(item: dict, step: str) -> None:
         item["current_versions"][downstream_step] = None
 
 
+def _effective_runtime_config(task_id: str, item: dict) -> dict:
+    runtime_config = load_runtime_config(task_id)
+    runtime_overrides = item.get("runtime_overrides", {})
+    if runtime_overrides.get("image_aspect_ratio"):
+        runtime_config["image_aspect_ratio"] = runtime_overrides["image_aspect_ratio"]
+    if runtime_overrides.get("image_resolution"):
+        runtime_config["image_resolution"] = runtime_overrides["image_resolution"]
+    runtime_config["image_size"] = (
+        f"{runtime_config.get('image_aspect_ratio', '1:1')} / {runtime_config.get('image_resolution', '1K')}"
+    )
+    return runtime_config
+
+
 def _select_current_version(
     task_id: str,
     item_id: str,
@@ -158,6 +171,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
     model_id = selected_runtime["model"]
     provider_settings = global_settings["providers"].get(provider_id, {})
     api_key = provider_settings.get("api_key", "")
+    prompt_templates = global_settings.get("prompt_templates", {})
     next_status = validate_generation(step, item["status"])
 
     try:
@@ -173,6 +187,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 project_background=task.get("project_background", task.get("project_context", "")),
                 style_requirements=task.get("style_requirements", ""),
                 extra_context=item.get("extra_context", ""),
+                system_prompt=prompt_templates.get("brief_system_prompt"),
             )
             payload = {
                 "step": step,
@@ -196,7 +211,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             if not brief_version:
                 raise ValueError("No approved brief version found for prompt generation")
             brief_artifact = load_artifact(task_id, item_id, STEP_BRIEF_GENERATION, brief_version)
-            runtime_config = load_runtime_config(task_id)
+            runtime_config = _effective_runtime_config(task_id, item)
             style_spec = load_style_spec(task_id)
             output = generate_prompt_output(
                 provider_id=provider_id,
@@ -205,6 +220,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 brief_output=brief_artifact["output"],
                 style_spec=style_spec,
                 runtime_config=runtime_config,
+                system_prompt=prompt_templates.get("prompt_system_prompt"),
             )
             payload = {
                 "step": step,
@@ -223,7 +239,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             prompt_version = item["current_versions"]["image_prompt"]
             if not prompt_version:
                 raise ValueError("No approved prompt version found for image generation")
-            runtime_config = load_runtime_config(task_id)
+            runtime_config = _effective_runtime_config(task_id, item)
             version = next_version(task_id, item_id, step)
             prompt_artifact = load_artifact(task_id, item_id, STEP_IMAGE_PROMPT, prompt_version)
             candidates = generate_image_candidates(
@@ -235,6 +251,9 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 candidate_count=runtime_config["candidate_count"],
                 prompt=prompt_artifact["output"].get("prompt", ""),
                 negative_prompt=prompt_artifact["output"].get("negative_prompt", ""),
+                image_size=runtime_config["image_size"],
+                image_aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
+                image_resolution=runtime_config.get("image_resolution", "1K"),
             )
             payload = {
                 "step": step,
@@ -244,6 +263,9 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 "input": {
                     "image_prompt_version": prompt_version,
                     "candidate_count": runtime_config["candidate_count"],
+                    "image_size": runtime_config["image_size"],
+                    "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
+                    "image_resolution": runtime_config.get("image_resolution", "1K"),
                     "selected_runtime": selected_runtime,
                 },
                 "output": {"candidates": candidates},

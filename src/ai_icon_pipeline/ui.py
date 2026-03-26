@@ -13,7 +13,13 @@ import streamlit as st
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from ai_icon_pipeline.chat_control import execute_chat_action, parse_chat_action
-    from ai_icon_pipeline.config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
+    from ai_icon_pipeline.config import (
+        IMAGE_ASPECT_RATIO_OPTIONS,
+        IMAGE_RESOLUTION_OPTIONS,
+        STEP_BRIEF_GENERATION,
+        STEP_IMAGE_GENERATION,
+        STEP_IMAGE_PROMPT,
+    )
     from ai_icon_pipeline.pipeline import (
         approve_step,
         edit_brief,
@@ -37,23 +43,33 @@ if __package__ in (None, ""):
         load_item_events,
         load_task,
         load_task_events,
+        load_runtime_config,
         update_task_settings,
+        update_runtime_config,
         update_task_model_override,
         update_item,
         update_item_model_override,
     )
     from ai_icon_pipeline.settings import (
+        DEFAULT_PROMPT_TEMPLATES,
         load_global_settings,
         provider_models_for_stage,
         resolve_stage_selection,
         set_global_default,
+        update_prompt_templates,
         update_provider_settings,
     )
     from ai_icon_pipeline.providers.registry import PROVIDER_LABELS, ProviderRequestError, sync_provider_models
     from ai_icon_pipeline.utils import utc_now
 else:
     from .chat_control import execute_chat_action, parse_chat_action
-    from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
+    from .config import (
+        IMAGE_ASPECT_RATIO_OPTIONS,
+        IMAGE_RESOLUTION_OPTIONS,
+        STEP_BRIEF_GENERATION,
+        STEP_IMAGE_GENERATION,
+        STEP_IMAGE_PROMPT,
+    )
     from .pipeline import (
         approve_step,
         edit_brief,
@@ -77,16 +93,20 @@ else:
         load_item_events,
         load_task,
         load_task_events,
+        load_runtime_config,
         update_task_settings,
+        update_runtime_config,
         update_task_model_override,
         update_item,
         update_item_model_override,
     )
     from .settings import (
+        DEFAULT_PROMPT_TEMPLATES,
         load_global_settings,
         provider_models_for_stage,
         resolve_stage_selection,
         set_global_default,
+        update_prompt_templates,
         update_provider_settings,
     )
     from .providers.registry import PROVIDER_LABELS, ProviderRequestError, sync_provider_models
@@ -377,7 +397,17 @@ def _stage_model_options(settings: dict, step: str, *, include_inherit_label: st
         options.append(("__inherit__", include_inherit_label))
     for entry in provider_models_for_stage(settings, step):
         token = _model_token(entry["provider"], entry["model"])
+        compatibility = entry.get("compatibility", "unknown")
+        suffix = {
+            "verified": "已验证",
+            "single_only": "仅单图",
+            "experimental": "实验性",
+            "unsupported": "当前不通",
+            "unknown": "未验证",
+        }.get(compatibility, "")
         label = f"{PROVIDER_LABELS.get(entry['provider'], entry['provider'])} · {_short_model_name(entry['label'])}"
+        if suffix:
+            label = f"{label} · {suffix}"
         options.append((token, label))
     return options
 
@@ -397,6 +427,14 @@ def _short_model_name(model: str) -> str:
     shortened = shortened.replace("gemini-", "")
     shortened = shortened.replace("deepseek-", "")
     return shortened
+
+
+def _display_model_name(settings: dict, provider: str, model: str) -> str:
+    provider_settings = settings.get("providers", {}).get(provider, {})
+    for row in provider_settings.get("models", []):
+        if row.get("id") == model:
+            return row.get("label", model)
+    return _short_model_name(model)
 
 
 def _selection_source_label(source: str) -> str:
@@ -439,7 +477,7 @@ def _render_stage_selectors(
                 label_visibility="collapsed",
             )
             st.caption(
-                f"当前生效：{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_short_model_name(effective['model'])}（{_selection_source_label(effective['source'])}）"
+                f"当前生效：{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_display_model_name(settings, effective['provider'], effective['model'])}（{_selection_source_label(effective['source'])}）"
             )
             st.divider()
         submitted = st.form_submit_button("保存", use_container_width=True)
@@ -528,6 +566,32 @@ def _render_global_settings(settings: dict) -> dict:
                 set_global_default(step, provider=provider, model=model)
         st.success("全局默认模型已保存。")
         _rerun()
+
+    st.markdown("#### Prompt 模板")
+    st.caption("这里控制系统如何生成“设计说明”和“出图指令”。建议先小步调整，不要一次完全改写。")
+    templates = settings.get("prompt_templates", DEFAULT_PROMPT_TEMPLATES)
+    with st.form("global-prompt-templates"):
+        brief_system_prompt = st.text_area(
+            "设计说明模板",
+            value=templates.get("brief_system_prompt", DEFAULT_PROMPT_TEMPLATES["brief_system_prompt"]),
+            height=240,
+            key="brief-system-prompt-template",
+        )
+        prompt_system_prompt = st.text_area(
+            "出图指令模板",
+            value=templates.get("prompt_system_prompt", DEFAULT_PROMPT_TEMPLATES["prompt_system_prompt"]),
+            height=220,
+            key="prompt-system-prompt-template",
+        )
+        save_templates = st.form_submit_button("保存 Prompt 模板", use_container_width=True)
+    if save_templates:
+        update_prompt_templates(
+            brief_system_prompt=brief_system_prompt,
+            prompt_system_prompt=prompt_system_prompt,
+        )
+        st.success("Prompt 模板已保存。")
+        _rerun()
+
     return load_global_settings()
 
 
@@ -553,21 +617,21 @@ def _render_task_model_overrides(task: dict, settings: dict) -> None:
 def _render_item_model_overrides(task: dict, item: dict, settings: dict) -> None:
     task_id = task["task_id"]
     item_id = item["item_id"]
-    st.markdown("### 当前条目模型")
-    st.caption("这里可以为当前条目的三个阶段单独选择模型。未选择时表示继续继承批次默认模型。")
-    selections, submitted = _render_stage_selectors(
-        prefix=f"item-model-override-{task_id}-{item_id}",
-        settings=settings,
-        selections_source=item.get("model_overrides", {}),
-        effective_resolver=lambda step: resolve_stage_selection(task, item, settings, step),
-        inherit_label_builder=lambda effective: f"继承当前默认（{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_short_model_name(effective['model'])}）",
-    )
-    if submitted:
-        for step, token in selections.items():
-            provider, model = _decode_model_token(token)
-            update_item_model_override(task_id, item_id, step, provider=provider, model=model)
-        st.success("当前条目模型已保存。")
-        _rerun()
+    with st.expander("当前条目模型", expanded=False):
+        st.caption("这里可以为当前条目的三个阶段单独选择模型。未选择时表示继续继承批次默认模型。")
+        selections, submitted = _render_stage_selectors(
+            prefix=f"item-model-override-{task_id}-{item_id}",
+            settings=settings,
+            selections_source=item.get("model_overrides", {}),
+            effective_resolver=lambda step: resolve_stage_selection(task, item, settings, step),
+            inherit_label_builder=lambda effective: f"继承当前默认（{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_display_model_name(settings, effective['provider'], effective['model'])}）",
+        )
+        if submitted:
+            for step, token in selections.items():
+                provider, model = _decode_model_token(token)
+                update_item_model_override(task_id, item_id, step, provider=provider, model=model)
+            st.success("当前条目模型已保存。")
+            _rerun()
 
 
 def _render_task_creation() -> None:
@@ -774,15 +838,30 @@ def _default_output_view(item: dict) -> str:
 
 
 def _candidate_paths(task_id: str, item_id: str, image_artifact: dict | None) -> list[tuple[str, Path]]:
-    if not image_artifact:
-        return []
     image_root = item_dir(task_id, item_id) / "images"
-    candidates = image_artifact.get("output", {}).get("candidates", [])
     resolved: list[tuple[str, Path]] = []
-    for index, candidate in enumerate(candidates, start=1):
-        path = image_root / candidate["image_path"]
-        if path.exists():
-            resolved.append((f"候选 {index}", path))
+    seen_paths: set[str] = set()
+
+    artifacts = list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION)
+    for artifact_meta in reversed(artifacts):
+        version = artifact_meta["version"]
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, version)
+        candidates = artifact.get("output", {}).get("candidates", [])
+        for index, candidate in enumerate(candidates, start=1):
+            image_path = candidate["image_path"]
+            if image_path in seen_paths:
+                continue
+            path = image_root / image_path
+            if path.exists():
+                resolved.append((f"{version} · 候选 {index}", path))
+                seen_paths.add(image_path)
+
+    if not resolved and image_artifact:
+        candidates = image_artifact.get("output", {}).get("candidates", [])
+        for index, candidate in enumerate(candidates, start=1):
+            path = image_root / candidate["image_path"]
+            if path.exists():
+                resolved.append((f"当前版 · 候选 {index}", path))
     return resolved
 
 
@@ -859,6 +938,10 @@ def _parse_pasted_rows(raw_text: str) -> list[dict]:
         "条目补充说明": "extra_context",
         "额外上下文": "extra_context",
         "extra_context": "extra_context",
+        "宽高比": "image_aspect_ratio",
+        "image_aspect_ratio": "image_aspect_ratio",
+        "分辨率": "image_resolution",
+        "image_resolution": "image_resolution",
     }
     first_row = [cell.strip() for cell in rows[0]]
     normalized_header = [header_aliases.get(cell.lower() if cell.isascii() else cell, "") for cell in first_row]
@@ -879,7 +962,7 @@ def _parse_pasted_rows(raw_text: str) -> list[dict]:
                 parsed.append(payload)
         return parsed
 
-    fallback_fields = ["title", "description", "asset_type", "category", "extra_context"]
+    fallback_fields = ["title", "description", "asset_type", "category", "extra_context", "image_aspect_ratio", "image_resolution"]
     for raw_row in rows:
         payload = {}
         for index, value in enumerate(raw_row):
@@ -905,6 +988,8 @@ def _create_items_from_paste(task_id: str, raw_text: str) -> list[str]:
             asset_type=row.get("asset_type", "") or "generic_icon",
             category=row.get("category", ""),
             extra_context=row.get("extra_context", ""),
+            image_aspect_ratio=row.get("image_aspect_ratio") or None,
+            image_resolution=row.get("image_resolution") or None,
         )
         created_ids.append(item["item_id"])
     return created_ids
@@ -912,6 +997,7 @@ def _create_items_from_paste(task_id: str, raw_text: str) -> list[str]:
 
 def _render_batch_settings(task: dict) -> None:
     task_id = task["task_id"]
+    runtime_config = load_runtime_config(task_id)
     st.markdown("### 批次设定")
     with st.form(f"batch-settings-{task_id}"):
         task_name = st.text_input("批次名称", value=task.get("task_name", ""), key=f"batch-task-name-{task_id}")
@@ -929,6 +1015,29 @@ def _render_batch_settings(task: dict) -> None:
             help="支持多段文本。用于约束整体风格和禁用项。",
             key=f"batch-style-requirements-{task_id}",
         )
+        st.markdown("#### 候选图运行设置")
+        st.caption("这里控制的是候选图的画幅与分辨率。每次点击“生成候选图”只会新增 1 张，历史会持续累积在候选池里。")
+        runtime_mid, runtime_right = st.columns(2)
+        with runtime_mid:
+            image_aspect_ratio = st.selectbox(
+                "宽高比",
+                options=IMAGE_ASPECT_RATIO_OPTIONS,
+                index=IMAGE_ASPECT_RATIO_OPTIONS.index(runtime_config.get("image_aspect_ratio", "1:1"))
+                if runtime_config.get("image_aspect_ratio", "1:1") in IMAGE_ASPECT_RATIO_OPTIONS
+                else 0,
+                key=f"batch-image-aspect-ratio-{task_id}",
+                help="优先用于 Gemini 原生图片模型。",
+            )
+        with runtime_right:
+            image_resolution = st.selectbox(
+                "分辨率档位",
+                options=IMAGE_RESOLUTION_OPTIONS,
+                index=IMAGE_RESOLUTION_OPTIONS.index(runtime_config.get("image_resolution", "1K"))
+                if runtime_config.get("image_resolution", "1K") in IMAGE_RESOLUTION_OPTIONS
+                else 1,
+                key=f"batch-image-resolution-{task_id}",
+                help="Gemini 3/Imagen 系列会尽量按这个档位生成；不支持时会自动降级。",
+            )
         submitted = st.form_submit_button("保存批次设定", use_container_width=True)
     if submitted:
         try:
@@ -937,6 +1046,12 @@ def _render_batch_settings(task: dict) -> None:
                 task_name=task_name,
                 project_background=project_background,
                 style_requirements=style_requirements,
+            )
+            update_runtime_config(
+                task_id,
+                image_aspect_ratio=image_aspect_ratio,
+                image_resolution=image_resolution,
+                image_size=f"{image_aspect_ratio} / {image_resolution}",
             )
         except Exception as exc:
             st.error(str(exc))
@@ -1017,6 +1132,11 @@ def _render_item_management(task: dict) -> None:
                 height=80,
                 help="这里写这一条素材专属的补充信息。批次共用的规范请写在“项目背景/统一风格要求”里。",
             )
+            meta_left, meta_right = st.columns(2)
+            with meta_left:
+                image_aspect_ratio = st.selectbox("宽高比覆盖", options=[""] + IMAGE_ASPECT_RATIO_OPTIONS, index=0)
+            with meta_right:
+                image_resolution = st.selectbox("分辨率覆盖", options=[""] + IMAGE_RESOLUTION_OPTIONS, index=0)
             submitted = st.form_submit_button("新增条目并打开详情", use_container_width=True)
         if submitted:
             try:
@@ -1027,6 +1147,8 @@ def _render_item_management(task: dict) -> None:
                     description=description,
                     category=category,
                     extra_context=extra_context,
+                    image_aspect_ratio=image_aspect_ratio or None,
+                    image_resolution=image_resolution or None,
                 )
             except Exception as exc:
                 st.error(str(exc))
@@ -1035,7 +1157,7 @@ def _render_item_management(task: dict) -> None:
                 st.success(f"已创建 {item['item_id']}。")
                 _rerun()
 
-    columns = ["条目ID", "名称", "资产类型", "需求描述", "分类", "条目补充说明", "状态"]
+    columns = ["条目ID", "名称", "资产类型", "需求描述", "分类", "条目补充说明", "宽高比", "分辨率", "状态"]
     rows = []
     for item in items:
         rows.append(
@@ -1046,6 +1168,8 @@ def _render_item_management(task: dict) -> None:
                 "需求描述": item.get("description", ""),
                 "分类": item.get("category", ""),
                 "条目补充说明": item.get("extra_context", ""),
+                "宽高比": item.get("runtime_overrides", {}).get("image_aspect_ratio", "") or "",
+                "分辨率": item.get("runtime_overrides", {}).get("image_resolution", "") or "",
                 "状态": STATUS_LABELS.get(item.get("status", "draft"), item.get("status", "draft")),
             }
         )
@@ -1066,6 +1190,8 @@ def _render_item_management(task: dict) -> None:
             "需求描述": st.column_config.TextColumn("需求描述", width="large"),
             "分类": st.column_config.TextColumn("分类"),
             "条目补充说明": st.column_config.TextColumn("条目补充说明", width="medium"),
+            "宽高比": st.column_config.TextColumn("宽高比"),
+            "分辨率": st.column_config.TextColumn("分辨率"),
             "状态": st.column_config.TextColumn("状态", disabled=True),
         },
         disabled=["条目ID", "状态"],
@@ -1083,9 +1209,11 @@ def _render_item_management(task: dict) -> None:
                     asset_type = str(row.get("资产类型", "") or "generic_icon").strip() or "generic_icon"
                     category = str(row.get("分类", "") or "").strip()
                     extra_context = str(row.get("条目补充说明", "") or "").strip()
+                    image_aspect_ratio = str(row.get("宽高比", "") or "").strip()
+                    image_resolution = str(row.get("分辨率", "") or "").strip()
                     item_id = str(row.get("条目ID", "") or "").strip()
 
-                    if not any([title, description, category, extra_context, item_id]):
+                    if not any([title, description, category, extra_context, image_aspect_ratio, image_resolution, item_id]):
                         continue
 
                     if item_id and item_id in existing_ids:
@@ -1097,6 +1225,8 @@ def _render_item_management(task: dict) -> None:
                             description=description,
                             category=category,
                             extra_context=extra_context,
+                            image_aspect_ratio=image_aspect_ratio or None,
+                            image_resolution=image_resolution or None,
                         )
             except Exception as exc:
                 st.error(str(exc))
@@ -1739,6 +1869,27 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
                 height=80,
                 key=f"source-extra-context-{item['item_id']}",
             )
+            override_left, override_right = st.columns(2)
+            current_aspect_ratio = item.get("runtime_overrides", {}).get("image_aspect_ratio") or ""
+            current_resolution = item.get("runtime_overrides", {}).get("image_resolution") or ""
+            with override_left:
+                image_aspect_ratio = st.selectbox(
+                    "候选图宽高比覆盖",
+                    options=[""] + IMAGE_ASPECT_RATIO_OPTIONS,
+                    index=([""] + IMAGE_ASPECT_RATIO_OPTIONS).index(current_aspect_ratio)
+                    if current_aspect_ratio in ([""] + IMAGE_ASPECT_RATIO_OPTIONS)
+                    else 0,
+                    key=f"source-image-aspect-ratio-{item['item_id']}",
+                )
+            with override_right:
+                image_resolution = st.selectbox(
+                    "候选图分辨率覆盖",
+                    options=[""] + IMAGE_RESOLUTION_OPTIONS,
+                    index=([""] + IMAGE_RESOLUTION_OPTIONS).index(current_resolution)
+                    if current_resolution in ([""] + IMAGE_RESOLUTION_OPTIONS)
+                    else 0,
+                    key=f"source-image-resolution-{item['item_id']}",
+                )
             submitted = st.form_submit_button("保存条目并按需重置下游版本", use_container_width=True)
         if submitted:
             try:
@@ -1750,6 +1901,8 @@ def _render_item_workspace(task_id: str, item: dict) -> None:
                     description=description,
                     category=category,
                     extra_context=extra_context,
+                    image_aspect_ratio=image_aspect_ratio or None,
+                    image_resolution=image_resolution or None,
                 )
             except Exception as exc:
                 st.error(str(exc))

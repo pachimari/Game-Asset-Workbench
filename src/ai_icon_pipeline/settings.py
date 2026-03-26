@@ -9,7 +9,12 @@ from .config import (
     STEP_IMAGE_GENERATION,
     STEP_IMAGE_PROMPT,
 )
-from .providers.registry import PROVIDER_ORDER, infer_stages
+from .providers.registry import (
+    MODEL_COMPATIBILITY_ORDER,
+    PROVIDER_ORDER,
+    compatibility_for_model,
+    infer_stages,
+)
 from .utils import ensure_dir
 from .storage import read_json, write_json
 
@@ -21,6 +26,29 @@ DEFAULT_STAGE_SELECTIONS = {
     STEP_BRIEF_GENERATION: {"provider": "mock", "model": "mock-text-v1"},
     STEP_IMAGE_PROMPT: {"provider": "mock", "model": "mock-text-v1"},
     STEP_IMAGE_GENERATION: {"provider": "mock", "model": "mock-image-v1"},
+}
+
+DEFAULT_PROMPT_TEMPLATES = {
+    "brief_system_prompt": """你是游戏图标前期设计助手。请把用户输入整理成结构化 JSON。
+只返回 JSON 对象，不要输出解释文本。
+字段必须包含:
+- title: string
+- name_source: string
+- description: string
+- keywords: string[]
+- icon_subject: string
+- visual_focus: string
+- project_background: string
+- style_requirements: string
+""",
+    "prompt_system_prompt": """你是游戏图标出图指令助手。请基于设计说明输出结构化 JSON。
+只返回 JSON 对象，不要输出解释文本。
+字段必须包含:
+- prompt: string
+- negative_prompt: string
+- constraints: object
+- batch_context: object
+""",
 }
 
 DEFAULT_PROVIDER_SETTINGS = {
@@ -60,6 +88,7 @@ def default_global_settings() -> dict:
     return {
         "providers": deepcopy(DEFAULT_PROVIDER_SETTINGS),
         "defaults": deepcopy(DEFAULT_STAGE_SELECTIONS),
+        "prompt_templates": deepcopy(DEFAULT_PROMPT_TEMPLATES),
     }
 
 
@@ -80,9 +109,15 @@ def _sanitize_provider_models(provider_id: str, models: list[dict]) -> list[dict
                 "id": model_id,
                 "label": model.get("label", model_id),
                 "stages": stages,
+                "compatibility": model.get("compatibility") or compatibility_for_model(provider_id, model_id),
             }
         )
-    sanitized.sort(key=lambda row: row.get("label", row["id"]))
+    sanitized.sort(
+        key=lambda row: (
+            MODEL_COMPATIBILITY_ORDER.get(row.get("compatibility", "unknown"), 99),
+            row.get("label", row["id"]),
+        )
+    )
     return sanitized
 
 
@@ -104,6 +139,7 @@ def load_global_settings() -> dict:
     if isinstance(payload, dict):
         settings["providers"].update(payload.get("providers", {}))
         settings["defaults"].update(payload.get("defaults", {}))
+        settings["prompt_templates"].update(payload.get("prompt_templates", {}))
 
     for provider_id, provider_settings in DEFAULT_PROVIDER_SETTINGS.items():
         settings["providers"].setdefault(provider_id, deepcopy(provider_settings))
@@ -172,6 +208,21 @@ def set_global_default(step: str, *, provider: str, model: str) -> dict:
     return settings
 
 
+def update_prompt_templates(
+    *,
+    brief_system_prompt: str | None = None,
+    prompt_system_prompt: str | None = None,
+) -> dict:
+    settings = load_global_settings()
+    templates = settings.setdefault("prompt_templates", deepcopy(DEFAULT_PROMPT_TEMPLATES))
+    if brief_system_prompt is not None:
+        templates["brief_system_prompt"] = brief_system_prompt
+    if prompt_system_prompt is not None:
+        templates["prompt_system_prompt"] = prompt_system_prompt
+    save_global_settings(settings)
+    return settings
+
+
 def resolve_stage_selection(task: dict, item: dict, settings: dict, step: str) -> dict:
     item_selection = item.get("model_overrides", {}).get(step, {})
     if _selection_supported(step, item_selection.get("provider"), item_selection.get("model")):
@@ -214,7 +265,14 @@ def provider_models_for_stage(settings: dict, step: str) -> list[dict]:
                         "provider": provider_id,
                         "model": model["id"],
                         "label": model.get("label", model["id"]),
+                        "compatibility": model.get("compatibility", "unknown"),
                     }
                 )
-    options.sort(key=lambda option: (PROVIDER_ORDER.get(option["provider"], 99), option["label"]))
+    options.sort(
+        key=lambda option: (
+            PROVIDER_ORDER.get(option["provider"], 99),
+            MODEL_COMPATIBILITY_ORDER.get(option.get("compatibility", "unknown"), 99),
+            option["label"],
+        )
+    )
     return options

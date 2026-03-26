@@ -40,9 +40,14 @@ DEFAULT_RUNTIME_CONFIG = {
     "brief_provider": "mock",
     "prompt_provider": "mock",
     "image_provider": "mock",
-    "candidate_count": 2,
+    "candidate_count": 1,
     "image_size": "512x512",
+    "image_aspect_ratio": "1:1",
+    "image_resolution": "1K",
 }
+
+IMAGE_ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"]
+IMAGE_RESOLUTION_OPTIONS = ["auto", "512", "1K", "2K", "4K"]
 
 # 1x1 transparent PNG.
 PLACEHOLDER_PNG_BASE64 = (
