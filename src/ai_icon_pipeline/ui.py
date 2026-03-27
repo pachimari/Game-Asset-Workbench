@@ -24,6 +24,7 @@ if __package__ in (None, ""):
         approve_step,
         edit_brief,
         edit_prompt,
+        poll_image_generation,
         rollback_step,
         run_pipeline,
         run_step,
@@ -52,7 +53,11 @@ if __package__ in (None, ""):
     )
     from ai_icon_pipeline.settings import (
         DEFAULT_PROMPT_TEMPLATES,
+        create_custom_provider,
+        delete_custom_provider,
         load_global_settings,
+        provider_label_for,
+        provider_settings_for,
         provider_models_for_stage,
         resolve_stage_selection,
         set_global_default,
@@ -74,6 +79,7 @@ else:
         approve_step,
         edit_brief,
         edit_prompt,
+        poll_image_generation,
         rollback_step,
         run_pipeline,
         run_step,
@@ -102,7 +108,11 @@ else:
     )
     from .settings import (
         DEFAULT_PROMPT_TEMPLATES,
+        create_custom_provider,
+        delete_custom_provider,
         load_global_settings,
+        provider_label_for,
+        provider_settings_for,
         provider_models_for_stage,
         resolve_stage_selection,
         set_global_default,
@@ -125,6 +135,7 @@ STATUS_LABELS = {
     "brief_approved": "可生成出图指令",
     "prompt_generated": "待确认出图指令",
     "prompt_approved": "可生成候选图",
+    "image_generating": "候选图生成中",
     "image_generated": "待确认候选图",
     "completed": "已完成",
     "failed": "失败",
@@ -405,7 +416,7 @@ def _stage_model_options(settings: dict, step: str, *, include_inherit_label: st
             "unsupported": "当前不通",
             "unknown": "未验证",
         }.get(compatibility, "")
-        label = f"{PROVIDER_LABELS.get(entry['provider'], entry['provider'])} · {_short_model_name(entry['label'])}"
+        label = f"{provider_label_for(settings, entry['provider'])} · {_short_model_name(entry['label'])}"
         if suffix:
             label = f"{label} · {suffix}"
         options.append((token, label))
@@ -430,7 +441,7 @@ def _short_model_name(model: str) -> str:
 
 
 def _display_model_name(settings: dict, provider: str, model: str) -> str:
-    provider_settings = settings.get("providers", {}).get(provider, {})
+    provider_settings = provider_settings_for(settings, provider)
     for row in provider_settings.get("models", []):
         if row.get("id") == model:
             return row.get("label", model)
@@ -443,6 +454,27 @@ def _selection_source_label(source: str) -> str:
         "task": "批次覆盖",
         "item": "条目覆盖",
     }.get(source, source)
+
+
+def _parse_manual_model_lines(raw_text: str, provider_type: str) -> list[dict]:
+    rows: list[dict] = []
+    for line in raw_text.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        if "|" in text:
+            model_id, label = [part.strip() for part in text.split("|", 1)]
+        else:
+            model_id, label = text, _short_model_name(text)
+        stages = [STEP_IMAGE_GENERATION] if provider_type == "async_image" else [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT]
+        rows.append(
+            {
+                "id": model_id,
+                "label": label or model_id,
+                "stages": stages,
+            }
+        )
+    return rows
 
 
 def _render_stage_selectors(
@@ -477,7 +509,7 @@ def _render_stage_selectors(
                 label_visibility="collapsed",
             )
             st.caption(
-                f"当前生效：{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_display_model_name(settings, effective['provider'], effective['model'])}（{_selection_source_label(effective['source'])}）"
+                f"当前生效：{provider_label_for(settings, effective['provider'])} · {_display_model_name(settings, effective['provider'], effective['model'])}（{_selection_source_label(effective['source'])}）"
             )
             st.divider()
         submitted = st.form_submit_button("保存", use_container_width=True)
@@ -490,12 +522,12 @@ def _render_global_settings(settings: dict) -> dict:
 
     provider_columns = st.columns(2, gap="large")
     for column, provider_id in zip(provider_columns, ["gemini", "deepseek"]):
-        provider_settings = settings["providers"].get(provider_id, {})
+        provider_settings = provider_settings_for(settings, provider_id)
         with column:
-            st.markdown(f"#### {PROVIDER_LABELS[provider_id]}")
+            st.markdown(f"#### {provider_label_for(settings, provider_id)}")
             with st.form(f"provider-settings-{provider_id}"):
                 api_key = st.text_input(
-                    f"{PROVIDER_LABELS[provider_id]} API Key",
+                    f"{provider_label_for(settings, provider_id)} API Key",
                     value=provider_settings.get("api_key", ""),
                     type="password",
                     key=f"provider-key-{provider_id}",
@@ -504,18 +536,18 @@ def _render_global_settings(settings: dict) -> dict:
             if save_clicked:
                 update_provider_settings(provider_id, api_key=api_key, last_error=None)
                 settings = load_global_settings()
-                st.success(f"{PROVIDER_LABELS[provider_id]} Key 已保存到本地配置。")
+                st.success(f"{provider_label_for(settings, provider_id)} Key 已保存到本地配置。")
                 _rerun()
 
             sync_left, sync_right = st.columns([1.2, 1.0])
             with sync_left:
-                if st.button(f"同步 {PROVIDER_LABELS[provider_id]} 模型", key=f"sync-models-{provider_id}", use_container_width=True):
-                    api_key = load_global_settings()["providers"][provider_id].get("api_key", "")
+                if st.button(f"同步 {provider_label_for(settings, provider_id)} 模型", key=f"sync-models-{provider_id}", use_container_width=True):
+                    api_key = provider_settings_for(load_global_settings(), provider_id).get("api_key", "")
                     if not api_key:
                         st.error("请先保存 API Key。")
                     else:
                         try:
-                            models = sync_provider_models(provider_id, api_key)
+                            models = sync_provider_models(provider_id, api_key, provider_settings_for(load_global_settings(), provider_id))
                         except ProviderRequestError as exc:
                             update_provider_settings(provider_id, last_error=str(exc))
                             st.error(str(exc))
@@ -536,6 +568,102 @@ def _render_global_settings(settings: dict) -> dict:
             last_error = provider_settings.get("last_error")
             if last_error:
                 st.warning(last_error)
+
+    st.markdown("#### 第三方 Provider")
+    st.caption("这里可以新增多个第三方 provider 实例。文本类优先选 OpenAI 兼容；图片网关可先选异步图片。")
+    custom_providers = settings.get("custom_providers", [])
+    if not custom_providers:
+        st.info("还没有第三方 provider。可以先在下面新增一个。")
+    for provider in custom_providers:
+        provider_id = provider["id"]
+        provider_type = provider.get("provider_type", "openai_compatible")
+        type_label = {"openai_compatible": "OpenAI 兼容", "async_image": "异步图片"}.get(provider_type, provider_type)
+        with st.expander(f"{provider.get('label', provider_id)} · {type_label}", expanded=False):
+            with st.form(f"custom-provider-{provider_id}"):
+                label = st.text_input("名称", value=provider.get("label", ""), key=f"custom-label-{provider_id}")
+                base_url = st.text_input("Base URL", value=provider.get("base_url", ""), key=f"custom-url-{provider_id}")
+                api_key = st.text_input(
+                    "API Key",
+                    value=provider.get("api_key", ""),
+                    type="password",
+                    key=f"custom-key-{provider_id}",
+                )
+                manual_models = st.text_area(
+                    "模型列表",
+                    value="\n".join(
+                        f"{row.get('id', '')}|{row.get('label', row.get('id', ''))}"
+                        for row in provider.get("models", [])
+                    ),
+                    height=120,
+                    help="每行一个模型。格式：model_id|显示名称。异步图片 provider 默认只用于候选图阶段。",
+                    key=f"custom-models-{provider_id}",
+                )
+                save_custom = st.form_submit_button("保存第三方 Provider", use_container_width=True)
+            if save_custom:
+                update_provider_settings(
+                    provider_id,
+                    label=label,
+                    base_url=base_url,
+                    api_key=api_key,
+                    models=_parse_manual_model_lines(manual_models, provider_type),
+                    last_error=None,
+                )
+                st.success("第三方 Provider 已保存。")
+                _rerun()
+            if provider_type == "openai_compatible":
+                if st.button(f"同步 {provider.get('label', provider_id)} 模型", key=f"sync-custom-{provider_id}", use_container_width=True):
+                    if not provider.get("api_key"):
+                        st.error("请先保存 API Key。")
+                    else:
+                        try:
+                            models = sync_provider_models(provider_id, provider.get("api_key", ""), provider)
+                        except ProviderRequestError as exc:
+                            update_provider_settings(provider_id, last_error=str(exc))
+                            st.error(str(exc))
+                        else:
+                            update_provider_settings(
+                                provider_id,
+                                models=models,
+                                last_synced_at=utc_now(),
+                                last_error=None,
+                            )
+                            st.success(f"已同步 {len(models)} 个模型。")
+                            _rerun()
+            if st.button("删除这个 Provider", key=f"delete-custom-{provider_id}", use_container_width=True):
+                delete_custom_provider(provider_id)
+                st.success("已删除第三方 Provider。")
+                _rerun()
+
+    with st.form("create-custom-provider"):
+        st.markdown("##### 新增第三方 Provider")
+        new_label = st.text_input("名称", value="ToAPIs")
+        new_type = st.selectbox(
+            "类型",
+            options=["openai_compatible", "async_image"],
+            format_func=lambda value: {"openai_compatible": "OpenAI 兼容", "async_image": "异步图片"}[value],
+        )
+        default_url = "https://toapis.com/v1" if new_type == "async_image" else "https://api.example.com/v1"
+        new_base_url = st.text_input("Base URL", value=default_url)
+        new_api_key = st.text_input("API Key", value="", type="password")
+        new_models = st.text_area(
+            "初始模型列表",
+            value="gemini-3.1-flash-image-preview|Gemini 3.1 Flash Image"
+            if new_type == "async_image"
+            else "",
+            help="每行一个模型。格式：model_id|显示名称。",
+            height=110,
+        )
+        create_clicked = st.form_submit_button("新增第三方 Provider", use_container_width=True)
+    if create_clicked:
+        create_custom_provider(
+            label=new_label,
+            provider_type=new_type,
+            base_url=new_base_url,
+            api_key=new_api_key,
+            models=_parse_manual_model_lines(new_models, new_type),
+        )
+        st.success("第三方 Provider 已新增。")
+        _rerun()
 
     st.markdown("#### 默认模型")
     with st.form("global-default-models"):
@@ -624,7 +752,7 @@ def _render_item_model_overrides(task: dict, item: dict, settings: dict) -> None
             settings=settings,
             selections_source=item.get("model_overrides", {}),
             effective_resolver=lambda step: resolve_stage_selection(task, item, settings, step),
-            inherit_label_builder=lambda effective: f"继承当前默认（{PROVIDER_LABELS.get(effective['provider'], effective['provider'])} · {_display_model_name(settings, effective['provider'], effective['model'])}）",
+            inherit_label_builder=lambda effective: f"继承当前默认（{provider_label_for(settings, effective['provider'])} · {_display_model_name(settings, effective['provider'], effective['model'])}）",
         )
         if submitted:
             for step, token in selections.items():
@@ -832,7 +960,7 @@ def _default_output_view(item: dict) -> str:
         return "设计说明"
     if status in {"prompt_generated", "prompt_approved"}:
         return "出图指令"
-    if status in {"image_generated", "completed"}:
+    if status in {"image_generating", "image_generated", "completed"}:
         return "当前候选图"
     return "总览"
 
@@ -895,6 +1023,8 @@ def _render_entry_overview(task_id: str, items: list[dict]) -> None:
                 )
                 if preview_path:
                     st.image(str(preview_path), width=140)
+                elif item.get("status") == "image_generating":
+                    st.info("候选图生成中")
                 else:
                     st.info("还没有候选图")
                 summary_lines = [
@@ -1317,6 +1447,7 @@ def _item_main_action(item: dict) -> tuple[str | None, str | None]:
         "brief_approved": ("生成出图指令", "基于当前设计说明生成出图指令"),
         "prompt_generated": ("继续生成候选图", "采纳当前出图指令并继续生成候选图"),
         "prompt_approved": ("生成候选图", "基于当前出图指令生成候选图"),
+        "image_generating": ("检查生成状态", "当前候选图任务正在第三方排队或生成中。点击可刷新状态，不会阻塞其它操作。"),
         "image_generated": ("采纳当前候选图", "将当前候选图设为结果并完成条目"),
         "completed": ("已完成", "当前条目已经完成"),
         "failed": ("已失败", "当前条目生成失败，请检查日志或回退后重试。"),
@@ -1346,6 +1477,9 @@ def _run_main_action(task_id: str, item: dict) -> None:
     if status == "prompt_approved":
         run_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
+    if status == "image_generating":
+        poll_image_generation(task_id, item_id)
+        return
     if status == "image_generated":
         approve_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
@@ -1362,6 +1496,7 @@ def _item_secondary_action(item: dict) -> tuple[str | None, str | None]:
         "prompt_generated": ("重新生成出图指令", STEP_IMAGE_PROMPT),
         "prompt_approved": ("返回出图指令", STEP_IMAGE_PROMPT),
         "image_generated": ("重新生成候选图", STEP_IMAGE_GENERATION),
+        "image_generating": ("继续查看其它条目", None),
     }
     return mapping.get(status, (None, None))
 
@@ -1384,6 +1519,8 @@ def _run_secondary_action(task_id: str, item: dict) -> None:
         return
     if status == "image_generated":
         run_step(task_id, item_id, STEP_IMAGE_GENERATION)
+        return
+    if status == "image_generating":
         return
     if status in {"completed", "failed", "archived"}:
         return
@@ -1430,8 +1567,9 @@ def _render_action_bar(task_id: str, item: dict) -> None:
                 except Exception as exc:
                     st.error(str(exc))
                 else:
-                    st.success(f"已执行：{secondary_label}")
-                    _rerun()
+                    if secondary_step is not None:
+                        st.success(f"已执行：{secondary_label}")
+                        _rerun()
         else:
             st.button("暂无次动作", disabled=True, use_container_width=True, key=f"idle-{item_id}")
     with right:
@@ -1478,6 +1616,14 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
 
     def render_candidate_area() -> None:
         st.markdown("### 当前候选图")
+        async_job = (image or {}).get("async_job", {}) if image else {}
+        if item.get("status") == "image_generating" and not candidate_paths:
+            task_id_remote = async_job.get("task_id", "未知任务")
+            remote_status = async_job.get("status", "queued")
+            progress = async_job.get("progress", 0)
+            st.info(f"候选图正在生成中。第三方任务：{task_id_remote} · 状态：{remote_status} · 进度：{progress}%")
+            st.caption("你可以继续切换别的条目；稍后点击上方“检查生成状态”即可刷新结果。")
+            return
         if not approved_exists and not candidate_paths:
             st.info("还没有生成候选图。")
             return

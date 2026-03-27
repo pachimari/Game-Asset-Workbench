@@ -4,9 +4,9 @@ import json
 import re
 
 from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
-from .pipeline import approve_step, rollback_step, run_step, set_current_version
+from .pipeline import approve_step, poll_image_generation, rollback_step, run_step, set_current_version
 from .providers.registry import get_provider
-from .settings import resolve_stage_selection
+from .settings import provider_settings_for, resolve_stage_selection
 from .storage import list_artifacts, load_item, load_task
 
 
@@ -85,7 +85,7 @@ def parse_chat_action(task: dict, item: dict, settings: dict, message: str) -> d
             "parser": "heuristic",
         }
 
-    provider_settings = settings.get("providers", {}).get(provider_id, {})
+    provider_settings = provider_settings_for(settings, provider_id)
     api_key = provider_settings.get("api_key", "")
     if not api_key:
         return {
@@ -95,7 +95,7 @@ def parse_chat_action(task: dict, item: dict, settings: dict, message: str) -> d
             "parser": "heuristic",
         }
 
-    provider = get_provider(provider_id)
+    provider = get_provider(provider_id, provider_settings)
     payload = provider.generate_json(
         api_key=api_key,
         model=model_id,
@@ -134,6 +134,8 @@ def execute_chat_action(task_id: str, item_id: str, action: str, *, source: str 
             return approve_step(task_id, item_id, STEP_IMAGE_PROMPT, source=source)
         if status == "image_generated":
             return approve_step(task_id, item_id, STEP_IMAGE_GENERATION, source=source)
+        if status == "image_generating":
+            return poll_image_generation(task_id, item_id, source=source)
         raise ValueError("当前状态没有可直接通过的步骤")
 
     if action == "rollback_to_brief":
@@ -163,6 +165,8 @@ def execute_chat_action(task_id: str, item_id: str, action: str, *, source: str 
 
     if action == "rerun_image":
         item = load_item(task_id, item_id)
+        if item["status"] == "image_generating":
+            return poll_image_generation(task_id, item_id, source=source)
         if item["status"] == "prompt_generated":
             approve_step(task_id, item_id, STEP_IMAGE_PROMPT, source=source)
             item = load_item(task_id, item_id)

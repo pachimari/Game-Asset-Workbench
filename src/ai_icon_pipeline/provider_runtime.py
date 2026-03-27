@@ -31,6 +31,7 @@ def _prompt_user_prompt(*, brief_output: dict, style_spec: dict, runtime_config:
 def generate_brief_output(
     *,
     provider_id: str,
+    provider_config: dict | None,
     api_key: str,
     model: str,
     asset_type: str,
@@ -54,7 +55,7 @@ def generate_brief_output(
     if provider_id == "mock":
         return fallback
 
-    provider = get_provider(provider_id)
+    provider = get_provider(provider_id, provider_config)
     raw = provider.generate_json(
         api_key=api_key,
         model=model,
@@ -84,6 +85,7 @@ def generate_brief_output(
 def generate_prompt_output(
     *,
     provider_id: str,
+    provider_config: dict | None,
     api_key: str,
     model: str,
     brief_output: dict,
@@ -99,7 +101,7 @@ def generate_prompt_output(
     if provider_id == "mock":
         return fallback
 
-    provider = get_provider(provider_id)
+    provider = get_provider(provider_id, provider_config)
     raw = provider.generate_json(
         api_key=api_key,
         model=model,

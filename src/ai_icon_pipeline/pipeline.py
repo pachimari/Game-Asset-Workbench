@@ -8,6 +8,7 @@ from .config import (
     STATUS_COMPLETED,
     STATUS_DRAFT,
     STATUS_FAILED,
+    STATUS_IMAGE_GENERATING,
     STATUS_IMAGE_GENERATED,
     STATUS_PROMPT_APPROVED,
     STATUS_PROMPT_GENERATED,
@@ -20,7 +21,8 @@ from .provider_runtime import (
     generate_image_candidates,
     generate_prompt_output,
 )
-from .settings import load_global_settings, resolve_stage_selection
+from .providers.registry import get_async_image_provider
+from .settings import load_global_settings, provider_settings_for, resolve_stage_selection
 from .state_machine import TERMINAL_STATUSES, validate_approval, validate_generation
 from .storage import (
     append_event,
@@ -126,6 +128,10 @@ def _effective_runtime_config(task_id: str, item: dict) -> dict:
     return runtime_config
 
 
+def _artifact_job_status(payload: dict) -> str | None:
+    return payload.get("async_job", {}).get("status")
+
+
 def _select_current_version(
     task_id: str,
     item_id: str,
@@ -169,7 +175,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
     selected_runtime = resolve_stage_selection(task, item, global_settings, step)
     provider_id = selected_runtime["provider"]
     model_id = selected_runtime["model"]
-    provider_settings = global_settings["providers"].get(provider_id, {})
+    provider_settings = provider_settings_for(global_settings, provider_id)
     api_key = provider_settings.get("api_key", "")
     prompt_templates = global_settings.get("prompt_templates", {})
     next_status = validate_generation(step, item["status"])
@@ -178,6 +184,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
         if step == STEP_BRIEF_GENERATION:
             output = generate_brief_output(
                 provider_id=provider_id,
+                provider_config=provider_settings,
                 api_key=api_key,
                 model=model_id,
                 asset_type=item["asset_type"],
@@ -215,6 +222,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             style_spec = load_style_spec(task_id)
             output = generate_prompt_output(
                 provider_id=provider_id,
+                provider_config=provider_settings,
                 api_key=api_key,
                 model=model_id,
                 brief_output=brief_artifact["output"],
@@ -242,34 +250,70 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             runtime_config = _effective_runtime_config(task_id, item)
             version = next_version(task_id, item_id, step)
             prompt_artifact = load_artifact(task_id, item_id, STEP_IMAGE_PROMPT, prompt_version)
-            candidates = generate_image_candidates(
-                provider_id=provider_id,
-                api_key=api_key,
-                model=model_id,
-                output_dir=item_dir(task_id, item_id) / "images",
-                version=version,
-                candidate_count=runtime_config["candidate_count"],
-                prompt=prompt_artifact["output"].get("prompt", ""),
-                negative_prompt=prompt_artifact["output"].get("negative_prompt", ""),
-                image_size=runtime_config["image_size"],
-                image_aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
-                image_resolution=runtime_config.get("image_resolution", "1K"),
-            )
-            payload = {
-                "step": step,
-                "provider": provider_id,
-                "model": model_id,
-                "created_at": utc_now(),
-                "input": {
-                    "image_prompt_version": prompt_version,
-                    "candidate_count": runtime_config["candidate_count"],
-                    "image_size": runtime_config["image_size"],
-                    "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
-                    "image_resolution": runtime_config.get("image_resolution", "1K"),
-                    "selected_runtime": selected_runtime,
-                },
-                "output": {"candidates": candidates},
-            }
+            if provider_settings.get("provider_type") == "async_image":
+                async_provider = get_async_image_provider(provider_id, provider_settings)
+                composed_prompt = prompt_artifact["output"].get("prompt", "")
+                negative_prompt = prompt_artifact["output"].get("negative_prompt", "")
+                if negative_prompt:
+                    composed_prompt += f"\nAvoid: {negative_prompt}"
+                response = async_provider.submit_generation(
+                    api_key=api_key,
+                    model=model_id,
+                    prompt=composed_prompt,
+                    aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
+                    resolution=runtime_config.get("image_resolution", "1K"),
+                )
+                payload = {
+                    "step": step,
+                    "provider": provider_id,
+                    "model": model_id,
+                    "created_at": utc_now(),
+                    "input": {
+                        "image_prompt_version": prompt_version,
+                        "candidate_count": runtime_config["candidate_count"],
+                        "image_size": runtime_config["image_size"],
+                        "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
+                        "image_resolution": runtime_config.get("image_resolution", "1K"),
+                        "selected_runtime": selected_runtime,
+                    },
+                    "async_job": {
+                        "provider_type": provider_settings.get("provider_type"),
+                        "status": response.get("status", "queued"),
+                        "task_id": response.get("id"),
+                        "progress": response.get("progress", 0),
+                        "submitted_at": utc_now(),
+                    },
+                    "output": {"candidates": []},
+                }
+            else:
+                candidates = generate_image_candidates(
+                    provider_id=provider_id,
+                    api_key=api_key,
+                    model=model_id,
+                    output_dir=item_dir(task_id, item_id) / "images",
+                    version=version,
+                    candidate_count=runtime_config["candidate_count"],
+                    prompt=prompt_artifact["output"].get("prompt", ""),
+                    negative_prompt=prompt_artifact["output"].get("negative_prompt", ""),
+                    image_size=runtime_config["image_size"],
+                    image_aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
+                    image_resolution=runtime_config.get("image_resolution", "1K"),
+                )
+                payload = {
+                    "step": step,
+                    "provider": provider_id,
+                    "model": model_id,
+                    "created_at": utc_now(),
+                    "input": {
+                        "image_prompt_version": prompt_version,
+                        "candidate_count": runtime_config["candidate_count"],
+                        "image_size": runtime_config["image_size"],
+                        "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
+                        "image_resolution": runtime_config.get("image_resolution", "1K"),
+                        "selected_runtime": selected_runtime,
+                    },
+                    "output": {"candidates": candidates},
+                }
         else:
             raise ValueError(f"Unsupported step: {step}")
     except Exception as exc:
@@ -286,7 +330,11 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
 
     version = write_artifact(task_id, item_id, step, payload, version=version)
     item["current_versions"][step] = version
-    item["status"] = next_status
+    item["status"] = (
+        STATUS_IMAGE_GENERATING
+        if step == STEP_IMAGE_GENERATION and payload.get("async_job")
+        else next_status
+    )
     save_item(task_id, item)
     _touch_metrics(task_id, item_id, step)
     append_item_event(
@@ -296,7 +344,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             "timestamp": utc_now(),
             "source": source,
             "action": f"run_{step}",
-            "to": next_status,
+            "to": item["status"],
             "version": version,
         },
     )
@@ -307,7 +355,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             "source": source,
             "action": f"run_{step}",
             "item_id": item_id,
-            "to": next_status,
+            "to": item["status"],
             "version": version,
         },
     )
@@ -317,8 +365,130 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
         "item_id": item_id,
         "step": step,
         "version": version,
-        "status": next_status,
+        "status": item["status"],
     }
+
+
+def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") -> dict:
+    item = load_item(task_id, item_id)
+    version = item["current_versions"].get(STEP_IMAGE_GENERATION)
+    if not version:
+        raise ValueError("当前没有候选图任务")
+    artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, version)
+    async_job = artifact.get("async_job", {})
+    task_id_remote = async_job.get("task_id")
+    if not task_id_remote:
+        raise ValueError("当前候选图版本不是异步任务")
+
+    global_settings = load_global_settings()
+    provider_id = artifact.get("provider", "mock")
+    provider_settings = provider_settings_for(global_settings, provider_id)
+    api_key = provider_settings.get("api_key", "")
+    model_id = artifact.get("model", "")
+    async_provider = get_async_image_provider(provider_id, provider_settings)
+    response = async_provider.poll_generation(api_key=api_key, task_id=task_id_remote)
+    remote_status = str(response.get("status", "")).lower()
+    async_job["status"] = remote_status or async_job.get("status", "queued")
+    async_job["progress"] = response.get("progress", async_job.get("progress", 0))
+    async_job["updated_at"] = utc_now()
+
+    if remote_status in {"queued", "processing"}:
+        artifact["async_job"] = async_job
+        write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
+        item["status"] = STATUS_IMAGE_GENERATING
+        save_item(task_id, item)
+        _set_metrics_status(task_id, item_id, STATUS_IMAGE_GENERATING)
+        append_item_event(
+            task_id,
+            item_id,
+            {
+                "timestamp": utc_now(),
+                "source": source,
+                "action": "poll_image_generation",
+                "version": version,
+                "remote_status": remote_status,
+                "to": STATUS_IMAGE_GENERATING,
+            },
+        )
+        append_event(
+            task_id,
+            {
+                "timestamp": utc_now(),
+                "source": source,
+                "action": "poll_image_generation",
+                "item_id": item_id,
+                "version": version,
+                "remote_status": remote_status,
+                "to": STATUS_IMAGE_GENERATING,
+            },
+        )
+        refresh_task_summary(task_id)
+        return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": STATUS_IMAGE_GENERATING}
+
+    if remote_status == "completed":
+        result = response.get("result", {})
+        urls = []
+        if isinstance(result, dict):
+            for row in result.get("data", []):
+                if isinstance(row, dict) and row.get("url"):
+                    urls.append(row["url"])
+        if not urls:
+            raise ValueError("异步图片任务已完成，但没有返回结果图 URL")
+        candidates = []
+        image_root = item_dir(task_id, item_id) / "images"
+        for index, url in enumerate(urls, start=1):
+            filename = f"{version}_candidate_{index:02d}.jpg"
+            destination = image_root / filename
+            async_provider.download_result(url=url, destination=destination)
+            candidates.append({"candidate_id": f"candidate_{index:02d}", "image_path": filename, "source_url": url})
+        artifact["async_job"] = async_job
+        artifact["output"] = {"candidates": candidates}
+        write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
+        item["status"] = STATUS_IMAGE_GENERATED
+        save_item(task_id, item)
+        _set_metrics_status(task_id, item_id, STATUS_IMAGE_GENERATED)
+        append_item_event(
+            task_id,
+            item_id,
+            {
+                "timestamp": utc_now(),
+                "source": source,
+                "action": "complete_image_generation",
+                "version": version,
+                "remote_status": remote_status,
+                "to": STATUS_IMAGE_GENERATED,
+            },
+        )
+        append_event(
+            task_id,
+            {
+                "timestamp": utc_now(),
+                "source": source,
+                "action": "complete_image_generation",
+                "item_id": item_id,
+                "version": version,
+                "remote_status": remote_status,
+                "to": STATUS_IMAGE_GENERATED,
+            },
+        )
+        refresh_task_summary(task_id)
+        return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": STATUS_IMAGE_GENERATED}
+
+    if remote_status in {"failed", "cancelled"}:
+        _mark_step_failed(
+            task_id,
+            item_id,
+            STEP_IMAGE_GENERATION,
+            source=source,
+            provider_id=provider_id,
+            model_id=model_id,
+            error_message=str(response.get("error", response)),
+        )
+        raise ValueError(f"异步图片任务失败：{response.get('error', remote_status)}")
+
+    artifact["async_job"] = async_job
+    write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
+    return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": item["status"]}
 
 
 def approve_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> dict:
@@ -542,6 +712,8 @@ def run_item_pipeline(
         if status == STATUS_PROMPT_APPROVED:
             run_step(task_id, item_id, STEP_IMAGE_GENERATION, source=source)
             continue
+        if status == STATUS_IMAGE_GENERATING:
+            return {"task_id": task_id, "item_id": item_id, "status": status}
         if status == STATUS_IMAGE_GENERATED:
             if not auto_approve:
                 return {"task_id": task_id, "item_id": item_id, "status": status}

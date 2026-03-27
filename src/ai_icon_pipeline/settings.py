@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
+import re
+from uuid import uuid4
 
 from .config import (
     PROJECT_ROOT,
@@ -53,18 +55,27 @@ DEFAULT_PROMPT_TEMPLATES = {
 
 DEFAULT_PROVIDER_SETTINGS = {
     "gemini": {
+        "provider_type": "gemini_native",
+        "label": "Gemini",
+        "base_url": "https://generativelanguage.googleapis.com",
         "api_key": "",
         "models": [],
         "last_synced_at": None,
         "last_error": None,
     },
     "deepseek": {
+        "provider_type": "openai_compatible",
+        "label": "DeepSeek",
+        "base_url": "https://api.deepseek.com",
         "api_key": "",
         "models": [],
         "last_synced_at": None,
         "last_error": None,
     },
     "mock": {
+        "provider_type": "mock",
+        "label": "本地 Mock",
+        "base_url": "",
         "api_key": "",
         "models": [
             {
@@ -87,12 +98,100 @@ DEFAULT_PROVIDER_SETTINGS = {
 def default_global_settings() -> dict:
     return {
         "providers": deepcopy(DEFAULT_PROVIDER_SETTINGS),
+        "custom_providers": [],
         "defaults": deepcopy(DEFAULT_STAGE_SELECTIONS),
         "prompt_templates": deepcopy(DEFAULT_PROMPT_TEMPLATES),
     }
 
 
-def _sanitize_provider_models(provider_id: str, models: list[dict]) -> list[dict]:
+def _slugify_provider_name(value: str) -> str:
+    text = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "-", value.strip().lower()).strip("-")
+    return text or "provider"
+
+
+def _default_custom_provider(
+    *,
+    provider_id: str | None = None,
+    label: str = "自定义 Provider",
+    provider_type: str = "openai_compatible",
+    base_url: str = "",
+    api_key: str = "",
+    models: list[dict] | None = None,
+) -> dict:
+    return {
+        "id": provider_id or f"custom_{_slugify_provider_name(label)}_{uuid4().hex[:8]}",
+        "provider_type": provider_type,
+        "label": label,
+        "base_url": base_url,
+        "api_key": api_key,
+        "models": models or [],
+        "last_synced_at": None,
+        "last_error": None,
+    }
+
+
+def _sanitize_custom_provider(provider: dict) -> dict:
+    merged = _default_custom_provider(
+        provider_id=provider.get("id"),
+        label=provider.get("label", "自定义 Provider"),
+        provider_type=provider.get("provider_type", "openai_compatible"),
+        base_url=provider.get("base_url", ""),
+        api_key=provider.get("api_key", ""),
+        models=provider.get("models", []),
+    )
+    merged["last_synced_at"] = provider.get("last_synced_at")
+    merged["last_error"] = provider.get("last_error")
+    return merged
+
+
+def provider_type_for(settings: dict, provider_id: str) -> str:
+    if provider_id in settings.get("providers", {}):
+        return settings["providers"][provider_id].get("provider_type", "openai_compatible")
+    for row in settings.get("custom_providers", []):
+        if row.get("id") == provider_id:
+            return row.get("provider_type", "openai_compatible")
+    return "openai_compatible"
+
+
+def provider_label_for(settings: dict, provider_id: str) -> str:
+    if provider_id in settings.get("providers", {}):
+        return settings["providers"][provider_id].get("label", provider_id)
+    for row in settings.get("custom_providers", []):
+        if row.get("id") == provider_id:
+            return row.get("label", provider_id)
+    return provider_id
+
+
+def provider_settings_for(settings: dict, provider_id: str) -> dict:
+    if provider_id in settings.get("providers", {}):
+        return settings["providers"][provider_id]
+    for row in settings.get("custom_providers", []):
+        if row.get("id") == provider_id:
+            return row
+    return {}
+
+
+def all_provider_entries(settings: dict) -> dict[str, dict]:
+    entries = {provider_id: row for provider_id, row in settings.get("providers", {}).items()}
+    for row in settings.get("custom_providers", []):
+        provider_id = row.get("id")
+        if provider_id:
+            entries[provider_id] = row
+    return entries
+
+
+def _infer_custom_stages(provider_type: str, model_id: str, model: dict) -> list[str]:
+    explicit = model.get("stages", [])
+    if explicit:
+        return explicit
+    if provider_type == "async_image":
+        return [STEP_IMAGE_GENERATION]
+    if provider_type == "openai_compatible":
+        return infer_stages("deepseek", model_id)
+    return []
+
+
+def _sanitize_provider_models(provider_id: str, models: list[dict], *, provider_type: str | None = None) -> list[dict]:
     sanitized: list[dict] = []
     for model in models:
         model_id = model.get("id")
@@ -100,6 +199,8 @@ def _sanitize_provider_models(provider_id: str, models: list[dict]) -> list[dict
             continue
         if provider_id == "mock":
             stages = model.get("stages", [])
+        elif provider_id not in DEFAULT_PROVIDER_SETTINGS:
+            stages = _infer_custom_stages(provider_type or "openai_compatible", model_id, model)
         else:
             stages = infer_stages(provider_id, model_id)
         if not stages:
@@ -121,10 +222,15 @@ def _sanitize_provider_models(provider_id: str, models: list[dict]) -> list[dict
     return sanitized
 
 
-def _selection_supported(step: str, provider: str | None, model: str | None) -> bool:
+def _selection_supported(settings: dict, step: str, provider: str | None, model: str | None) -> bool:
     if not provider or not model:
         return False
-    return step in infer_stages(provider, model) or provider == "mock"
+    if provider == "mock":
+        return True
+    if provider in DEFAULT_PROVIDER_SETTINGS:
+        return step in infer_stages(provider, model)
+    provider_type = provider_type_for(settings, provider)
+    return step in _infer_custom_stages(provider_type, model, {"id": model})
 
 
 def load_global_settings() -> dict:
@@ -138,6 +244,11 @@ def load_global_settings() -> dict:
     settings = default_global_settings()
     if isinstance(payload, dict):
         settings["providers"].update(payload.get("providers", {}))
+        settings["custom_providers"] = [
+            _sanitize_custom_provider(row)
+            for row in payload.get("custom_providers", [])
+            if isinstance(row, dict)
+        ]
         settings["defaults"].update(payload.get("defaults", {}))
         settings["prompt_templates"].update(payload.get("prompt_templates", {}))
 
@@ -148,6 +259,15 @@ def load_global_settings() -> dict:
         settings["providers"][provider_id]["models"] = _sanitize_provider_models(
             provider_id,
             settings["providers"][provider_id].get("models", []),
+            provider_type=settings["providers"][provider_id].get("provider_type"),
+        )
+
+    for index, row in enumerate(settings.get("custom_providers", [])):
+        provider_id = row["id"]
+        settings["custom_providers"][index]["models"] = _sanitize_provider_models(
+            provider_id,
+            row.get("models", []),
+            provider_type=row.get("provider_type"),
         )
 
     for step, selection in DEFAULT_STAGE_SELECTIONS.items():
@@ -155,6 +275,7 @@ def load_global_settings() -> dict:
         settings["defaults"][step].setdefault("provider", selection["provider"])
         settings["defaults"][step].setdefault("model", selection["model"])
         if not _selection_supported(
+            settings,
             step,
             settings["defaults"][step].get("provider"),
             settings["defaults"][step].get("model"),
@@ -179,16 +300,32 @@ def save_global_settings(settings: dict) -> None:
 def update_provider_settings(
     provider_id: str,
     *,
+    provider_type: str | None = None,
+    label: str | None = None,
+    base_url: str | None = None,
     api_key: str | None = None,
     models: list[dict] | None = None,
     last_synced_at: str | None = None,
     last_error: str | None = None,
 ) -> dict:
     settings = load_global_settings()
-    provider_settings = settings["providers"].setdefault(
-        provider_id,
-        deepcopy(DEFAULT_PROVIDER_SETTINGS.get(provider_id, {"api_key": "", "models": [], "last_synced_at": None, "last_error": None})),
-    )
+    provider_settings = None
+    if provider_id in settings["providers"]:
+        provider_settings = settings["providers"][provider_id]
+    else:
+        for row in settings.get("custom_providers", []):
+            if row.get("id") == provider_id:
+                provider_settings = row
+                break
+        if provider_settings is None:
+            provider_settings = _default_custom_provider(provider_id=provider_id, label=label or provider_id)
+            settings.setdefault("custom_providers", []).append(provider_settings)
+    if provider_type is not None:
+        provider_settings["provider_type"] = provider_type
+    if label is not None:
+        provider_settings["label"] = label
+    if base_url is not None:
+        provider_settings["base_url"] = base_url
     if api_key is not None:
         provider_settings["api_key"] = api_key
     if models is not None:
@@ -197,6 +334,39 @@ def update_provider_settings(
         provider_settings["last_synced_at"] = last_synced_at
     if last_error is not None:
         provider_settings["last_error"] = last_error
+    save_global_settings(settings)
+    return settings
+
+
+def create_custom_provider(
+    *,
+    label: str,
+    provider_type: str,
+    base_url: str,
+    api_key: str = "",
+    models: list[dict] | None = None,
+) -> dict:
+    settings = load_global_settings()
+    provider = _default_custom_provider(
+        label=label,
+        provider_type=provider_type,
+        base_url=base_url,
+        api_key=api_key,
+        models=models,
+    )
+    settings.setdefault("custom_providers", []).append(provider)
+    save_global_settings(settings)
+    return settings
+
+
+def delete_custom_provider(provider_id: str) -> dict:
+    settings = load_global_settings()
+    settings["custom_providers"] = [
+        row for row in settings.get("custom_providers", []) if row.get("id") != provider_id
+    ]
+    for step, selection in settings.get("defaults", {}).items():
+        if selection.get("provider") == provider_id:
+            settings["defaults"][step] = deepcopy(DEFAULT_STAGE_SELECTIONS[step])
     save_global_settings(settings)
     return settings
 
@@ -225,15 +395,15 @@ def update_prompt_templates(
 
 def resolve_stage_selection(task: dict, item: dict, settings: dict, step: str) -> dict:
     item_selection = item.get("model_overrides", {}).get(step, {})
-    if _selection_supported(step, item_selection.get("provider"), item_selection.get("model")):
+    if _selection_supported(settings, step, item_selection.get("provider"), item_selection.get("model")):
         return {"provider": item_selection["provider"], "model": item_selection["model"], "source": "item"}
 
     task_selection = task.get("model_overrides", {}).get(step, {})
-    if _selection_supported(step, task_selection.get("provider"), task_selection.get("model")):
+    if _selection_supported(settings, step, task_selection.get("provider"), task_selection.get("model")):
         return {"provider": task_selection["provider"], "model": task_selection["model"], "source": "task"}
 
     default_selection = settings.get("defaults", {}).get(step, DEFAULT_STAGE_SELECTIONS[step])
-    if _selection_supported(step, default_selection.get("provider"), default_selection.get("model")):
+    if _selection_supported(settings, step, default_selection.get("provider"), default_selection.get("model")):
         return {
             "provider": default_selection["provider"],
             "model": default_selection["model"],
@@ -257,7 +427,7 @@ def resolve_stage_selection(task: dict, item: dict, settings: dict, step: str) -
 
 def provider_models_for_stage(settings: dict, step: str) -> list[dict]:
     options: list[dict] = []
-    for provider_id, provider_settings in settings.get("providers", {}).items():
+    for provider_id, provider_settings in all_provider_entries(settings).items():
         for model in provider_settings.get("models", []):
             if step in model.get("stages", []):
                 options.append(

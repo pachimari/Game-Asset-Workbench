@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .gemini_native import GeminiNativeProvider
 from .openai_compatible import OpenAICompatibleProvider, ProviderRequestError
+from .toapis_async import ToApisAsyncImageProvider
 from ..config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
 
 
@@ -47,11 +48,16 @@ DEEPSEEK_PROVIDER = OpenAICompatibleProvider(
 )
 
 
-def get_provider(provider_id: str) -> OpenAICompatibleProvider:
+def get_provider(provider_id: str, provider_config: dict | None = None) -> OpenAICompatibleProvider:
     if provider_id == "gemini":
         return GEMINI_PROVIDER
     if provider_id == "deepseek":
         return DEEPSEEK_PROVIDER
+    if provider_config and provider_config.get("provider_type") == "openai_compatible":
+        return OpenAICompatibleProvider(
+            base_url=provider_config.get("base_url", "").rstrip("/"),
+            label=provider_config.get("label", provider_id),
+        )
     raise ValueError(f"Unsupported provider: {provider_id}")
 
 
@@ -59,6 +65,15 @@ def get_native_image_provider(provider_id: str):
     if provider_id == "gemini":
         return GEMINI_NATIVE_PROVIDER
     raise ValueError(f"Unsupported native image provider: {provider_id}")
+
+
+def get_async_image_provider(provider_id: str, provider_config: dict | None = None):
+    if provider_config and provider_config.get("provider_type") == "async_image":
+        return ToApisAsyncImageProvider(
+            label=provider_config.get("label", provider_id),
+            base_url=provider_config.get("base_url", ""),
+        )
+    raise ValueError(f"Unsupported async image provider: {provider_id}")
 
 
 def infer_stages(provider_id: str, model_id: str) -> list[str]:
@@ -91,16 +106,22 @@ def compatibility_for_model(provider_id: str, model_id: str) -> str:
     return "unknown"
 
 
-def sync_provider_models(provider_id: str, api_key: str) -> list[dict]:
+def sync_provider_models(provider_id: str, api_key: str, provider_config: dict | None = None) -> list[dict]:
     if provider_id == "mock":
         return []
-    provider = GEMINI_NATIVE_PROVIDER if provider_id == "gemini" else get_provider(provider_id)
+    if provider_config and provider_config.get("provider_type") == "async_image":
+        return provider_config.get("models", [])
+    provider = GEMINI_NATIVE_PROVIDER if provider_id == "gemini" else get_provider(provider_id, provider_config)
+    provider_type = (provider_config or {}).get("provider_type")
     models = []
     for row in provider.list_models(api_key=api_key):
         model_id = row.get("id")
         if not model_id:
             continue
-        stages = infer_stages(provider_id, model_id)
+        if provider_id not in PROVIDER_LABELS and provider_type == "openai_compatible":
+            stages = infer_stages("deepseek", model_id)
+        else:
+            stages = infer_stages(provider_id, model_id)
         if not stages:
             continue
         models.append(
@@ -126,6 +147,7 @@ __all__ = [
     "PROVIDER_ORDER",
     "display_label_for_model",
     "compatibility_for_model",
+    "get_async_image_provider",
     "get_provider",
     "get_native_image_provider",
     "infer_stages",
