@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Callable
 
 from .config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
-from .pipeline import approve_step, poll_image_generation, rollback_step, run_step, set_current_version
+from .pipeline import (
+    approve_step,
+    edit_brief,
+    edit_prompt,
+    poll_image_generation,
+    rollback_step,
+    run_step,
+    set_current_version,
+)
 from .providers.registry import get_provider
 from .settings import (
     load_global_settings,
@@ -31,6 +40,8 @@ ALLOWED_COMMANDS = {
     "update_item_fields": {"args": ["title", "description", "category", "extra_context"]},
     "update_item_runtime": {"args": ["image_aspect_ratio", "image_resolution"]},
     "set_stage_model": {"args": ["step", "model", "provider"]},
+    "edit_brief_fields": {"args": ["title", "description", "keywords", "icon_subject", "visual_focus", "note"]},
+    "edit_prompt_fields": {"args": ["prompt", "negative_prompt", "note"]},
 }
 
 ALLOWED_STEPS = {
@@ -54,6 +65,8 @@ CHAT_SYSTEM_PROMPT = """你是游戏图标工作台里的受限命令规划器�
 - update_item_fields
 - update_item_runtime
 - set_stage_model
+- edit_brief_fields
+- edit_prompt_fields
 
 规则：
 1. 最多输出 4 步。
@@ -61,6 +74,7 @@ CHAT_SYSTEM_PROMPT = """你是游戏图标工作台里的受限命令规划器�
 3. 如果需要修改模型，优先使用用户提到的友好模型名。
 4. 如果当前状态还不能直接执行某一步，请先规划必要的前置步骤。
 5. 如果请求超出允许范围，请返回 steps 为 []，并说明 reason。
+6. 如果用户想直接改“设计说明”或“出图指令”内容，优先使用 edit_brief_fields / edit_prompt_fields。
 
 返回 JSON 对象，字段必须包含：
 - summary: string
@@ -190,6 +204,16 @@ def _validate_plan(raw: dict) -> dict:
         "confidence": float(raw.get("confidence") or 0.0),
         "steps": normalized_steps,
     }
+
+
+def _normalize_keywords(value) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return [str(row).strip() for row in value if str(row).strip()]
+    if isinstance(value, str):
+        return [row.strip() for row in re.split(r"[,\n，、]", value) if row.strip()]
+    return None
 
 
 def parse_chat_plan(task: dict, item: dict, settings: dict, message: str) -> dict:
@@ -322,91 +346,150 @@ def _ensure_step_ready(task_id: str, item_id: str, target_step: str, *, source: 
         return
 
 
+CommandHandler = Callable[[str, str, dict, str], dict]
+
+
+def _cmd_approve_current_step(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    item = load_item(task_id, item_id)
+    status = item["status"]
+    if status == "brief_generated":
+        return approve_step(task_id, item_id, STEP_BRIEF_GENERATION, source=source)
+    if status == "prompt_generated":
+        return approve_step(task_id, item_id, STEP_IMAGE_PROMPT, source=source)
+    if status == "image_generating":
+        return poll_image_generation(task_id, item_id, source=source)
+    if status == "image_generated":
+        return approve_step(task_id, item_id, STEP_IMAGE_GENERATION, source=source)
+    raise ValueError("当前状态没有可直接通过的步骤")
+
+
+def _cmd_run_step(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    step = _normalize_step(args.get("step"))
+    if step not in ALLOWED_STEPS:
+        raise ValueError(f"非法步骤：{args.get('step')}")
+    _ensure_step_ready(task_id, item_id, step, source=source)
+    return run_step(task_id, item_id, step, source=source)
+
+
+def _cmd_poll_image_generation(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    return poll_image_generation(task_id, item_id, source=source)
+
+
+def _cmd_rollback_step(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    step = _normalize_step(args.get("step"))
+    if step not in {STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT}:
+        raise ValueError("只允许回退到设计说明或出图指令")
+    return rollback_step(task_id, item_id, step, source=source)
+
+
+def _cmd_set_current_version(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    step = _normalize_step(args.get("step"))
+    version = args.get("version")
+    if step not in ALLOWED_STEPS or not version:
+        raise ValueError("切换版本需要 step 和 version")
+    return set_current_version(task_id, item_id, step, str(version), source=source)
+
+
+def _cmd_update_item_fields(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    result_item = update_item(
+        task_id,
+        item_id,
+        title=args.get("title"),
+        description=args.get("description"),
+        category=args.get("category"),
+        extra_context=args.get("extra_context"),
+    )
+    return {"status": result_item.get("status"), "item_id": item_id, "command": "update_item_fields"}
+
+
+def _cmd_update_item_runtime(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    result_item = update_item(
+        task_id,
+        item_id,
+        image_aspect_ratio=args.get("image_aspect_ratio"),
+        image_resolution=args.get("image_resolution"),
+    )
+    return {"status": result_item.get("status"), "item_id": item_id, "command": "update_item_runtime"}
+
+
+def _cmd_set_stage_model(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    global_settings = load_global_settings()
+    step = _normalize_step(args.get("step"))
+    if step not in ALLOWED_STEPS:
+        raise ValueError(f"非法步骤：{args.get('step')}")
+    provider_query = args.get("provider")
+    model_query = args.get("model") or args.get("model_query")
+    provider_id, model_id = _match_model(
+        global_settings,
+        step=step,
+        provider=provider_query,
+        query=str(model_query or ""),
+    )
+    result_item = update_item_model_override(
+        task_id,
+        item_id,
+        step,
+        provider=provider_id,
+        model=model_id,
+    )
+    return {
+        "status": result_item.get("status"),
+        "item_id": item_id,
+        "command": "set_stage_model",
+        "provider": provider_id,
+        "model": model_id,
+    }
+
+
+def _cmd_edit_brief_fields(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    return edit_brief(
+        task_id,
+        item_id,
+        title=args.get("title"),
+        description=args.get("description"),
+        keywords=_normalize_keywords(args.get("keywords")),
+        icon_subject=args.get("icon_subject"),
+        visual_focus=args.get("visual_focus"),
+        note=args.get("note") or "chat plan brief edit",
+        source=source,
+    )
+
+
+def _cmd_edit_prompt_fields(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    return edit_prompt(
+        task_id,
+        item_id,
+        prompt=args.get("prompt"),
+        negative_prompt=args.get("negative_prompt"),
+        note=args.get("note") or "chat plan prompt edit",
+        source=source,
+    )
+
+
+COMMAND_REGISTRY: dict[str, CommandHandler] = {
+    "approve_current_step": _cmd_approve_current_step,
+    "run_step": _cmd_run_step,
+    "poll_image_generation": _cmd_poll_image_generation,
+    "rollback_step": _cmd_rollback_step,
+    "set_current_version": _cmd_set_current_version,
+    "update_item_fields": _cmd_update_item_fields,
+    "update_item_runtime": _cmd_update_item_runtime,
+    "set_stage_model": _cmd_set_stage_model,
+    "edit_brief_fields": _cmd_edit_brief_fields,
+    "edit_prompt_fields": _cmd_edit_prompt_fields,
+}
+
+
 def execute_chat_plan(task_id: str, item_id: str, plan: dict, *, source: str = "chat") -> dict:
     results = []
     last_status = None
     for row in plan.get("steps", []):
         command = row["command"]
         args = row.get("args", {})
-        if command == "approve_current_step":
-            item = load_item(task_id, item_id)
-            status = item["status"]
-            if status == "brief_generated":
-                result = approve_step(task_id, item_id, STEP_BRIEF_GENERATION, source=source)
-            elif status == "prompt_generated":
-                result = approve_step(task_id, item_id, STEP_IMAGE_PROMPT, source=source)
-            elif status == "image_generating":
-                result = poll_image_generation(task_id, item_id, source=source)
-            elif status == "image_generated":
-                result = approve_step(task_id, item_id, STEP_IMAGE_GENERATION, source=source)
-            else:
-                raise ValueError("当前状态没有可直接通过的步骤")
-        elif command == "run_step":
-            step = _normalize_step(args.get("step"))
-            if step not in ALLOWED_STEPS:
-                raise ValueError(f"非法步骤：{args.get('step')}")
-            _ensure_step_ready(task_id, item_id, step, source=source)
-            result = run_step(task_id, item_id, step, source=source)
-        elif command == "poll_image_generation":
-            result = poll_image_generation(task_id, item_id, source=source)
-        elif command == "rollback_step":
-            step = _normalize_step(args.get("step"))
-            if step not in {STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT}:
-                raise ValueError("只允许回退到设计说明或出图指令")
-            result = rollback_step(task_id, item_id, step, source=source)
-        elif command == "set_current_version":
-            step = _normalize_step(args.get("step"))
-            version = args.get("version")
-            if step not in ALLOWED_STEPS or not version:
-                raise ValueError("切换版本需要 step 和 version")
-            result = set_current_version(task_id, item_id, step, str(version), source=source)
-        elif command == "update_item_fields":
-            result_item = update_item(
-                task_id,
-                item_id,
-                title=args.get("title"),
-                description=args.get("description"),
-                category=args.get("category"),
-                extra_context=args.get("extra_context"),
-            )
-            result = {"status": result_item.get("status"), "item_id": item_id, "command": command}
-        elif command == "update_item_runtime":
-            result_item = update_item(
-                task_id,
-                item_id,
-                image_aspect_ratio=args.get("image_aspect_ratio"),
-                image_resolution=args.get("image_resolution"),
-            )
-            result = {"status": result_item.get("status"), "item_id": item_id, "command": command}
-        elif command == "set_stage_model":
-            global_settings = load_global_settings()
-            step = _normalize_step(args.get("step"))
-            if step not in ALLOWED_STEPS:
-                raise ValueError(f"非法步骤：{args.get('step')}")
-            provider_query = args.get("provider")
-            model_query = args.get("model") or args.get("model_query")
-            provider_id, model_id = _match_model(
-                global_settings,
-                step=step,
-                provider=provider_query,
-                query=str(model_query or ""),
-            )
-            result_item = update_item_model_override(
-                task_id,
-                item_id,
-                step,
-                provider=provider_id,
-                model=model_id,
-            )
-            result = {
-                "status": result_item.get("status"),
-                "item_id": item_id,
-                "command": command,
-                "provider": provider_id,
-                "model": model_id,
-            }
-        else:
+        handler = COMMAND_REGISTRY.get(command)
+        if not handler:
             raise ValueError(f"Unsupported chat command: {command}")
+        result = handler(task_id, item_id, args, source)
         results.append({"command": command, "args": args, "result": result})
         last_status = result.get("status", last_status)
     return {
