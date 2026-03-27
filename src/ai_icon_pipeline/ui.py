@@ -12,7 +12,7 @@ import streamlit as st
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from ai_icon_pipeline.chat_control import execute_chat_action, parse_chat_action
+    from ai_icon_pipeline.chat_control import execute_chat_plan, parse_chat_plan
     from ai_icon_pipeline.config import (
         IMAGE_ASPECT_RATIO_OPTIONS,
         IMAGE_RESOLUTION_OPTIONS,
@@ -67,7 +67,7 @@ if __package__ in (None, ""):
     from ai_icon_pipeline.providers.registry import PROVIDER_LABELS, ProviderRequestError, sync_provider_models
     from ai_icon_pipeline.utils import utc_now
 else:
-    from .chat_control import execute_chat_action, parse_chat_action
+    from .chat_control import execute_chat_plan, parse_chat_plan
     from .config import (
         IMAGE_ASPECT_RATIO_OPTIONS,
         IMAGE_RESOLUTION_OPTIONS,
@@ -1883,7 +1883,12 @@ def _render_chat_control(task_id: str, item: dict) -> None:
             st.markdown(f"**{'你' if role == 'user' else '系统'}**")
             if row.get("message"):
                 st.write(row["message"])
-            if row.get("action"):
+            if row.get("plan"):
+                st.code(
+                    json.dumps(row.get("plan"), ensure_ascii=False, indent=2),
+                    language="json",
+                )
+            elif row.get("action"):
                 st.code(
                     json.dumps(
                         {
@@ -1899,7 +1904,7 @@ def _render_chat_control(task_id: str, item: dict) -> None:
                 )
             st.divider()
     else:
-        st.caption("还没有聊天记录。你可以输入“重跑出图指令”“回到设计说明”“通过当前步骤”等指令。")
+        st.caption("还没有聊天记录。你可以直接说复杂一点的操作，例如“切到 Nano Banana 2，再生成一张 3:4 候选图”。")
 
     with st.form(f"chat-control-{task_id}-{item_id}"):
         message = st.text_area(
@@ -1924,17 +1929,17 @@ def _render_chat_control(task_id: str, item: dict) -> None:
 
     task = load_task(task_id)
     settings = load_global_settings()
-    parsed = parse_chat_action(task, load_item(task_id, item_id), settings, user_message)
+    parsed = parse_chat_plan(task, load_item(task_id, item_id), settings, user_message)
 
-    if parsed["action"] == "unsupported":
+    if not parsed.get("steps"):
         append_item_chat(
             task_id,
             item_id,
             {
                 "timestamp": utc_now(),
                 "role": "assistant",
-                "message": "当前最小版聊天只支持重跑、回退和通过当前步骤。",
-                "action": parsed["action"],
+                "message": "当前没有生成可执行计划。",
+                "plan": parsed,
                 "reason": parsed.get("reason"),
                 "confidence": parsed.get("confidence"),
                 "status": "ignored",
@@ -1944,7 +1949,7 @@ def _render_chat_control(task_id: str, item: dict) -> None:
         _rerun()
 
     try:
-        result = execute_chat_action(task_id, item_id, parsed["action"], source="chat")
+        result = execute_chat_plan(task_id, item_id, parsed, source="chat")
     except Exception as exc:
         append_item_chat(
             task_id,
@@ -1953,7 +1958,7 @@ def _render_chat_control(task_id: str, item: dict) -> None:
                 "timestamp": utc_now(),
                 "role": "assistant",
                 "message": str(exc),
-                "action": parsed["action"],
+                "plan": parsed,
                 "reason": parsed.get("reason"),
                 "confidence": parsed.get("confidence"),
                 "status": "failed",
@@ -1967,14 +1972,20 @@ def _render_chat_control(task_id: str, item: dict) -> None:
             {
                 "timestamp": utc_now(),
                 "role": "assistant",
-                "message": f"已执行 {parsed['action']}",
-                "action": parsed["action"],
+                "message": parsed.get("summary") or f"已执行 {result.get('steps_executed', 0)} 步",
+                "plan": {
+                    "summary": parsed.get("summary"),
+                    "reason": parsed.get("reason"),
+                    "confidence": parsed.get("confidence"),
+                    "steps": parsed.get("steps"),
+                    "results": result.get("results", []),
+                },
                 "reason": parsed.get("reason"),
                 "confidence": parsed.get("confidence"),
                 "status": result.get("status"),
             },
         )
-        st.success(f"已执行：{parsed['action']}")
+        st.success(f"已执行计划：{parsed.get('summary') or result.get('steps_executed', 0)} 步")
         _reset_task_ui_state(task_id, item_id)
         _rerun()
 
