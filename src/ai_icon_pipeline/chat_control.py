@@ -42,6 +42,9 @@ ALLOWED_COMMANDS = {
     "set_stage_model": {"args": ["step", "model", "provider"]},
     "edit_brief_fields": {"args": ["title", "description", "keywords", "icon_subject", "visual_focus", "note"]},
     "edit_prompt_fields": {"args": ["prompt", "negative_prompt", "note"]},
+    "batch_run_step": {"args": ["step", "item_ids", "status_in", "title_query", "limit"]},
+    "batch_approve_current_step": {"args": ["item_ids", "status_in", "title_query", "limit"]},
+    "batch_poll_image_generation": {"args": ["item_ids", "status_in", "title_query", "limit"]},
 }
 
 ALLOWED_STEPS = {
@@ -67,14 +70,18 @@ CHAT_SYSTEM_PROMPT = """你是游戏图标工作台里的受限命令规划器�
 - set_stage_model
 - edit_brief_fields
 - edit_prompt_fields
+- batch_run_step
+- batch_approve_current_step
+- batch_poll_image_generation
 
 规则：
-1. 最多输出 4 步。
-2. 只能操作当前条目。
+1. 最多输出 5 步。
+2. 默认操作当前条目；如果用户明确说“这批/当前批次/所有符合条件的条目”，才允许使用 batch_* 命令。
 3. 如果需要修改模型，优先使用用户提到的友好模型名。
 4. 如果当前状态还不能直接执行某一步，请先规划必要的前置步骤。
 5. 如果请求超出允许范围，请返回 steps 为 []，并说明 reason。
 6. 如果用户想直接改“设计说明”或“出图指令”内容，优先使用 edit_brief_fields / edit_prompt_fields。
+7. batch_* 命令只允许作用于当前批次，不能跨批次。
 
 返回 JSON 对象，字段必须包含：
 - summary: string
@@ -190,7 +197,7 @@ def _validate_plan(raw: dict) -> dict:
     if not isinstance(steps, list):
         steps = []
     normalized_steps = []
-    for row in steps[:4]:
+    for row in steps[:5]:
         if not isinstance(row, dict):
             continue
         command = row.get("command")
@@ -214,6 +221,22 @@ def _normalize_keywords(value) -> list[str] | None:
     if isinstance(value, str):
         return [row.strip() for row in re.split(r"[,\n，、]", value) if row.strip()]
     return None
+
+
+def _task_item_context(task: dict) -> list[dict]:
+    rows = []
+    for current_item_id in task.get("items", []):
+        item = load_item(task["task_id"], current_item_id)
+        rows.append(
+            {
+                "item_id": item.get("item_id"),
+                "title": item.get("title", ""),
+                "status": item.get("status", ""),
+                "asset_type": item.get("asset_type", ""),
+                "category": item.get("category", ""),
+            }
+        )
+    return rows
 
 
 def parse_chat_plan(task: dict, item: dict, settings: dict, message: str) -> dict:
@@ -257,6 +280,7 @@ def parse_chat_plan(task: dict, item: dict, settings: dict, message: str) -> dic
                     "task_name": task.get("task_name"),
                     "project_background": task.get("project_background", ""),
                     "style_requirements": task.get("style_requirements", ""),
+                    "items": _task_item_context(task),
                 },
                 "item": {
                     "item_id": item.get("item_id"),
@@ -466,6 +490,91 @@ def _cmd_edit_prompt_fields(task_id: str, item_id: str, args: dict, source: str)
     )
 
 
+def _resolve_batch_item_ids(task_id: str, args: dict) -> list[str]:
+    task = load_task(task_id)
+    explicit_ids = [str(row) for row in args.get("item_ids", []) if str(row).strip()]
+    if explicit_ids:
+        valid_ids = set(task.get("items", []))
+        matched = [row for row in explicit_ids if row in valid_ids]
+        if not matched:
+            raise ValueError("批量命令没有命中当前批次里的条目")
+        return matched
+
+    status_in = {str(row) for row in args.get("status_in", []) if str(row).strip()}
+    title_query = str(args.get("title_query") or "").strip().lower()
+    limit = int(args.get("limit") or 0)
+
+    matched_ids: list[str] = []
+    for current_item_id in task.get("items", []):
+        item = load_item(task_id, current_item_id)
+        if status_in and item.get("status") not in status_in:
+            continue
+        if title_query:
+            haystack = " ".join(
+                [
+                    item.get("item_id", ""),
+                    item.get("title", ""),
+                    item.get("description", ""),
+                    item.get("category", ""),
+                ]
+            ).lower()
+            if title_query not in haystack:
+                continue
+        matched_ids.append(current_item_id)
+        if limit > 0 and len(matched_ids) >= limit:
+            break
+    if not matched_ids:
+        raise ValueError("批量命令没有匹配到条目")
+    return matched_ids
+
+
+def _cmd_batch_run_step(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    step = _normalize_step(args.get("step"))
+    if step not in ALLOWED_STEPS:
+        raise ValueError(f"非法步骤：{args.get('step')}")
+    matched_ids = _resolve_batch_item_ids(task_id, args)
+    results = []
+    for current_item_id in matched_ids:
+        _ensure_step_ready(task_id, current_item_id, step, source=source)
+        results.append(run_step(task_id, current_item_id, step, source=source))
+    return {
+        "command": "batch_run_step",
+        "step": step,
+        "matched_item_ids": matched_ids,
+        "count": len(matched_ids),
+        "results": results,
+        "status": load_task(task_id).get("status"),
+    }
+
+
+def _cmd_batch_approve_current_step(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    matched_ids = _resolve_batch_item_ids(task_id, args)
+    results = []
+    for current_item_id in matched_ids:
+        results.append(_cmd_approve_current_step(task_id, current_item_id, {}, source))
+    return {
+        "command": "batch_approve_current_step",
+        "matched_item_ids": matched_ids,
+        "count": len(matched_ids),
+        "results": results,
+        "status": load_task(task_id).get("status"),
+    }
+
+
+def _cmd_batch_poll_image_generation(task_id: str, item_id: str, args: dict, source: str) -> dict:
+    matched_ids = _resolve_batch_item_ids(task_id, args)
+    results = []
+    for current_item_id in matched_ids:
+        results.append(poll_image_generation(task_id, current_item_id, source=source))
+    return {
+        "command": "batch_poll_image_generation",
+        "matched_item_ids": matched_ids,
+        "count": len(matched_ids),
+        "results": results,
+        "status": load_task(task_id).get("status"),
+    }
+
+
 COMMAND_REGISTRY: dict[str, CommandHandler] = {
     "approve_current_step": _cmd_approve_current_step,
     "run_step": _cmd_run_step,
@@ -477,6 +586,9 @@ COMMAND_REGISTRY: dict[str, CommandHandler] = {
     "set_stage_model": _cmd_set_stage_model,
     "edit_brief_fields": _cmd_edit_brief_fields,
     "edit_prompt_fields": _cmd_edit_prompt_fields,
+    "batch_run_step": _cmd_batch_run_step,
+    "batch_approve_current_step": _cmd_batch_approve_current_step,
+    "batch_poll_image_generation": _cmd_batch_poll_image_generation,
 }
 
 
