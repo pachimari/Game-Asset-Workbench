@@ -6,11 +6,9 @@ import html
 import json
 import io
 import sys
-import time
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import html as component_html
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -1074,32 +1072,40 @@ def _render_pending_candidate(progress: int, remote_status: str, task_id_remote:
     )
 
 
-def _maybe_auto_poll_generating_items(task_id: str, items: list[dict], *, interval_seconds: float = 4.0) -> None:
+def _current_async_signature(task_id: str, item_id: str) -> tuple[str | None, str | None, int]:
+    item = load_item(task_id, item_id)
+    version = item.get("current_versions", {}).get(STEP_IMAGE_GENERATION)
+    if not version:
+        return (item.get("status"), None, 0)
+    artifact = _artifact_or_none(task_id, item_id, STEP_IMAGE_GENERATION, version)
+    async_job = (artifact or {}).get("async_job", {}) if artifact else {}
+    return (
+        item.get("status"),
+        async_job.get("status"),
+        int(async_job.get("progress", 0)),
+    )
+
+
+@st.fragment(run_every=4)
+def _render_async_poll_daemon(task_id: str) -> None:
+    items = list_items(task_id)
     generating_items = [item for item in items if item.get("status") == "image_generating"]
     if not generating_items:
         return
 
-    now = time.time()
-    state_key = f"auto-poll-at-{task_id}"
-    last_polled_at = st.session_state.get(state_key, 0.0)
-    if now - float(last_polled_at) < interval_seconds:
-        component_html(
-            f"""
-            <script>
-            setTimeout(() => window.parent.location.reload(), {int(interval_seconds * 1000)});
-            </script>
-            """,
-            height=0,
-        )
-        return
-
-    st.session_state[state_key] = now
+    changed = False
     for item in generating_items:
+        before = _current_async_signature(task_id, item["item_id"])
         try:
             poll_image_generation(task_id, item["item_id"], source="auto-poll")
         except Exception:
             continue
-    _rerun()
+        after = _current_async_signature(task_id, item["item_id"])
+        if after != before:
+            changed = True
+
+    if changed:
+        st.rerun()
 
 
 def _render_entry_overview(task_id: str, items: list[dict]) -> None:
@@ -1510,7 +1516,6 @@ def _render_item_management(task: dict) -> None:
 
 
 def _render_task_summary(task: dict, items: list[dict]) -> None:
-    _maybe_auto_poll_generating_items(task["task_id"], items)
     summary = task.get("items_summary", {})
     task_name = _esc(task.get("task_name", task["task_id"]))
     asset_domain = _esc(task.get("asset_domain", "game_icon_assets"))
@@ -2233,6 +2238,7 @@ def main() -> None:
 
     task = load_task(selected_task_id)
     items = list_items(selected_task_id)
+    _render_async_poll_daemon(selected_task_id)
     _render_task_summary(task, items)
     settings = load_global_settings()
     workspace_view = _switcher(
