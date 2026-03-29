@@ -50,13 +50,20 @@ class ToApisAsyncImageProvider:
         aspect_ratio: str,
         resolution: str,
     ) -> dict:
+        normalized_resolution = {
+            "auto": "1K",
+            "512": "0.5K",
+            "1k": "1K",
+            "2k": "2K",
+            "4k": "4K",
+        }.get(str(resolution or "1K").strip().lower(), resolution or "1K")
         payload = {
             "model": model,
             "prompt": prompt,
             "size": aspect_ratio or "1:1",
             "n": 1,
             "metadata": {
-                "resolution": resolution or "1K",
+                "resolution": normalized_resolution,
             },
         }
         response = self._request_json(

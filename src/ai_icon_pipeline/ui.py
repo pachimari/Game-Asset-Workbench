@@ -1014,6 +1014,12 @@ def _image_version_label(task_id: str, item_id: str, version: str) -> str:
     return f"第 {order} 次生成" if order else version
 
 
+def _effective_item_status(task_id: str, item: dict) -> str:
+    if _pending_image_versions(task_id, item["item_id"]):
+        return "image_generating"
+    return item.get("status", "draft")
+
+
 def _default_output_view(item: dict) -> str:
     status = item.get("status", "draft")
     if status in {"draft", "brief_generated", "brief_approved"}:
@@ -1142,11 +1148,12 @@ def _render_entry_overview(task_id: str, items: list[dict]) -> None:
         row_items = items[start : start + OVERVIEW_CARD_COLUMNS]
         columns = st.columns(OVERVIEW_CARD_COLUMNS)
         for col, item in zip(columns, row_items):
+            effective_status = _effective_item_status(task_id, item)
             preview_path = _current_preview_path(task_id, item)
             is_selected = item["item_id"] == current_selected
             item_id = _esc(item["item_id"])
             title = _esc(item.get("title") or "未命名条目")
-            item_meta = _esc(f"{item.get('asset_type', 'generic_icon')} · {STATUS_LABELS.get(item.get('status', 'draft'), item.get('status', 'draft'))}")
+            item_meta = _esc(f"{item.get('asset_type', 'generic_icon')} · {STATUS_LABELS.get(effective_status, effective_status)}")
             with col:
                 st.markdown(
                     f"""
@@ -1673,14 +1680,16 @@ def _run_secondary_action(task_id: str, item: dict) -> None:
 
 def _render_action_bar(task_id: str, item: dict) -> None:
     item_id = item["item_id"]
-    status = item["status"]
-    action_label, action_hint = _item_main_action(item)
+    effective_status = _effective_item_status(task_id, item)
+    display_item = dict(item)
+    display_item["status"] = effective_status
+    action_label, action_hint = _item_main_action(display_item)
 
     st.markdown(
         f"""
         <div class="panel">
           <div class="kicker">当前阶段</div>
-          <p style="margin:0.15rem 0 0.2rem 0;font-size:1.05rem;color:#0f172a;"><strong>{_esc(STATUS_LABELS.get(status, status))}</strong></p>
+          <p style="margin:0.15rem 0 0.2rem 0;font-size:1.05rem;color:#0f172a;"><strong>{_esc(STATUS_LABELS.get(effective_status, effective_status))}</strong></p>
           <p style="margin:0;color:#475569;">{_esc(action_hint or '当前没有可执行动作。')}</p>
         </div>
         """,
@@ -1693,21 +1702,21 @@ def _render_action_bar(task_id: str, item: dict) -> None:
             action_label or "当前无动作",
             key=f"main-action-{item_id}",
             use_container_width=True,
-            disabled=status in {"completed", "failed", "archived"},
+            disabled=effective_status in {"completed", "archived"},
         ):
             try:
-                _run_main_action(task_id, item)
+                _run_main_action(task_id, display_item)
             except Exception as exc:
                 st.error(str(exc))
             else:
                 st.success(f"已执行：{action_label}")
                 _rerun()
     with mid:
-        secondary_label, secondary_step = _item_secondary_action(item)
+        secondary_label, secondary_step = _item_secondary_action(display_item)
         if secondary_label:
             if st.button(secondary_label, key=f"secondary-{item_id}-{secondary_step}", use_container_width=True):
                 try:
-                    _run_secondary_action(task_id, item)
+                    _run_secondary_action(task_id, display_item)
                 except Exception as exc:
                     st.error(str(exc))
                 else:
@@ -1729,10 +1738,12 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
     image = _artifact_or_none(task_id, item_id, STEP_IMAGE_GENERATION, item["current_versions"].get("image_generation"))
     output_view_key = f"output-view-{task_id}-{item_id}"
     output_view_status_key = f"{output_view_key}-status"
-    expected_view = _default_output_view(item)
-    if st.session_state.get(output_view_status_key) != item.get("status"):
+    display_item = dict(item)
+    display_item["status"] = _effective_item_status(task_id, item)
+    expected_view = _default_output_view(display_item)
+    if st.session_state.get(output_view_status_key) != display_item.get("status"):
         st.session_state[output_view_key] = expected_view
-        st.session_state[output_view_status_key] = item.get("status")
+        st.session_state[output_view_status_key] = display_item.get("status")
 
     selected_view = _switcher(
         "当前输出页签",
