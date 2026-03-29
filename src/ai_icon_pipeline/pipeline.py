@@ -374,6 +374,11 @@ def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") ->
     version = item["current_versions"].get(STEP_IMAGE_GENERATION)
     if not version:
         raise ValueError("当前没有候选图任务")
+    return poll_image_generation_version(task_id, item_id, version, source=source)
+
+
+def poll_image_generation_version(task_id: str, item_id: str, version: str, *, source: str = "cli") -> dict:
+    item = load_item(task_id, item_id)
     artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, version)
     async_job = artifact.get("async_job", {})
     task_id_remote = async_job.get("task_id")
@@ -395,9 +400,10 @@ def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") ->
     if remote_status in {"queued", "processing"}:
         artifact["async_job"] = async_job
         write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
-        item["status"] = STATUS_IMAGE_GENERATING
-        save_item(task_id, item)
-        _set_metrics_status(task_id, item_id, STATUS_IMAGE_GENERATING)
+        if item["current_versions"].get(STEP_IMAGE_GENERATION) == version:
+            item["status"] = STATUS_IMAGE_GENERATING
+            save_item(task_id, item)
+            _set_metrics_status(task_id, item_id, STATUS_IMAGE_GENERATING)
         append_item_event(
             task_id,
             item_id,
@@ -444,9 +450,10 @@ def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") ->
         artifact["async_job"] = async_job
         artifact["output"] = {"candidates": candidates}
         write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
-        item["status"] = STATUS_IMAGE_GENERATED
-        save_item(task_id, item)
-        _set_metrics_status(task_id, item_id, STATUS_IMAGE_GENERATED)
+        if item["current_versions"].get(STEP_IMAGE_GENERATION) == version:
+            item["status"] = STATUS_IMAGE_GENERATED
+            save_item(task_id, item)
+            _set_metrics_status(task_id, item_id, STATUS_IMAGE_GENERATED)
         append_item_event(
             task_id,
             item_id,
@@ -475,15 +482,20 @@ def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") ->
         return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": STATUS_IMAGE_GENERATED}
 
     if remote_status in {"failed", "cancelled"}:
-        _mark_step_failed(
-            task_id,
-            item_id,
-            STEP_IMAGE_GENERATION,
-            source=source,
-            provider_id=provider_id,
-            model_id=model_id,
-            error_message=str(response.get("error", response)),
-        )
+        if item["current_versions"].get(STEP_IMAGE_GENERATION) == version:
+            _mark_step_failed(
+                task_id,
+                item_id,
+                STEP_IMAGE_GENERATION,
+                source=source,
+                provider_id=provider_id,
+                model_id=model_id,
+                error_message=str(response.get("error", response)),
+            )
+        else:
+            artifact["async_job"] = async_job
+            artifact["async_job"]["error"] = str(response.get("error", response))
+            write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
         raise ValueError(f"异步图片任务失败：{response.get('error', remote_status)}")
 
     artifact["async_job"] = async_job

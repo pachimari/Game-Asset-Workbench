@@ -24,6 +24,7 @@ if __package__ in (None, ""):
         approve_step,
         edit_brief,
         edit_prompt,
+        poll_image_generation_version,
         poll_image_generation,
         rollback_step,
         run_pipeline,
@@ -79,6 +80,7 @@ else:
         approve_step,
         edit_brief,
         edit_prompt,
+        poll_image_generation_version,
         poll_image_generation,
         rollback_step,
         run_pipeline,
@@ -1086,21 +1088,41 @@ def _current_async_signature(task_id: str, item_id: str) -> tuple[str | None, st
     )
 
 
+def _pending_image_versions(task_id: str, item_id: str) -> list[dict]:
+    pending = []
+    for artifact in _image_generation_artifacts(task_id, item_id):
+        async_job = artifact.get("async_job", {})
+        status = str(async_job.get("status", "")).lower()
+        if status in {"queued", "processing"}:
+            pending.append(
+                {
+                    "version": artifact["version"],
+                    "task_id": str(async_job.get("task_id", "未知任务")),
+                    "status": status or "queued",
+                    "progress": int(async_job.get("progress", 0)),
+                }
+            )
+    return pending
+
+
 @st.fragment(run_every=4)
 def _render_async_poll_daemon(task_id: str) -> None:
     items = list_items(task_id)
-    generating_items = [item for item in items if item.get("status") == "image_generating"]
-    if not generating_items:
+    pending_jobs: list[tuple[str, str]] = []
+    for item in items:
+        for row in _pending_image_versions(task_id, item["item_id"]):
+            pending_jobs.append((item["item_id"], row["version"]))
+    if not pending_jobs:
         return
 
     changed = False
-    for item in generating_items:
-        before = _current_async_signature(task_id, item["item_id"])
+    for item_id, version in pending_jobs:
+        before = _current_async_signature(task_id, item_id)
         try:
-            poll_image_generation(task_id, item["item_id"], source="auto-poll")
+            poll_image_generation_version(task_id, item_id, version, source="auto-poll")
         except Exception:
             continue
-        after = _current_async_signature(task_id, item["item_id"])
+        after = _current_async_signature(task_id, item_id)
         if after != before:
             changed = True
 
@@ -1138,18 +1160,12 @@ def _render_entry_overview(task_id: str, items: list[dict]) -> None:
                 )
                 if preview_path:
                     st.image(str(preview_path), width=140)
-                elif item.get("status") == "image_generating":
-                    image_artifact = _artifact_or_none(
-                        task_id,
-                        item["item_id"],
-                        STEP_IMAGE_GENERATION,
-                        item["current_versions"].get(STEP_IMAGE_GENERATION),
-                    )
-                    async_job = (image_artifact or {}).get("async_job", {}) if image_artifact else {}
+                elif _pending_image_versions(task_id, item["item_id"]):
+                    pending = _pending_image_versions(task_id, item["item_id"])[-1]
                     _render_pending_candidate(
-                        int(async_job.get("progress", 0)),
-                        str(async_job.get("status", "queued")),
-                        str(async_job.get("task_id", "未知任务")),
+                        pending["progress"],
+                        pending["status"],
+                        pending["task_id"],
                         compact=True,
                     )
                 else:
@@ -1574,7 +1590,7 @@ def _item_main_action(item: dict) -> tuple[str | None, str | None]:
         "brief_approved": ("生成出图指令", "基于当前设计说明生成出图指令"),
         "prompt_generated": ("继续生成候选图", "采纳当前出图指令并继续生成候选图"),
         "prompt_approved": ("生成候选图", "基于当前出图指令生成候选图"),
-        "image_generating": ("检查生成状态", "当前候选图任务正在第三方排队或生成中。点击可刷新状态，不会阻塞其它操作。"),
+        "image_generating": ("再生成一张候选图", "上一张还在排队或生成中也没关系，你可以继续追加新的候选图。系统会自动轮询历史任务。"),
         "image_generated": ("采纳当前候选图", "将当前候选图设为结果并完成条目"),
         "completed": ("已完成", "当前条目已经完成"),
         "failed": ("已失败", "当前条目生成失败，请检查日志或回退后重试。"),
@@ -1605,7 +1621,7 @@ def _run_main_action(task_id: str, item: dict) -> None:
         run_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
     if status == "image_generating":
-        poll_image_generation(task_id, item_id)
+        run_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
     if status == "image_generated":
         approve_step(task_id, item_id, STEP_IMAGE_GENERATION)
@@ -1623,7 +1639,7 @@ def _item_secondary_action(item: dict) -> tuple[str | None, str | None]:
         "prompt_generated": ("重新生成出图指令", STEP_IMAGE_PROMPT),
         "prompt_approved": ("返回出图指令", STEP_IMAGE_PROMPT),
         "image_generated": ("重新生成候选图", STEP_IMAGE_GENERATION),
-        "image_generating": ("继续查看其它条目", None),
+        "image_generating": ("检查生成状态", STEP_IMAGE_GENERATION),
     }
     return mapping.get(status, (None, None))
 
@@ -1648,6 +1664,7 @@ def _run_secondary_action(task_id: str, item: dict) -> None:
         run_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
     if status == "image_generating":
+        poll_image_generation(task_id, item_id)
         return
     if status in {"completed", "failed", "archived"}:
         return
@@ -1743,13 +1760,17 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
 
     def render_candidate_area() -> None:
         st.markdown("### 当前候选图")
-        async_job = (image or {}).get("async_job", {}) if image else {}
-        if item.get("status") == "image_generating":
-            task_id_remote = str(async_job.get("task_id", "未知任务"))
-            remote_status = str(async_job.get("status", "queued"))
-            progress = int(async_job.get("progress", 0))
-            st.caption("候选图生成是异步的。你可以继续切换别的条目，系统会自动轮询刷新。")
-            _render_pending_candidate(progress, remote_status, task_id_remote)
+        pending_versions = _pending_image_versions(task_id, item_id)
+        if pending_versions:
+            st.caption("候选图生成是异步的。你可以继续追加新图，系统会自动轮询历史任务。")
+            pending_cols = st.columns(min(3, len(pending_versions)))
+            for index, pending in enumerate(reversed(pending_versions)):
+                with pending_cols[index % len(pending_cols)]:
+                    _render_pending_candidate(
+                        pending["progress"],
+                        pending["status"],
+                        pending["task_id"],
+                    )
         if not approved_exists and not candidate_paths:
             st.info("还没有生成候选图。")
             return
