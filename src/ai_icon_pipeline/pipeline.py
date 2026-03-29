@@ -397,7 +397,7 @@ def poll_image_generation_version(task_id: str, item_id: str, version: str, *, s
     async_job["progress"] = response.get("progress", async_job.get("progress", 0))
     async_job["updated_at"] = utc_now()
 
-    if remote_status in {"queued", "processing"}:
+    if remote_status in {"queued", "processing", "pending", "running", "in_progress"}:
         artifact["async_job"] = async_job
         write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
         if item["current_versions"].get(STEP_IMAGE_GENERATION) == version:

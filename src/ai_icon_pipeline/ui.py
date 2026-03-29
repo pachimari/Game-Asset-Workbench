@@ -1093,7 +1093,7 @@ def _pending_image_versions(task_id: str, item_id: str) -> list[dict]:
     for artifact in _image_generation_artifacts(task_id, item_id):
         async_job = artifact.get("async_job", {})
         status = str(async_job.get("status", "")).lower()
-        if status in {"queued", "processing"}:
+        if status in {"queued", "processing", "pending", "running", "in_progress"}:
             pending.append(
                 {
                     "version": artifact["version"],
