@@ -22,6 +22,7 @@ if __package__ in (None, ""):
     )
     from ai_icon_pipeline.pipeline import (
         approve_step,
+        cancel_pending_image_generations,
         edit_brief,
         edit_prompt,
         poll_image_generation_version,
@@ -78,6 +79,7 @@ else:
     )
     from .pipeline import (
         approve_step,
+        cancel_pending_image_generations,
         edit_brief,
         edit_prompt,
         poll_image_generation_version,
@@ -1646,7 +1648,7 @@ def _item_secondary_action(item: dict) -> tuple[str | None, str | None]:
         "prompt_generated": ("重新生成出图指令", STEP_IMAGE_PROMPT),
         "prompt_approved": ("返回出图指令", STEP_IMAGE_PROMPT),
         "image_generated": ("重新生成候选图", STEP_IMAGE_GENERATION),
-        "image_generating": ("检查生成状态", STEP_IMAGE_GENERATION),
+        "image_generating": ("停止等待这些任务", None),
     }
     return mapping.get(status, (None, None))
 
@@ -1671,7 +1673,7 @@ def _run_secondary_action(task_id: str, item: dict) -> None:
         run_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
     if status == "image_generating":
-        poll_image_generation(task_id, item_id)
+        cancel_pending_image_generations(task_id, item_id)
         return
     if status in {"completed", "failed", "archived"}:
         return

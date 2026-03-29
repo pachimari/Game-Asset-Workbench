@@ -56,6 +56,8 @@ DOWNSTREAM_STEPS = {
     STEP_IMAGE_GENERATION: [],
 }
 
+PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
+
 
 def _touch_metrics(task_id: str, item_id: str, step: str) -> None:
     metrics = load_metrics(task_id, item_id)
@@ -113,6 +115,15 @@ def _mark_step_failed(
 def _reset_downstream(item: dict, step: str) -> None:
     for downstream_step in DOWNSTREAM_STEPS[step]:
         item["current_versions"][downstream_step] = None
+
+
+def _latest_successful_image_version(task_id: str, item_id: str) -> str | None:
+    latest = None
+    for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        if artifact.get("output", {}).get("candidates"):
+            latest = artifact_meta["version"]
+    return latest
 
 
 def _effective_runtime_config(task_id: str, item: dict) -> dict:
@@ -397,7 +408,7 @@ def poll_image_generation_version(task_id: str, item_id: str, version: str, *, s
     async_job["progress"] = response.get("progress", async_job.get("progress", 0))
     async_job["updated_at"] = utc_now()
 
-    if remote_status in {"queued", "processing", "pending", "running", "in_progress"}:
+    if remote_status in PENDING_ASYNC_STATUSES:
         artifact["async_job"] = async_job
         write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
         if item["current_versions"].get(STEP_IMAGE_GENERATION) == version:
@@ -481,7 +492,11 @@ def poll_image_generation_version(task_id: str, item_id: str, version: str, *, s
         refresh_task_summary(task_id)
         return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": STATUS_IMAGE_GENERATED}
 
-    if remote_status in {"failed", "cancelled"}:
+    if remote_status in {"failed", "cancelled", "canceled"}:
+        async_job["status"] = remote_status
+        async_job["error"] = str(response.get("error", response))
+        artifact["async_job"] = async_job
+        write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
         if item["current_versions"].get(STEP_IMAGE_GENERATION) == version:
             _mark_step_failed(
                 task_id,
@@ -492,15 +507,88 @@ def poll_image_generation_version(task_id: str, item_id: str, version: str, *, s
                 model_id=model_id,
                 error_message=str(response.get("error", response)),
             )
-        else:
-            artifact["async_job"] = async_job
-            artifact["async_job"]["error"] = str(response.get("error", response))
-            write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
-        raise ValueError(f"异步图片任务失败：{response.get('error', remote_status)}")
+            return {
+                "task_id": task_id,
+                "item_id": item_id,
+                "step": STEP_IMAGE_GENERATION,
+                "version": version,
+                "status": STATUS_FAILED,
+                "error": str(response.get("error", remote_status)),
+            }
+        return {
+            "task_id": task_id,
+            "item_id": item_id,
+            "step": STEP_IMAGE_GENERATION,
+            "version": version,
+            "status": item.get("status"),
+            "error": str(response.get("error", remote_status)),
+        }
 
     artifact["async_job"] = async_job
     write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
     return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": item["status"]}
+
+
+def cancel_pending_image_generations(task_id: str, item_id: str, *, source: str = "cli") -> dict:
+    item = load_item(task_id, item_id)
+    cancelled_versions: list[str] = []
+    for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+        version = artifact_meta["version"]
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, version)
+        async_job = artifact.get("async_job", {})
+        status = str(async_job.get("status", "")).lower()
+        if status not in PENDING_ASYNC_STATUSES:
+            continue
+        async_job["status"] = "cancelled_local"
+        async_job["updated_at"] = utc_now()
+        artifact["async_job"] = async_job
+        write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact, version=version)
+        cancelled_versions.append(version)
+
+    if not cancelled_versions:
+        raise ValueError("当前没有可中断的候选图任务")
+
+    fallback_version = _latest_successful_image_version(task_id, item_id)
+    if fallback_version:
+        item["current_versions"][STEP_IMAGE_GENERATION] = fallback_version
+        item["status"] = STATUS_IMAGE_GENERATED
+        next_status = STATUS_IMAGE_GENERATED
+    else:
+        item["current_versions"][STEP_IMAGE_GENERATION] = None
+        item["status"] = STATUS_PROMPT_APPROVED
+        next_status = STATUS_PROMPT_APPROVED
+    save_item(task_id, item)
+    _set_metrics_status(task_id, item_id, next_status)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "cancel_pending_image_generations",
+            "cancelled_versions": cancelled_versions,
+            "to": next_status,
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "cancel_pending_image_generations",
+            "item_id": item_id,
+            "cancelled_versions": cancelled_versions,
+            "to": next_status,
+        },
+    )
+    refresh_task_summary(task_id)
+    return {
+        "task_id": task_id,
+        "item_id": item_id,
+        "cancelled_versions": cancelled_versions,
+        "status": next_status,
+        "current_version": item["current_versions"].get(STEP_IMAGE_GENERATION),
+    }
 
 
 def approve_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> dict:
