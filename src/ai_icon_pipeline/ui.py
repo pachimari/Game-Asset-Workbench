@@ -6,9 +6,11 @@ import html
 import json
 import io
 import sys
+import time
 
 import pandas as pd
 import streamlit as st
+from streamlit.components.v1 import html as component_html
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -243,6 +245,43 @@ def _inject_styles() -> None:
           overflow-x: auto;
           font-family: Menlo, Monaco, monospace;
           font-size: 0.84rem;
+        }
+        .pending-candidate {
+          min-height: 18rem;
+          border-radius: 22px;
+          border: 1px dashed rgba(148, 163, 184, 0.45);
+          background:
+            radial-gradient(circle at top, rgba(59, 130, 246, 0.14), transparent 48%),
+            linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.02));
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.75rem;
+          text-align: center;
+          padding: 1.5rem;
+        }
+        .pending-candidate.compact {
+          min-height: 8rem;
+          border-radius: 18px;
+          padding: 1rem;
+        }
+        .pending-spinner {
+          width: 44px;
+          height: 44px;
+          border-radius: 999px;
+          border: 4px solid rgba(148, 163, 184, 0.22);
+          border-top-color: #3b82f6;
+          animation: pending-spin 1s linear infinite;
+        }
+        .pending-candidate.compact .pending-spinner {
+          width: 28px;
+          height: 28px;
+          border-width: 3px;
+        }
+        @keyframes pending-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         [data-testid="stStatusWidget"] {
           display: none !important;
@@ -954,6 +993,27 @@ def _current_preview_path(task_id: str, item: dict) -> Path | None:
     return None
 
 
+def _image_generation_artifacts(task_id: str, item_id: str) -> list[dict]:
+    artifacts = []
+    for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        artifacts.append(artifact)
+    return artifacts
+
+
+def _image_version_order_map(task_id: str, item_id: str) -> dict[str, int]:
+    order_map: dict[str, int] = {}
+    for index, artifact in enumerate(_image_generation_artifacts(task_id, item_id), start=1):
+        order_map[artifact["version"]] = index
+    return order_map
+
+
+def _image_version_label(task_id: str, item_id: str, version: str) -> str:
+    order_map = _image_version_order_map(task_id, item_id)
+    order = order_map.get(version)
+    return f"第 {order} 次生成" if order else version
+
+
 def _default_output_view(item: dict) -> str:
     status = item.get("status", "draft")
     if status in {"draft", "brief_generated", "brief_approved"}:
@@ -969,11 +1029,11 @@ def _candidate_paths(task_id: str, item_id: str, image_artifact: dict | None) ->
     image_root = item_dir(task_id, item_id) / "images"
     resolved: list[tuple[str, Path]] = []
     seen_paths: set[str] = set()
+    order_map = _image_version_order_map(task_id, item_id)
 
-    artifacts = list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION)
-    for artifact_meta in reversed(artifacts):
-        version = artifact_meta["version"]
-        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, version)
+    for artifact in reversed(_image_generation_artifacts(task_id, item_id)):
+        version = artifact["version"]
+        version_label = f"{_image_version_label(task_id, item_id, version)}"
         candidates = artifact.get("output", {}).get("candidates", [])
         for index, candidate in enumerate(candidates, start=1):
             image_path = candidate["image_path"]
@@ -981,7 +1041,11 @@ def _candidate_paths(task_id: str, item_id: str, image_artifact: dict | None) ->
                 continue
             path = image_root / image_path
             if path.exists():
-                resolved.append((f"{version} · 候选 {index}", path))
+                if len(candidates) == 1:
+                    label = version_label
+                else:
+                    label = f"{version_label} · 第 {index} 张"
+                resolved.append((label, path))
                 seen_paths.add(image_path)
 
     if not resolved and image_artifact:
@@ -989,8 +1053,53 @@ def _candidate_paths(task_id: str, item_id: str, image_artifact: dict | None) ->
         for index, candidate in enumerate(candidates, start=1):
             path = image_root / candidate["image_path"]
             if path.exists():
-                resolved.append((f"当前版 · 候选 {index}", path))
+                label = f"第 {order_map.get(image_artifact.get('version', ''), index)} 次生成"
+                resolved.append((label, path))
     return resolved
+
+
+def _render_pending_candidate(progress: int, remote_status: str, task_id_remote: str, *, compact: bool = False) -> None:
+    compact_class = " compact" if compact else ""
+    st.markdown(
+        f"""
+        <div class="pending-candidate{compact_class}">
+          <div class="pending-spinner"></div>
+          <div class="kicker">候选图生成中</div>
+          <div style="font-size:1.05rem;color:#0f172a;"><strong>{_esc(remote_status)}</strong></div>
+          <div style="font-size:0.95rem;color:#475569;">进度 {int(progress)}%</div>
+          <div style="font-size:0.82rem;color:#64748b;">任务 { _esc(task_id_remote) }</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _maybe_auto_poll_generating_items(task_id: str, items: list[dict], *, interval_seconds: float = 4.0) -> None:
+    generating_items = [item for item in items if item.get("status") == "image_generating"]
+    if not generating_items:
+        return
+
+    now = time.time()
+    state_key = f"auto-poll-at-{task_id}"
+    last_polled_at = st.session_state.get(state_key, 0.0)
+    if now - float(last_polled_at) < interval_seconds:
+        component_html(
+            f"""
+            <script>
+            setTimeout(() => window.parent.location.reload(), {int(interval_seconds * 1000)});
+            </script>
+            """,
+            height=0,
+        )
+        return
+
+    st.session_state[state_key] = now
+    for item in generating_items:
+        try:
+            poll_image_generation(task_id, item["item_id"], source="auto-poll")
+        except Exception:
+            continue
+    _rerun()
 
 
 def _render_entry_overview(task_id: str, items: list[dict]) -> None:
@@ -1024,13 +1133,25 @@ def _render_entry_overview(task_id: str, items: list[dict]) -> None:
                 if preview_path:
                     st.image(str(preview_path), width=140)
                 elif item.get("status") == "image_generating":
-                    st.info("候选图生成中")
+                    image_artifact = _artifact_or_none(
+                        task_id,
+                        item["item_id"],
+                        STEP_IMAGE_GENERATION,
+                        item["current_versions"].get(STEP_IMAGE_GENERATION),
+                    )
+                    async_job = (image_artifact or {}).get("async_job", {}) if image_artifact else {}
+                    _render_pending_candidate(
+                        int(async_job.get("progress", 0)),
+                        str(async_job.get("status", "queued")),
+                        str(async_job.get("task_id", "未知任务")),
+                        compact=True,
+                    )
                 else:
                     st.info("还没有候选图")
                 summary_lines = [
                     f"设计说明：{item['current_versions'].get(STEP_BRIEF_GENERATION) or '无'}",
                     f"出图指令：{item['current_versions'].get(STEP_IMAGE_PROMPT) or '无'}",
-                    f"候选图：{item['current_versions'].get(STEP_IMAGE_GENERATION) or '无'}",
+                    f"候选图：{_image_version_label(task_id, item['item_id'], item['current_versions'].get(STEP_IMAGE_GENERATION)) if item['current_versions'].get(STEP_IMAGE_GENERATION) else '无'}",
                 ]
                 st.caption(" | ".join(summary_lines))
                 if st.button(
@@ -1389,6 +1510,7 @@ def _render_item_management(task: dict) -> None:
 
 
 def _render_task_summary(task: dict, items: list[dict]) -> None:
+    _maybe_auto_poll_generating_items(task["task_id"], items)
     summary = task.get("items_summary", {})
     task_name = _esc(task.get("task_name", task["task_id"]))
     asset_domain = _esc(task.get("asset_domain", "game_icon_assets"))
@@ -1617,13 +1739,12 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
     def render_candidate_area() -> None:
         st.markdown("### 当前候选图")
         async_job = (image or {}).get("async_job", {}) if image else {}
-        if item.get("status") == "image_generating" and not candidate_paths:
-            task_id_remote = async_job.get("task_id", "未知任务")
-            remote_status = async_job.get("status", "queued")
-            progress = async_job.get("progress", 0)
-            st.info(f"候选图正在生成中。第三方任务：{task_id_remote} · 状态：{remote_status} · 进度：{progress}%")
-            st.caption("你可以继续切换别的条目；稍后点击上方“检查生成状态”即可刷新结果。")
-            return
+        if item.get("status") == "image_generating":
+            task_id_remote = str(async_job.get("task_id", "未知任务"))
+            remote_status = str(async_job.get("status", "queued"))
+            progress = int(async_job.get("progress", 0))
+            st.caption("候选图生成是异步的。你可以继续切换别的条目，系统会自动轮询刷新。")
+            _render_pending_candidate(progress, remote_status, task_id_remote)
         if not approved_exists and not candidate_paths:
             st.info("还没有生成候选图。")
             return
@@ -1638,7 +1759,8 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
         current_focus = st.session_state.get(focus_key, options[0][0])
         current_path = option_map.get(current_focus, options[0][1])
 
-        st.caption(f"当前候选图版本：{candidate_version}")
+        if candidate_version != "未生成":
+            st.caption(f"当前选中结果：{_image_version_label(task_id, item_id, candidate_version)}")
         st.image(str(current_path), caption=current_focus, use_container_width=True)
         thumb_cols = st.columns(min(4, len(options)))
         for index, (label, path) in enumerate(options):
