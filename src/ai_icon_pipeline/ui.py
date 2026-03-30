@@ -191,6 +191,12 @@ def _reset_task_ui_state(task_id: str, item_id: str | None = None) -> None:
     _reset_keys(keys)
 
 
+def _ensure_item_workspace(task_id: str, item_id: str | None) -> None:
+    st.session_state[f"workspace-view-{task_id}"] = "条目工作台"
+    if item_id:
+        st.session_state[f"selected-item-{task_id}"] = item_id
+
+
 def _inject_styles() -> None:
     st.markdown(
         """
@@ -1602,7 +1608,7 @@ def _item_main_action(item: dict) -> tuple[str | None, str | None]:
         "image_generating": ("再生成一张候选图", "上一张还在排队或生成中也没关系，你可以继续追加新的候选图。系统会自动轮询历史任务。"),
         "image_generated": ("采纳当前候选图", "将当前候选图设为结果并完成条目"),
         "completed": ("已完成", "当前条目已经完成"),
-        "failed": ("已失败", "当前条目生成失败，请检查日志或回退后重试。"),
+        "failed": ("再生成一张候选图", "当前条目上一次生成失败了。你可以直接再生成一张，或回退到出图指令后再试。"),
         "archived": ("已归档", "当前条目已经归档，不再允许继续编辑。"),
     }
     return mapping.get(status, (None, None))
@@ -1635,7 +1641,10 @@ def _run_main_action(task_id: str, item: dict) -> None:
     if status == "image_generated":
         approve_step(task_id, item_id, STEP_IMAGE_GENERATION)
         return
-    if status in {"completed", "failed", "archived"}:
+    if status == "failed":
+        run_step(task_id, item_id, STEP_IMAGE_GENERATION)
+        return
+    if status in {"completed", "archived"}:
         return
     raise ValueError(f"Unsupported item status: {status}")
 
@@ -1649,6 +1658,7 @@ def _item_secondary_action(item: dict) -> tuple[str | None, str | None]:
         "prompt_approved": ("返回出图指令", STEP_IMAGE_PROMPT),
         "image_generated": ("重新生成候选图", STEP_IMAGE_GENERATION),
         "image_generating": ("停止等待这些任务", None),
+        "failed": ("回到出图指令", STEP_IMAGE_PROMPT),
     }
     return mapping.get(status, (None, None))
 
@@ -1675,7 +1685,10 @@ def _run_secondary_action(task_id: str, item: dict) -> None:
     if status == "image_generating":
         cancel_pending_image_generations(task_id, item_id)
         return
-    if status in {"completed", "failed", "archived"}:
+    if status == "failed":
+        rollback_step(task_id, item_id, STEP_IMAGE_PROMPT)
+        return
+    if status in {"completed", "archived"}:
         return
     raise ValueError(f"No secondary action for item status: {status}")
 
@@ -1900,6 +1913,8 @@ def _render_versions(task_id: str, item: dict) -> None:
                         except Exception as exc:
                             st.error(str(exc))
                         else:
+                            _ensure_item_workspace(task_id, item_id)
+                            _reset_task_ui_state(task_id, item_id)
                             st.success(f"已切换到 {selected_version}。")
                             _rerun()
                 else:
@@ -1911,6 +1926,8 @@ def _render_versions(task_id: str, item: dict) -> None:
 
 def _render_manual_edits(task_id: str, item: dict) -> None:
     item_id = item["item_id"]
+    brief_version = item["current_versions"].get("brief_generation") or "none"
+    prompt_version = item["current_versions"].get("image_prompt") or "none"
     brief_artifact = _artifact_or_none(
         task_id,
         item_id,
@@ -1932,30 +1949,30 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             title = st.text_input(
                 "名称",
                 value=brief_output.get("title", item.get("title", "")),
-                key=f"brief-title-{item_id}",
+                key=f"brief-title-{item_id}-{brief_version}",
             )
             description = st.text_area(
                 "需求整理",
                 value=brief_output.get("description", item.get("description", "")),
                 height=120,
-                key=f"brief-description-{item_id}",
+                key=f"brief-description-{item_id}-{brief_version}",
             )
             keywords = st.text_input(
                 "关键词（逗号分隔）",
                 value=", ".join(brief_output.get("keywords", [])),
-                key=f"brief-keywords-{item_id}",
+                key=f"brief-keywords-{item_id}-{brief_version}",
             )
             icon_subject = st.text_input(
                 "图标主体",
                 value=brief_output.get("icon_subject", ""),
-                key=f"brief-icon-subject-{item_id}",
+                key=f"brief-icon-subject-{item_id}-{brief_version}",
             )
             visual_focus = st.text_input(
                 "视觉重点",
                 value=brief_output.get("visual_focus", ""),
-                key=f"brief-visual-focus-{item_id}",
+                key=f"brief-visual-focus-{item_id}-{brief_version}",
             )
-            note = st.text_input("备注", value="手动编辑设计说明", key=f"brief-note-{item_id}")
+            note = st.text_input("备注", value="手动编辑设计说明", key=f"brief-note-{item_id}-{brief_version}")
             submitted = st.form_submit_button("保存设计说明版本", use_container_width=True)
         if submitted:
             try:
@@ -1972,6 +1989,7 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _ensure_item_workspace(task_id, item_id)
                 _reset_task_ui_state(task_id, item_id)
                 st.success("已保存设计说明版本。")
                 _rerun()
@@ -1981,6 +1999,7 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _ensure_item_workspace(task_id, item_id)
                 st.success("已回退到设计说明阶段。")
                 _rerun()
 
@@ -1992,15 +2011,15 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
                 "出图指令",
                 value=prompt_output.get("prompt", ""),
                 height=140,
-                key=f"prompt-text-{item_id}",
+                key=f"prompt-text-{item_id}-{prompt_version}",
             )
             negative_prompt = st.text_area(
                 "负向指令",
                 value=prompt_output.get("negative_prompt", ""),
                 height=100,
-                key=f"prompt-negative-{item_id}",
+                key=f"prompt-negative-{item_id}-{prompt_version}",
             )
-            note = st.text_input("备注", value="手动编辑出图指令", key=f"prompt-note-{item_id}")
+            note = st.text_input("备注", value="手动编辑出图指令", key=f"prompt-note-{item_id}-{prompt_version}")
             submitted = st.form_submit_button("保存出图指令版本", use_container_width=True)
         if submitted:
             try:
@@ -2014,6 +2033,7 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _ensure_item_workspace(task_id, item_id)
                 _reset_task_ui_state(task_id, item_id)
                 st.success("已保存出图指令版本。")
                 _rerun()
@@ -2023,6 +2043,7 @@ def _render_manual_edits(task_id: str, item: dict) -> None:
             except Exception as exc:
                 st.error(str(exc))
             else:
+                _ensure_item_workspace(task_id, item_id)
                 st.success("已回退到出图指令阶段。")
                 _rerun()
 
