@@ -48,6 +48,25 @@
 
 建议从当前平铺命令，逐步收敛到分组命令。
 
+迁移策略：
+- 旧平铺命令继续保留，避免打断现有脚本、现有 agent、现有文档
+- 新分组命令作为正式推荐入口
+- `schema command` 与 `capabilities` 同时暴露旧命令与新别名
+- 后续文档、外部 agent、新 UI 优先使用分组命令树
+
+例如：
+
+```text
+旧命令: ai-icon-pipeline create-task
+新命令: ai-icon-pipeline task create
+
+旧命令: ai-icon-pipeline show-item
+新命令: ai-icon-pipeline item show
+
+旧命令: ai-icon-pipeline run-step
+新命令: ai-icon-pipeline step run
+```
+
 ### 3.1 Task
 
 ```text

@@ -294,6 +294,35 @@ COMMAND_SPECS = {
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "VALIDATION_ERROR"],
     },
 }
+COMMAND_ALIASES = {
+    "task.create": "create-task",
+    "task.show": "show-task",
+    "item.create": "create-item",
+    "item.update": "update-item",
+    "item.list": "list-items",
+    "item.show": "show-item",
+    "item.actions": "available-actions",
+    "step.run": "run-step",
+    "step.approve": "approve-step",
+    "step.rollback": "rollback-step",
+    "pipeline.run": "run-pipeline",
+    "artifact.list": "list-artifacts",
+    "artifact.show": "show-artifact",
+    "artifact.use": "set-current-version",
+    "brief.edit": "edit-brief",
+    "prompt.edit": "edit-prompt",
+    "agent.capabilities": "capabilities",
+    "agent.workflow-help": "workflow-help",
+    "provider.list": "provider-list",
+    "provider.show": "provider-show",
+    "provider.add": "provider-add",
+    "provider.update": "provider-update",
+    "provider.delete": "provider-delete",
+    "provider.sync-models": "provider-sync-models",
+    "image.pending": "image-pending",
+    "image.poll": "image-poll",
+    "image.cancel": "image-cancel",
+}
 
 
 def _load_task_payload(path: str) -> dict:
@@ -350,9 +379,11 @@ def _emit_error(exc: Exception, *, as_json: bool) -> int:
 
 
 def _command_schema(command_name: str) -> dict:
-    spec = COMMAND_SPECS[command_name]
-    return {
+    canonical_name = COMMAND_ALIASES.get(command_name, command_name)
+    spec = COMMAND_SPECS[canonical_name]
+    payload = {
         "command": command_name,
+        "canonical_command": canonical_name,
         "group": spec["group"],
         "description": spec["description"],
         "args": spec["args"],
@@ -360,6 +391,12 @@ def _command_schema(command_name: str) -> dict:
         "output": spec.get("output", {}),
         "errors": spec.get("errors", []),
     }
+    if canonical_name != command_name:
+        payload["alias_of"] = canonical_name
+    aliases = sorted(alias for alias, target in COMMAND_ALIASES.items() if target == canonical_name)
+    if aliases:
+        payload["aliases"] = aliases
+    return payload
 
 
 def _state_machine_schema() -> dict:
@@ -701,7 +738,7 @@ def build_parser() -> argparse.ArgumentParser:
     schema = subparsers.add_parser("schema", help="Show machine-readable schemas", parents=[common_parser])
     schema_subparsers = schema.add_subparsers(dest="schema_command", required=True)
     schema_command = schema_subparsers.add_parser("command", help="Show one command schema", parents=[common_parser])
-    schema_command.add_argument("name", choices=sorted(COMMAND_SPECS))
+    schema_command.add_argument("name", choices=sorted({*COMMAND_SPECS, *COMMAND_ALIASES}))
     schema_subparsers.add_parser("state-machine", help="Show state machine schema", parents=[common_parser])
 
     workflow_help = subparsers.add_parser("workflow-help", help="Show recommended workflows", parents=[common_parser])
@@ -739,6 +776,145 @@ def build_parser() -> argparse.ArgumentParser:
     image_cancel = subparsers.add_parser("image-cancel", help="Cancel local waiting for pending image jobs", parents=[common_parser])
     image_cancel.add_argument("task_id")
     image_cancel.add_argument("item_id")
+
+    task_group = subparsers.add_parser("task", help="Task-scoped commands", parents=[common_parser])
+    task_subparsers = task_group.add_subparsers(dest="task_command", required=True)
+    task_create = task_subparsers.add_parser("create", help="Create a batch task", parents=[common_parser])
+    task_create.set_defaults(command="create-task")
+    task_create.add_argument("--task-name", default="Untitled icon batch")
+    task_create.add_argument("--project-background", default="")
+    task_create.add_argument("--style-requirements", default="")
+    task_create.add_argument("--asset-domain", default="game_icon_assets")
+    task_create.add_argument("--task-id")
+    task_create.add_argument("--input-file", help="JSON file containing task metadata and optional items")
+    task_show = task_subparsers.add_parser("show", help="Show current task snapshot", parents=[common_parser])
+    task_show.set_defaults(command="show-task")
+    task_show.add_argument("task_id")
+
+    item_group = subparsers.add_parser("item", help="Item-scoped commands", parents=[common_parser])
+    item_subparsers = item_group.add_subparsers(dest="item_command", required=True)
+    item_create = item_subparsers.add_parser("create", help="Create one item inside a task", parents=[common_parser])
+    item_create.set_defaults(command="create-item")
+    item_create.add_argument("task_id")
+    item_create.add_argument("--item-id")
+    item_create.add_argument("--asset-type", default="generic_icon")
+    item_create.add_argument("--title", default="")
+    item_create.add_argument("--description", default="")
+    item_create.add_argument("--category", default="")
+    item_create.add_argument("--extra-context", default="")
+    item_update = item_subparsers.add_parser("update", help="Update one item source payload", parents=[common_parser])
+    item_update.set_defaults(command="update-item")
+    item_update.add_argument("task_id")
+    item_update.add_argument("item_id")
+    item_update.add_argument("--asset-type")
+    item_update.add_argument("--title")
+    item_update.add_argument("--description")
+    item_update.add_argument("--category")
+    item_update.add_argument("--extra-context")
+    item_list = item_subparsers.add_parser("list", help="List items in a task", parents=[common_parser])
+    item_list.set_defaults(command="list-items")
+    item_list.add_argument("task_id")
+    item_show = item_subparsers.add_parser("show", help="Show one item snapshot", parents=[common_parser])
+    item_show.set_defaults(command="show-item")
+    item_show.add_argument("task_id")
+    item_show.add_argument("item_id")
+    item_actions = item_subparsers.add_parser("actions", help="Show recommended next actions for one item", parents=[common_parser])
+    item_actions.set_defaults(command="available-actions")
+    item_actions.add_argument("task_id")
+    item_actions.add_argument("item_id")
+
+    step_group = subparsers.add_parser("step", help="Step execution commands", parents=[common_parser])
+    step_subparsers = step_group.add_subparsers(dest="step_command", required=True)
+    step_run = step_subparsers.add_parser("run", help="Run a single step for one item", parents=[common_parser])
+    step_run.set_defaults(command="run-step")
+    step_run.add_argument("task_id")
+    step_run.add_argument("item_id")
+    step_run.add_argument("step", choices=STEP_CHOICES)
+    step_approve = step_subparsers.add_parser("approve", help="Approve one generated step", parents=[common_parser])
+    step_approve.set_defaults(command="approve-step")
+    step_approve.add_argument("task_id")
+    step_approve.add_argument("item_id")
+    step_approve.add_argument("step", choices=STEP_CHOICES)
+    step_rollback = step_subparsers.add_parser("rollback", help="Move an item back to a previous stage", parents=[common_parser])
+    step_rollback.set_defaults(command="rollback-step")
+    step_rollback.add_argument("task_id")
+    step_rollback.add_argument("item_id")
+    step_rollback.add_argument("step", choices=[STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT])
+
+    artifact_group = subparsers.add_parser("artifact", help="Artifact version commands", parents=[common_parser])
+    artifact_subparsers = artifact_group.add_subparsers(dest="artifact_command", required=True)
+    artifact_list = artifact_subparsers.add_parser("list", help="List artifact versions for one step or all steps", parents=[common_parser])
+    artifact_list.set_defaults(command="list-artifacts")
+    artifact_list.add_argument("task_id")
+    artifact_list.add_argument("item_id")
+    artifact_list.add_argument("step", nargs="?", choices=STEP_CHOICES)
+    artifact_show = artifact_subparsers.add_parser("show", help="Show one artifact payload", parents=[common_parser])
+    artifact_show.set_defaults(command="show-artifact")
+    artifact_show.add_argument("task_id")
+    artifact_show.add_argument("item_id")
+    artifact_show.add_argument("step", choices=STEP_CHOICES)
+    artifact_show.add_argument("version")
+    artifact_use = artifact_subparsers.add_parser("use", help="Switch the active version for one step", parents=[common_parser])
+    artifact_use.set_defaults(command="set-current-version")
+    artifact_use.add_argument("task_id")
+    artifact_use.add_argument("item_id")
+    artifact_use.add_argument("step", choices=STEP_CHOICES)
+    artifact_use.add_argument("version")
+
+    image_group = subparsers.add_parser("image", help="Async image job commands", parents=[common_parser])
+    image_subparsers = image_group.add_subparsers(dest="image_command", required=True)
+    image_pending_group = image_subparsers.add_parser("pending", help="List pending async image jobs", parents=[common_parser])
+    image_pending_group.set_defaults(command="image-pending")
+    image_pending_group.add_argument("task_id")
+    image_pending_group.add_argument("item_id")
+    image_poll_group = image_subparsers.add_parser("poll", help="Poll async image generation", parents=[common_parser])
+    image_poll_group.set_defaults(command="image-poll")
+    image_poll_group.add_argument("task_id")
+    image_poll_group.add_argument("item_id")
+    image_poll_group.add_argument("--version")
+    image_cancel_group = image_subparsers.add_parser("cancel", help="Cancel local waiting for pending image jobs", parents=[common_parser])
+    image_cancel_group.set_defaults(command="image-cancel")
+    image_cancel_group.add_argument("task_id")
+    image_cancel_group.add_argument("item_id")
+
+    provider_group = subparsers.add_parser("provider", help="Provider configuration commands", parents=[common_parser])
+    provider_subparsers = provider_group.add_subparsers(dest="provider_command", required=True)
+    provider_list_group = provider_subparsers.add_parser("list", help="List configured providers", parents=[common_parser])
+    provider_list_group.set_defaults(command="provider-list")
+    provider_show_group = provider_subparsers.add_parser("show", help="Show one provider config", parents=[common_parser])
+    provider_show_group.set_defaults(command="provider-show")
+    provider_show_group.add_argument("provider_id")
+    provider_add_group = provider_subparsers.add_parser("add", help="Add one custom provider", parents=[common_parser])
+    provider_add_group.set_defaults(command="provider-add")
+    provider_add_group.add_argument("--label", required=True)
+    provider_add_group.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image"])
+    provider_add_group.add_argument("--base-url", required=True)
+    provider_add_group.add_argument("--api-key", default="")
+    provider_update_group = provider_subparsers.add_parser("update", help="Update one provider config", parents=[common_parser])
+    provider_update_group.set_defaults(command="provider-update")
+    provider_update_group.add_argument("provider_id")
+    provider_update_group.add_argument("--label")
+    provider_update_group.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native", "mock"])
+    provider_update_group.add_argument("--base-url")
+    provider_update_group.add_argument("--api-key")
+    provider_delete_group = provider_subparsers.add_parser("delete", help="Delete one custom provider", parents=[common_parser])
+    provider_delete_group.set_defaults(command="provider-delete")
+    provider_delete_group.add_argument("provider_id")
+    provider_sync_group = provider_subparsers.add_parser("sync-models", help="Sync models for one provider", parents=[common_parser])
+    provider_sync_group.set_defaults(command="provider-sync-models")
+    provider_sync_group.add_argument("provider_id")
+
+    pipeline_group = subparsers.add_parser("pipeline", help="Pipeline orchestration commands", parents=[common_parser])
+    pipeline_subparsers = pipeline_group.add_subparsers(dest="pipeline_command", required=True)
+    pipeline_run = pipeline_subparsers.add_parser("run", help="Run a task or one item end-to-end", parents=[common_parser])
+    pipeline_run.set_defaults(command="run-pipeline")
+    pipeline_run.add_argument("task_id")
+    pipeline_run.add_argument("--item-id")
+    pipeline_run.add_argument(
+        "--no-auto-approve",
+        action="store_true",
+        help="Stop after each generated step instead of auto-approving it",
+    )
 
     return parser
 
@@ -897,9 +1073,10 @@ def main(argv: list[str] | None = None) -> int:
             payload = {
                 "supports_json": True,
                 "commands": sorted(COMMAND_SPECS),
+                "aliases": COMMAND_ALIASES,
             }
             if args.verbose:
-                payload["specs"] = [_command_schema(name) for name in sorted(COMMAND_SPECS)]
+                payload["specs"] = [_command_schema(name) for name in sorted({*COMMAND_SPECS, *COMMAND_ALIASES})]
             _emit(payload, as_json=True)
             return 0
 

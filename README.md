@@ -5,6 +5,9 @@
 详细设计见 [PRD.md](./PRD.md)。README 只保留项目概览和执行方向。
 
 如果后续要把本项目作为外部 AI Agent 的正式工具接口，见 [CLI_INTERFACE.md](./CLI_INTERFACE.md)。
+当前 CLI 同时支持：
+- 旧的平铺命令，例如 `create-task`、`show-item`、`run-step`
+- 新的分组命令，例如 `task create`、`item show`、`step run`
 
 ## 项目目标
 
