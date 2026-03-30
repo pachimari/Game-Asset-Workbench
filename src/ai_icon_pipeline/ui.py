@@ -979,9 +979,10 @@ def _render_prompt_readable(artifact: dict) -> None:
 def _current_preview_path(task_id: str, item: dict) -> Path | None:
     item_id = item["item_id"]
     image_root = item_dir(task_id, item_id) / "images"
-    approved_path = image_root / "approved.png"
-    if approved_path.exists():
-        return approved_path
+    for candidate_name in ["approved.png", "approved.jpg", "approved.jpeg", "approved.webp"]:
+        approved_path = image_root / candidate_name
+        if approved_path.exists():
+            return approved_path
 
     image_version = item["current_versions"].get(STEP_IMAGE_GENERATION)
     if not image_version:
@@ -1768,8 +1769,8 @@ def _render_current_outputs(task_id: str, item: dict) -> None:
     )
 
     image_root = item_dir(task_id, item_id) / "images"
-    approved_path = image_root / "approved.png"
-    approved_exists = approved_path.exists()
+    approved_path = _current_preview_path(task_id, {"item_id": item_id, "current_versions": item["current_versions"]})
+    approved_exists = bool(approved_path and approved_path.name.startswith("approved."))
     candidate_paths = _candidate_paths(task_id, item_id, image)
     candidate_version = item["current_versions"].get(STEP_IMAGE_GENERATION) or "未生成"
 

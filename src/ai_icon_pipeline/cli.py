@@ -55,6 +55,7 @@ from .settings import (
 
 
 STEP_CHOICES = [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]
+ASYNC_STEPS = [STEP_IMAGE_GENERATION]
 STATUS_CHOICES = [
     STATUS_DRAFT,
     STATUS_BRIEF_GENERATED,
@@ -142,8 +143,8 @@ COMMAND_SPECS = {
     },
     "list-artifacts": {
         "group": "artifact",
-        "description": "List artifact versions for one step",
-        "args": ["task_id", "item_id", "step"],
+        "description": "List artifact versions for one step or all steps",
+        "args": ["task_id", "item_id", "[step]"],
         "supports_json": True,
         "output": {"type": "array"},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND"],
@@ -211,6 +212,14 @@ COMMAND_SPECS = {
         "supports_json": True,
         "output": {"type": "object", "keys": ["workflows"]},
         "errors": [],
+    },
+    "available-actions": {
+        "group": "agent",
+        "description": "Show recommended next actions for one item",
+        "args": ["task_id", "item_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["status", "available_actions"]},
+        "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND"],
     },
     "provider-list": {
         "group": "provider",
@@ -356,10 +365,19 @@ def _command_schema(command_name: str) -> dict:
 def _state_machine_schema() -> dict:
     return {
         "statuses": STATUS_CHOICES,
+        "async_steps": {
+            STEP_IMAGE_GENERATION: {
+                "run_returns": STATUS_IMAGE_GENERATING,
+                "completion_status": STATUS_IMAGE_GENERATED,
+                "poll_command": "image-poll",
+                "cancel_command": "image-cancel",
+            }
+        },
         "generation_rules": {
             step: {
                 "allowed_statuses": sorted(rule["allowed_statuses"]),
                 "next_status": rule["next_status"],
+                "async": step in ASYNC_STEPS,
             }
             for step, rule in GENERATION_RULES.items()
         },
@@ -386,7 +404,12 @@ def _workflow_help() -> dict:
                     "run-step image_prompt",
                     "approve-step image_prompt",
                     "run-step image_generation",
+                    "image-poll (repeat until image_generated)",
                     "approve-step image_generation",
+                ],
+                "notes": [
+                    "image_generation 是异步步骤。",
+                    "run-step image_generation 返回 image_generating 后，需要继续调用 image-poll。",
                 ],
             },
             {
@@ -400,6 +423,9 @@ def _workflow_help() -> dict:
                     "approve-step image_prompt",
                     "run-step image_generation",
                 ],
+                "notes": [
+                    "如果 image_generation 进入 image_generating，需要继续调用 image-poll。",
+                ],
             },
             {
                 "name": "image_retry_after_failure",
@@ -410,6 +436,21 @@ def _workflow_help() -> dict:
                     "run-step image_prompt",
                     "approve-step image_prompt",
                     "run-step image_generation",
+                ],
+                "notes": [
+                    "失败后可以直接重跑 image_generation，也可以先回退到出图指令。",
+                ],
+            },
+            {
+                "name": "run_pipeline_vs_manual",
+                "steps": [
+                    "run-pipeline",
+                    "run-pipeline --no-auto-approve",
+                ],
+                "notes": [
+                    "run-pipeline 会自动串起多步主流程。",
+                    "--no-auto-approve 适合人工审核为主的流程。",
+                    "如果走到异步图片阶段，后续仍然需要 image-poll 或 UI 自动轮询。",
                 ],
             },
         ]
@@ -487,6 +528,64 @@ def _pending_image_jobs(task_id: str, item_id: str) -> list[dict]:
     return rows
 
 
+def _list_artifacts_any(task_id: str, item_id: str, step: str | None) -> list[dict]:
+    if step:
+        return list_artifacts(task_id, item_id, step)
+    rows = []
+    for current_step in STEP_CHOICES:
+        rows.extend(list_artifacts(task_id, item_id, current_step))
+    rows.sort(key=lambda row: (row["step"], row["version"], row["manual"]))
+    return rows
+
+
+def _available_actions(task_id: str, item_id: str) -> dict:
+    item = load_item(task_id, item_id)
+    status = item.get("status", STATUS_DRAFT)
+    actions: list[dict] = []
+    if status == STATUS_DRAFT:
+        actions.append({"command": "run-step", "step": STEP_BRIEF_GENERATION})
+    elif status == STATUS_BRIEF_GENERATED:
+        actions.extend([
+            {"command": "approve-step", "step": STEP_BRIEF_GENERATION},
+            {"command": "run-step", "step": STEP_BRIEF_GENERATION},
+            {"command": "edit-brief"},
+        ])
+    elif status == STATUS_BRIEF_APPROVED:
+        actions.extend([
+            {"command": "run-step", "step": STEP_IMAGE_PROMPT},
+            {"command": "rollback-step", "step": STEP_BRIEF_GENERATION},
+        ])
+    elif status == STATUS_PROMPT_GENERATED:
+        actions.extend([
+            {"command": "approve-step", "step": STEP_IMAGE_PROMPT},
+            {"command": "run-step", "step": STEP_IMAGE_PROMPT},
+            {"command": "edit-prompt"},
+        ])
+    elif status == STATUS_PROMPT_APPROVED:
+        actions.extend([
+            {"command": "run-step", "step": STEP_IMAGE_GENERATION, "async": True},
+            {"command": "rollback-step", "step": STEP_IMAGE_PROMPT},
+        ])
+    elif status == STATUS_IMAGE_GENERATING:
+        actions.extend([
+            {"command": "image-poll"},
+            {"command": "image-cancel"},
+            {"command": "run-step", "step": STEP_IMAGE_GENERATION, "async": True},
+        ])
+    elif status == STATUS_IMAGE_GENERATED:
+        actions.extend([
+            {"command": "approve-step", "step": STEP_IMAGE_GENERATION},
+            {"command": "run-step", "step": STEP_IMAGE_GENERATION, "async": True},
+            {"command": "set-current-version", "step": STEP_IMAGE_GENERATION},
+        ])
+    elif status == STATUS_FAILED:
+        actions.extend([
+            {"command": "run-step", "step": STEP_IMAGE_GENERATION, "async": True},
+            {"command": "rollback-step", "step": STEP_IMAGE_PROMPT},
+        ])
+    return {"status": status, "available_actions": actions}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-icon-pipeline")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -550,11 +649,11 @@ def build_parser() -> argparse.ArgumentParser:
     show_item.add_argument("item_id")
 
     list_artifacts_parser = subparsers.add_parser(
-        "list-artifacts", help="List artifact versions for one step", parents=[common_parser]
+        "list-artifacts", help="List artifact versions for one step or all steps", parents=[common_parser]
     )
     list_artifacts_parser.add_argument("task_id")
     list_artifacts_parser.add_argument("item_id")
-    list_artifacts_parser.add_argument("step", choices=STEP_CHOICES)
+    list_artifacts_parser.add_argument("step", nargs="?", choices=STEP_CHOICES)
 
     show_artifact_parser = subparsers.add_parser(
         "show-artifact", help="Show one artifact payload", parents=[common_parser]
@@ -606,7 +705,10 @@ def build_parser() -> argparse.ArgumentParser:
     schema_subparsers.add_parser("state-machine", help="Show state machine schema", parents=[common_parser])
 
     workflow_help = subparsers.add_parser("workflow-help", help="Show recommended workflows", parents=[common_parser])
-    workflow_help.add_argument("--name", choices=["single_item_happy_path", "single_item_manual_review", "image_retry_after_failure"])
+    workflow_help.add_argument("--name", choices=["single_item_happy_path", "single_item_manual_review", "image_retry_after_failure", "run_pipeline_vs_manual"])
+    available_actions = subparsers.add_parser("available-actions", help="Show recommended next actions for one item", parents=[common_parser])
+    available_actions.add_argument("task_id")
+    available_actions.add_argument("item_id")
 
     provider_list = subparsers.add_parser("provider-list", help="List configured providers", parents=[common_parser])
     provider_show = subparsers.add_parser("provider-show", help="Show one provider config", parents=[common_parser])
@@ -740,7 +842,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "list-artifacts":
-            _emit(list_artifacts(args.task_id, args.item_id, args.step), as_json=args.json)
+            _emit(_list_artifacts_any(args.task_id, args.item_id, args.step), as_json=args.json)
             return 0
 
         if args.command == "show-artifact":
@@ -817,6 +919,10 @@ def main(argv: list[str] | None = None) -> int:
                     "workflows": [workflow for workflow in payload["workflows"] if workflow["name"] == args.name]
                 }
             _emit(payload, as_json=True)
+            return 0
+
+        if args.command == "available-actions":
+            _emit(_available_actions(args.task_id, args.item_id), as_json=True)
             return 0
 
         if args.command == "provider-list":

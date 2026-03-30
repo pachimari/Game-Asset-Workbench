@@ -606,7 +606,8 @@ def approve_step(task_id: str, item_id: str, step: str, *, source: str = "cli") 
         image_artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, current_version)
         first_image = image_artifact["output"]["candidates"][0]["image_path"]
         src = item_dir(task_id, item_id) / "images" / first_image
-        dst = item_dir(task_id, item_id) / "images" / "approved.png"
+        approved_suffix = src.suffix or ".png"
+        dst = item_dir(task_id, item_id) / "images" / f"approved{approved_suffix}"
         shutil.copyfile(src, dst)
         _mark_completed(task_id, item_id)
     else:
