@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary-fixed": "#d8e2ff",
+            "on-background": "#dae2fd",
+            "on-tertiary-fixed-variant": "#703700",
+            "inverse-surface": "#dae2fd",
+            "tertiary-fixed-dim": "#ffb783",
+            "surface-container-highest": "#2d3449",
+            "on-primary-fixed": "#07006c",
+            "surface": "#0b1326",
+            "error": "#ffb4ab",
+            "outline": "#908fa0",
+            "primary-fixed-dim": "#c0c1ff",
+            "inverse-on-surface": "#283044",
+            "surface-dim": "#0b1326",
+            "secondary": "#adc6ff",
+            "on-error-container": "#ffdad6",
+            "on-secondary-fixed": "#001a42",
+            "on-tertiary-fixed": "#301400",
+            "on-tertiary-container": "#452000",
+            "on-surface": "#dae2fd",
+            "tertiary-container": "#d97721",
+            "on-secondary-fixed-variant": "#004395",
+            "error-container": "#93000a",
+            "on-primary-fixed-variant": "#2f2ebe",
+            "on-surface-variant": "#c7c4d7",
+            "surface-variant": "#2d3449",
+            "primary-container": "#8083ff",
+            "primary-fixed": "#e1e0ff",
+            "surface-tint": "#c0c1ff",
+            "outline-variant": "#464554",
+            "on-primary-container": "#0d0096",
+            "surface-container-low": "#131b2e",
+            "on-secondary-container": "#e6ecff",
+            "on-error": "#690005",
+            "on-secondary": "#002e6a",
+            "background": "#0b1326",
+            "primary": "#c0c1ff",
+            "on-primary": "#1000a9",
+            "tertiary": "#ffb783",
+            "inverse-primary": "#494bd6",
+            "surface-container": "#171f33",
+            "secondary-fixed-dim": "#adc6ff",
+            "surface-container-high": "#222a3d",
+            "surface-container-lowest": "#060e20",
+            "secondary-container": "#0566d9",
+            "on-tertiary": "#4f2500",
+            "surface-bright": "#31394d",
+            "tertiary-fixed": "#ffdcc5"
+          },
+          fontFamily: {
+            "headline": ["Manrope"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .glass-panel {
+      background: rgba(49, 57, 77, 0.6);
+      backdrop-filter: blur(12px);
+    }
+    body {
+      background-color: #0b1326;
+      color: #dae2fd;
+    }
+  </style>
+</head>
+<body class="font-body selection:bg-primary/30">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col items-center py-6 z-40 bg-[#131b2e] border-r border-[#464554]/15 w-20 shadow-2xl">
+<div class="mb-8 flex flex-col items-center">
+<div class="w-10 h-10 bg-primary-container rounded flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="layers">layers</span>
+</div>
+<span class="text-[10px] font-black text-white uppercase tracking-tighter">AI Assets</span>
+</div>
+<nav class="flex flex-col w-full flex-1 gap-2">
+<a class="flex flex-col items-center justify-center text-[#c0c1ff] border-l-2 border-[#c0c1ff] bg-[#222a3d] w-full py-4 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="layers">layers</span>
+<span class="font-manrope text-[10px] font-medium">Batches</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 w-full py-4 hover:bg-[#222a3d] hover:text-[#adc6ff] transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="add_box">add_box</span>
+<span class="font-manrope text-[10px] font-medium">New Batch</span>
+</a>
+</nav>
+<div class="mt-auto w-full">
+<button class="w-12 h-12 mx-auto mb-6 bg-gradient-to-br from-primary to-primary-container rounded-md flex items-center justify-center text-on-primary shadow-lg hover:scale-105 transition-transform">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</button>
+<a class="flex flex-col items-center justify-center text-slate-500 w-full py-4 hover:bg-[#222a3d] hover:text-[#adc6ff] transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-manrope text-[10px] font-medium">Settings</span>
+</a>
+</div>
+</aside>
+<!-- Main Stage -->
+<main class="ml-20 min-h-screen">
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 left-20 z-50 flex justify-between items-center px-8 h-14 bg-[#0b1326]">
+<div class="flex items-center gap-4">
+<h1 class="text-xl font-bold tracking-tight text-[#c0c1ff] font-headline">Obsidian Workbench</h1>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-2 text-slate-400 text-sm">
+<span class="material-symbols-outlined text-xs" data-icon="folder">folder</span>
+<span>Project: Cyberpunk Icons</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-slate-400">
+<span class="material-symbols-outlined cursor-pointer hover:text-white transition-colors" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-white transition-colors" data-icon="bolt">bolt</span>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="close-up portrait of a professional digital artist in a dark studio setting with soft blue rim lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUqZtPCABgcxH2TpsE1V6LNoXZLh3S1KbmA2bcJXtZfwnkizBL7xbmBWzFfXks5TgmeWPiWrcuSAlZ0ddDJ9Iq7_kBT8i2KVrJdERnGa_CcljPMyd6B78c4OqQSjfulshUdSjvZK4CGU5TCD7GztcDWYEnxin85ryfjcFbRiaVqSuICPDewKpGEzHGtPJg2CthE2giXdv3ijDgFmGkm5LojwHYgBpy6K80IgyiFSVIrlPkLx9mP0f-HJ6ALSEVEYrbYuAr2U86CtFf"/>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="pt-20 px-8 pb-12 max-w-[1600px] mx-auto">
+<!-- Batch Detail Header -->
+<section class="mb-10">
+<div class="flex justify-between items-end mb-6">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-secondary-container/20 text-secondary border border-secondary/20 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+                In Progress
+              </span>
+<span class="text-outline text-xs">Updated 2m ago</span>
+</div>
+<h2 class="text-4xl font-extrabold font-headline tracking-tight text-on-surface">Batch: Cyberpunk Ability Icons - V2</h2>
+</div>
+<button class="flex items-center gap-2 bg-gradient-to-r from-primary to-primary-container px-6 py-2.5 rounded-lg text-on-primary font-bold text-sm shadow-xl shadow-primary-container/20 hover:scale-[1.02] active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+            Add New Item to Batch
+          </button>
+</div>
+<!-- Statistics Bento -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+<div class="bg-surface-container-low p-5 rounded-xl border border-outline-variant/10 group hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="text-outline text-xs font-semibold uppercase tracking-widest">Total Items</span>
+<span class="material-symbols-outlined text-primary" data-icon="inventory_2">inventory_2</span>
+</div>
+<div class="text-3xl font-black font-headline">20</div>
+<div class="w-full bg-surface-container-lowest h-1 mt-4 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-full"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-5 rounded-xl border border-outline-variant/10 group hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="text-outline text-xs font-semibold uppercase tracking-widest">Design Spec</span>
+<span class="material-symbols-outlined text-tertiary" data-icon="architecture">architecture</span>
+</div>
+<div class="text-3xl font-black font-headline">5</div>
+<div class="w-full bg-surface-container-lowest h-1 mt-4 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full w-1/4"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-5 rounded-xl border border-outline-variant/10 group hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="text-outline text-xs font-semibold uppercase tracking-widest">Completed</span>
+<span class="material-symbols-outlined text-secondary" data-icon="verified">verified</span>
+</div>
+<div class="text-3xl font-black font-headline text-secondary">14</div>
+<div class="w-full bg-surface-container-lowest h-1 mt-4 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[70%]"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-5 rounded-xl border border-outline-variant/10 group hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="text-outline text-xs font-semibold uppercase tracking-widest">Progress</span>
+<span class="material-symbols-outlined text-on-surface" data-icon="pending">pending</span>
+</div>
+<div class="text-3xl font-black font-headline">70%</div>
+<div class="w-full bg-surface-container-lowest h-1 mt-4 rounded-full overflow-hidden">
+<div class="bg-gradient-to-r from-secondary to-primary h-full w-[70%]"></div>
+</div>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-12 gap-8">
+<!-- Sidebar Info -->
+<aside class="col-span-12 lg:col-span-4 space-y-6">
+<div class="bg-surface-container-low rounded-2xl overflow-hidden border border-outline-variant/10">
+<div class="p-6 border-b border-outline-variant/5 bg-surface-container-high/30">
+<h3 class="font-headline font-bold text-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="info">info</span>
+                Batch Info
+              </h3>
+</div>
+<div class="p-6 space-y-6">
+<div>
+<label class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-2">Project Background</label>
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                  High-fidelity skill icons for the "Neon Protocol" expansion. These need to convey aggressive digital manipulation and kinetic energy.
+                </p>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-2">Asset Domain</label>
+<div class="text-sm font-semibold text-on-surface">Skill Icons</div>
+</div>
+<div>
+<label class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-2">Platform</label>
+<div class="text-sm font-semibold text-on-surface">Mobile/PC Cross</div>
+</div>
+</div>
+<div>
+<label class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-2">Style Requirements</label>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 rounded bg-surface-container-highest text-xs text-secondary border border-secondary/10">Neon</span>
+<span class="px-2 py-1 rounded bg-surface-container-highest text-xs text-secondary border border-secondary/10">High Contrast</span>
+<span class="px-2 py-1 rounded bg-surface-container-highest text-xs text-secondary border border-secondary/10">Vectorized</span>
+<span class="px-2 py-1 rounded bg-surface-container-highest text-xs text-secondary border border-secondary/10">Cyber-Tech</span>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant/5">
+<label class="text-[10px] font-bold text-outline uppercase tracking-widest block mb-3">Model Configuration</label>
+<div class="bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/10 space-y-2">
+<div class="flex justify-between text-xs">
+<span class="text-outline">Engine</span>
+<span class="text-on-surface font-medium">Stable-Diffusion-XL</span>
+</div>
+<div class="flex justify-between text-xs">
+<span class="text-outline">Sampler</span>
+<span class="text-on-surface font-medium">DPM++ 2M Karras</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Grid -->
+<div class="col-span-12 lg:col-span-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-headline font-bold text-xl text-on-surface">Asset Pipeline Overview</h3>
+<div class="flex gap-2">
+<button class="p-2 rounded bg-surface-container-low text-outline hover:text-white transition-colors">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+</button>
+<button class="p-2 rounded bg-surface-container-high text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="list">list</span>
+</button>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high/30">
+<th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Asset Preview</th>
+<th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Title &amp; ID</th>
+<th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Pipeline Phase</th>
+<th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest">Version</th>
+<th class="px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-widest text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-lowest border border-outline-variant/10 overflow-hidden">
+<img alt="Icon preview" class="w-full h-full object-cover" data-alt="vibrant abstract digital illustration of a glowing blue data stream with neon particle effects on a black background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGVyzJxgMAeRBMSfO0bYed89B_RdPe314Az5ZXAb9-6VVaC-F4Smd5--WVCP4HSB1uzt5VAmjq0noTR-nEobO31B3LvFQHP-jgfcUAZFcGEYriKmsY-Lw2am0qhj74r7PwmxHNYAamgFVtSNQQo7gO_rvuNDyw8cTf51bchS71_B2kFKNaFRlXn3EzUhpGattWUiqjaae5Nnf5fbsW74MMKB-4nu3Eb8KhNlKzPqKL17iADjAK3PK-3ZMH5KN0YQDik6Bj_Gqq6wDg"/>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="text-sm font-bold text-on-surface">Digital Surge</div>
+<div class="text-[10px] text-outline">#CP-SK-001</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">Final Review</span>
+</td>
+<td class="px-6 py-4 text-xs text-outline">v2.4</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-high/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-lowest border border-outline-variant/10 overflow-hidden flex items-center justify-center">
+<span class="material-symbols-outlined text-outline-variant" data-icon="pending">pending</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="text-sm font-bold text-on-surface">Neural Override</div>
+<div class="text-[10px] text-outline">#CP-SK-002</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded text-[10px] font-bold bg-tertiary/10 text-tertiary border border-tertiary/20">Generating Prompt</span>
+</td>
+<td class="px-6 py-4 text-xs text-outline">v1.0</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-high/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-lowest border border-outline-variant/10 overflow-hidden">
+<img alt="Icon preview" class="w-full h-full object-cover" data-alt="neon purple hexagon pattern icon with futuristic digital glitch effects and sharp vector edges" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVA8vaedl7vRUW728HxKwClBNDM4MOGx-ZWu34WFCVEAx1GTZbSIETtjdyCu7wNd3c7YJ0hPPjlHj0yWB03G4gbjHGmafXJTFZ0t4is7cOzRszJEoaQFAnPw_QTxIV7Ax5Ei_s7rxSa0c0dI9nuKGSDLpPJtwtxYrDZJdsOt6vUC9MSYwtI1T8CxOdzuE6PHlXoK3takgzsFpZz5LYzy0HsEn55o0dWjqMDMGxExXIZ7lCrYg_hZVLRUABoBdOszonFUy5QWit1HFJ"/>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="text-sm font-bold text-on-surface">Glitch Phase</div>
+<div class="text-[10px] text-outline">#CP-SK-003</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded text-[10px] font-bold bg-secondary/10 text-secondary border border-secondary/20">Candidate Selection</span>
+</td>
+<td class="px-6 py-4 text-xs text-outline">v2.1</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-high/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-lowest border border-outline-variant/10 overflow-hidden flex items-center justify-center">
+<span class="material-symbols-outlined text-outline-variant" data-icon="architecture">architecture</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="text-sm font-bold text-on-surface">Data Shield</div>
+<div class="text-[10px] text-outline">#CP-SK-004</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded text-[10px] font-bold bg-outline-variant/30 text-outline border border-outline-variant/20">Awaiting Spec</span>
+</td>
+<td class="px-6 py-4 text-xs text-outline">--</td>
+<td class="px-6 py-4 text-right">
+<span class="material-symbols-outlined text-outline cursor-pointer hover:text-primary transition-colors" data-icon="more_vert">more_vert</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-surface-container-high/30 border-t border-outline-variant/5 flex justify-between items-center">
+<div class="text-xs text-outline">Showing 4 of 20 items</div>
+<div class="flex gap-1">
+<button class="px-3 py-1 rounded bg-surface-container-highest text-xs text-on-surface hover:bg-surface-bright transition-colors">Previous</button>
+<button class="px-3 py-1 rounded bg-surface-container-highest text-xs text-on-surface hover:bg-surface-bright transition-colors">Next</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Status Pulse Overlay (Component) -->
+<div class="fixed bottom-6 right-6 z-50">
+<div class="glass-panel px-4 py-2 rounded-full border border-outline-variant/20 shadow-2xl flex items-center gap-3">
+<div class="relative flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-secondary"></span>
+</div>
+<span class="text-xs font-bold text-on-surface tracking-wide">Synthesizing Asset #CP-SK-005...</span>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<button class="text-xs font-bold text-primary hover:text-secondary-fixed transition-colors">View Details</button>
+</div>
+</div>
+</body></html>

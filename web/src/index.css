@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-background: #060e20;
+  --color-surface: #0f1930;
+  --color-surface-low: #091328;
+  --color-surface-high: #141f38;
+  --color-surface-highest: #192540;
+  --color-border: #40485d;
+  --color-text: #dee5ff;
+  --color-text-soft: #a3aac4;
+  --color-primary: #a3a6ff;
+  --color-primary-strong: #9396ff;
+  --color-secondary: #a28efc;
+  --color-success: #54d2a1;
+  --color-warning: #ffbe65;
+  --color-danger: #ff6e84;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(163, 166, 255, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(162, 142, 252, 0.1), transparent 30%),
+    linear-gradient(180deg, #060e20 0%, #091328 100%);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(64, 72, 93, 0.8);
+  border-radius: 999px;
+}

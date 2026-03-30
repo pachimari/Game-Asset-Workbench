@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Obsidian Workbench - Item Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-fixed": "#d8e2ff",
+              "on-background": "#dae2fd",
+              "on-tertiary-fixed-variant": "#703700",
+              "inverse-surface": "#dae2fd",
+              "tertiary-fixed-dim": "#ffb783",
+              "surface-container-highest": "#2d3449",
+              "on-primary-fixed": "#07006c",
+              "surface": "#0b1326",
+              "error": "#ffb4ab",
+              "outline": "#908fa0",
+              "primary-fixed-dim": "#c0c1ff",
+              "inverse-on-surface": "#283044",
+              "surface-dim": "#0b1326",
+              "secondary": "#adc6ff",
+              "on-error-container": "#ffdad6",
+              "on-secondary-fixed": "#001a42",
+              "on-tertiary-fixed": "#301400",
+              "on-tertiary-container": "#452000",
+              "on-surface": "#dae2fd",
+              "tertiary-container": "#d97721",
+              "on-secondary-fixed-variant": "#004395",
+              "error-container": "#93000a",
+              "on-primary-fixed-variant": "#2f2ebe",
+              "on-surface-variant": "#c7c4d7",
+              "surface-variant": "#2d3449",
+              "primary-container": "#8083ff",
+              "primary-fixed": "#e1e0ff",
+              "surface-tint": "#c0c1ff",
+              "outline-variant": "#464554",
+              "on-primary-container": "#0d0096",
+              "surface-container-low": "#131b2e",
+              "on-secondary-container": "#e6ecff",
+              "on-error": "#690005",
+              "on-secondary": "#002e6a",
+              "background": "#0b1326",
+              "primary": "#c0c1ff",
+              "on-primary": "#1000a9",
+              "tertiary": "#ffb783",
+              "inverse-primary": "#494bd6",
+              "surface-container": "#171f33",
+              "secondary-fixed-dim": "#adc6ff",
+              "surface-container-high": "#222a3d",
+              "surface-container-lowest": "#060e20",
+              "secondary-container": "#0566d9",
+              "on-tertiary": "#4f2500",
+              "surface-bright": "#31394d",
+              "tertiary-fixed": "#ffdcc5"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #464554; border-radius: 10px; }
+      .glass-panel {
+        background: rgba(49, 57, 77, 0.6);
+        backdrop-filter: blur(12px);
+      }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 min-h-screen">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-14 bg-[#0b1326] text-[#c0c1ff]">
+<div class="flex items-center gap-4">
+<span class="text-xl font-bold tracking-tight text-[#c0c1ff] font-headline">Obsidian Workbench</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-400 hover:text-white transition-colors material-symbols-outlined">notifications</button>
+<button class="text-slate-400 hover:text-white transition-colors material-symbols-outlined">bolt</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="User profile" data-alt="Close-up professional portrait of a tech lead with neutral lighting and dark studio background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBej90umtN7g2mLWwS90YiANE5gx_V77JbvIcWmKCGor20RLODbUSMOeoF_twoseBwN8okQbOwI5K0jq-C9EmKB7r9lJzWcCVAL5IDSAD8arR28rnbssn93osxbwRPyO6a7fpR7IxXfuWbix9U5QbReUPEOu7sXty4iSx0hL_Gy7qw2-dEyGBoyzEafRjZbZDgIOZqPl1fmHIlilVtFo_mN_ZLquDV7s-a4qcrlj9jmqY5LcEei30h7c3I1hK2FiUde6B8CucTi5dA2"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar (Slim) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col items-center py-6 z-40 bg-[#131b2e] text-[#c0c1ff] border-r border-[#464554]/15 w-20 pt-20">
+<div class="flex flex-col items-center gap-2 mb-8">
+<div class="w-10 h-10 bg-primary-container/20 rounded-xl flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">layers</span>
+</div>
+<span class="font-manrope text-[10px] font-medium text-slate-500 uppercase tracking-widest">Workbench</span>
+</div>
+<div class="flex flex-col w-full gap-1">
+<div class="flex flex-col items-center justify-center text-[#c0c1ff] border-l-2 border-[#c0c1ff] bg-[#222a3d] w-full py-4 transition-all duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined mb-1">layers</span>
+<span class="font-manrope text-xs font-medium">Batches</span>
+</div>
+<div class="flex flex-col items-center justify-center text-slate-500 w-full py-4 transition-all duration-200 ease-in-out hover:bg-[#222a3d] hover:text-[#adc6ff] cursor-pointer">
+<span class="material-symbols-outlined mb-1">add_box</span>
+<span class="font-manrope text-xs font-medium">New Batch</span>
+</div>
+</div>
+<div class="mt-auto w-full">
+<div class="flex flex-col items-center justify-center text-slate-500 w-full py-4 transition-all duration-200 ease-in-out hover:bg-[#222a3d] hover:text-[#adc6ff] cursor-pointer">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-manrope text-xs font-medium">Settings</span>
+</div>
+</div>
+</aside>
+<!-- Main Workspace Stage -->
+<main class="pl-20 pt-14 h-screen flex flex-col overflow-hidden">
+<!-- Item Header & Phase Navigation -->
+<header class="h-16 flex items-center justify-between px-8 bg-surface-container-low border-b border-outline-variant/10">
+<div class="flex items-center gap-6">
+<h1 class="text-xl font-headline font-bold text-on-surface tracking-tight">Flame Burst Skill Icon</h1>
+<nav class="flex gap-1 bg-surface-container-lowest p-1 rounded-lg">
+<button class="px-4 py-1.5 text-sm font-medium text-slate-400 hover:text-on-surface transition-colors">Overview</button>
+<button class="px-4 py-1.5 text-sm font-medium text-slate-400 hover:text-on-surface transition-colors">Design Spec</button>
+<button class="px-4 py-1.5 text-sm font-medium text-slate-400 hover:text-on-surface transition-colors">Out-image Prompt</button>
+<button class="px-4 py-1.5 text-sm font-medium text-primary bg-surface-container-high rounded shadow-sm px-4">Candidate Pool</button>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 bg-secondary-container/20 px-3 py-1 rounded-full">
+<div class="w-1.5 h-1.5 bg-secondary rounded-full animate-pulse"></div>
+<span class="text-xs font-semibold text-secondary uppercase tracking-tighter">Drafting Phase</span>
+</div>
+</div>
+</header>
+<!-- Multi-Panel Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Panel: Specs & Prompts -->
+<section class="w-[400px] flex flex-col border-r border-outline-variant/10 bg-surface-container-low overflow-y-auto p-6 gap-6">
+<!-- Design Spec Card -->
+<div class="bg-surface-container-high rounded-xl p-5 border border-outline-variant/10 shadow-lg">
+<div class="flex justify-between items-center mb-4">
+<h3 class="text-xs font-bold text-primary uppercase tracking-widest">Phase 1: Design Spec</h3>
+<span class="material-symbols-outlined text-slate-500 text-sm cursor-pointer hover:text-white">edit</span>
+</div>
+<div class="space-y-4">
+<div>
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Subject</label>
+<div class="text-sm text-on-surface font-medium">Fireball</div>
+</div>
+<div>
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Visual Focal Point</label>
+<div class="text-sm text-on-surface font-medium">Central energy core</div>
+</div>
+<div>
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Keywords</label>
+<div class="flex flex-wrap gap-2 mt-1">
+<span class="px-2 py-0.5 bg-surface-container-highest rounded text-[11px] text-on-surface-variant">Radiant</span>
+<span class="px-2 py-0.5 bg-surface-container-highest rounded text-[11px] text-on-surface-variant">Explosive</span>
+<span class="px-2 py-0.5 bg-surface-container-highest rounded text-[11px] text-on-surface-variant">VFX</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Prompting Card -->
+<div class="bg-surface-container-high rounded-xl p-5 border border-outline-variant/10 shadow-lg">
+<div class="flex justify-between items-center mb-4">
+<h3 class="text-xs font-bold text-primary uppercase tracking-widest">Phase 2: Prompting</h3>
+<span class="material-symbols-outlined text-slate-500 text-sm cursor-pointer hover:text-white">content_copy</span>
+</div>
+<div class="space-y-5">
+<div>
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Generated Prompt</label>
+<div class="text-xs text-on-surface-variant bg-surface-container-lowest p-3 rounded leading-relaxed border border-outline-variant/5">
+                                Hyper-realistic skill icon, stylized fireball with a dense glowing plasma core, explosive embers, dark fantasy background, high contrast, radiant light rays, 8k resolution.
+                            </div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Model</label>
+<div class="text-xs font-medium text-on-surface">Gemini 2.0 Pro</div>
+</div>
+<div>
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Template</label>
+<div class="text-xs font-medium text-on-surface">VFX_Master_V2</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Model Controls -->
+<div class="mt-auto">
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold py-3 rounded-lg text-sm shadow-xl active:scale-[0.98] transition-all">
+                        Update Design Spec
+                    </button>
+</div>
+</section>
+<!-- Right Panel: The Output & Candidate Pool -->
+<section class="flex-1 flex flex-col bg-surface p-8 overflow-y-auto relative">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="text-2xl font-headline font-extrabold text-white">Candidate Gallery</h2>
+<p class="text-slate-500 text-sm">Managing 12 versions across 3 prompt iterations.</p>
+</div>
+<button class="bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 border border-outline-variant/10 transition-colors">
+<span class="material-symbols-outlined text-primary text-sm">add</span>
+                        Generate Next Candidate
+                    </button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+<!-- Active Generation Card -->
+<div class="aspect-square rounded-2xl bg-surface-container-low border-2 border-dashed border-primary/20 flex flex-col items-center justify-center p-6 relative overflow-hidden group">
+<div class="absolute inset-0 bg-primary/5 animate-pulse"></div>
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-12 h-12 mb-4 relative">
+<span class="material-symbols-outlined text-primary text-4xl animate-spin" style="animation-duration: 3s;">cycle</span>
+</div>
+<span class="text-sm font-bold text-white mb-1">Generating... (45%)</span>
+<span class="text-[10px] text-slate-500 uppercase tracking-widest mb-6">Queue Position: 2</span>
+<div class="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[45%] rounded-full shadow-[0_0_12px_rgba(192,193,255,0.4)]"></div>
+</div>
+</div>
+</div>
+<!-- Candidate Card 1 -->
+<div class="group relative aspect-square rounded-2xl bg-surface-container-low overflow-hidden shadow-2xl transition-all hover:translate-y-[-4px]">
+<img alt="Candidate 1" class="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500" data-alt="Digital art of a vibrant fireball skill icon with a blue core and orange flames against a dark background, dramatic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCOo1yNSDz3e88VJJin37n_7Xv66_jg77KptMve4IbYgrrMv9YtKC7iFqrJGXGPUBJRWqwLvAcoUXoa6pGnATvLvs1bUP-ZTeB-YxRVgoZ9iI2eJXer33RiubzoFC-nQGGj2mLceR-zpvzeowH2DvPO1X4uoIMFFTrvN49nf59egwmVO1LA2FGRpXXwKXXbeCsXU--ixLjCYPmU0bBV3vfOlRNwxBhU2HTrMM6BOQP92OkkulsMztY_s9ZKpeTlk5o_n57OhZG0Ysr"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-bold text-white bg-black/40 px-2 py-1 rounded">V 1.4</span>
+<button class="bg-primary text-on-primary text-[11px] font-bold px-3 py-1.5 rounded-md hover:scale-105 active:scale-95 transition-transform">Select as Final</button>
+</div>
+</div>
+</div>
+<!-- Candidate Card 2 -->
+<div class="group relative aspect-square rounded-2xl bg-surface-container-low overflow-hidden shadow-2xl transition-all hover:translate-y-[-4px]">
+<img alt="Candidate 2" class="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500" data-alt="Abstract explosive energy core with particles and light streaks, dark fantasy vfx game asset style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQPHzCFCBrwi9a2BH2uNOfcjBrOQtR6qJCTooBGX6HtASz15yhGTMShOCyuxxQaDMNu5TaB3VvJqBfHkiITPZFAdV2ZQJPT_J1gfUdrfrt_WPx6ZAKS-YKrZLE0ppVjbg5-JYD4Yj0o8FayuB9JrS8eKX-VI5HFE3EMicCLGcAYylYga9_0MM4ImrdGUZdTqmRPlxgZzg6-rE9bBVgttnmGtqmzz2n44mRqA4fDWITt7G_UAp8YZGz1FSd--Thr2kIy4BLCXnCLqYu"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-bold text-white bg-black/40 px-2 py-1 rounded">V 1.3</span>
+<button class="bg-primary text-on-primary text-[11px] font-bold px-3 py-1.5 rounded-md hover:scale-105 active:scale-95 transition-transform">Select as Final</button>
+</div>
+</div>
+</div>
+<!-- Candidate Card 3 -->
+<div class="group relative aspect-square rounded-2xl bg-surface-container-low overflow-hidden shadow-2xl transition-all hover:translate-y-[-4px]">
+<img alt="Candidate 3" class="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500" data-alt="Intense orange and yellow flame burst icon, circular composition, high quality digital illustration for RPG" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvGmBtYzEdR_spnWP6mCD4AeD_O1fWVWxqY4cOGm1WY6sFRVQttEo5XupXvxjqZgt3TvVDSoH5R7UQ_LbK_7ekZNS5cLq4x1oH-O1BKKIPxZ12THTvUZZW8LASP8julpqrGofCpbsKBWyp_izKaOqyBocctoJrlyoGgHEhDHEcVuo2zwcRv6YeUdCCbe_uqYJMvwN3SYiyzHIC3-tU1BHMkgrsziXyWn-MB-6gsQQhoAruQgdrid7cbzrcgZr5RbC6n0X8dkdkJ9hs"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-bold text-white bg-black/40 px-2 py-1 rounded">V 1.2</span>
+<button class="bg-primary text-on-primary text-[11px] font-bold px-3 py-1.5 rounded-md hover:scale-105 active:scale-95 transition-transform">Select as Final</button>
+</div>
+</div>
+</div>
+<!-- Candidate Card 4 -->
+<div class="group relative aspect-square rounded-2xl bg-surface-container-low overflow-hidden shadow-2xl transition-all hover:translate-y-[-4px]">
+<img alt="Candidate 4" class="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-500" data-alt="Dark nebula style skill icon with subtle fire elements and deep purple accents, cinematic game art" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-QcXL59URf28jPDsY40Bi0ukU7qnpcph8C79sDsxhUlUtKpgrDd104GvLxW4Q_Tgu8ZMH_S-XJzZocQfHk7VoOWGbwHnModfh0-NU-5C-Z6YCVtUSTG47buSjAmLWD4eMS-2LUCIcdhDzS0vuf1lP06vfgMm8iIlPFtm6jT3lCCggatZwnH3J4zz5iqVI8Yrdz0hezgfyUI-A-1pN2cMxmYtrtD7LywwP7YhroXPk3ynb8BL9M_8ww_JvajeR6JP4AcJu0PlSdUHQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-bold text-white bg-black/40 px-2 py-1 rounded">V 1.1</span>
+<button class="bg-primary text-on-primary text-[11px] font-bold px-3 py-1.5 rounded-md hover:scale-105 active:scale-95 transition-transform">Select as Final</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Secondary Panel: Agent Chat Control -->
+<aside class="w-80 flex flex-col border-l border-outline-variant/10 bg-surface-container-low overflow-hidden">
+<div class="p-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-base">smart_toy</span>
+<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface">Agent Operations</h4>
+</div>
+<span class="material-symbols-outlined text-slate-500 text-sm cursor-pointer hover:text-white">close_fullscreen</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-4">
+<!-- Agent Message -->
+<div class="glass-panel p-3 rounded-xl border border-outline-variant/10">
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                            Prompt iteration #4 complete. I've increased the contrast and added the "plasma core" keyword as requested. Results are showing better focal definition.
+                        </p>
+<span class="text-[9px] text-slate-500 mt-2 block">Just now</span>
+</div>
+<!-- Quick Operations -->
+<div class="space-y-2">
+<label class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Suggested Actions</label>
+<button class="w-full text-left p-3 text-xs bg-surface-container-highest/40 hover:bg-surface-container-highest rounded-lg transition-colors border border-outline-variant/5 text-on-surface flex items-center justify-between group">
+                            Re-run with higher contrast
+                            <span class="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</button>
+<button class="w-full text-left p-3 text-xs bg-surface-container-highest/40 hover:bg-surface-container-highest rounded-lg transition-colors border border-outline-variant/5 text-on-surface flex items-center justify-between group">
+                            Backtrack to Design Spec
+                            <span class="material-symbols-outlined text-sm opacity-0 group-hover:opacity-100 transition-opacity">history</span>
+</button>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high">
+<div class="relative">
+<textarea class="w-full bg-surface-container-lowest border-none rounded-lg text-xs p-3 pr-10 focus:ring-1 focus:ring-primary min-h-[80px] resize-none placeholder:text-slate-600" placeholder="Type an operation..."></textarea>
+<button class="absolute bottom-3 right-3 text-primary hover:text-white transition-colors">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+</aside>
+</div>
+</main>
+</body></html>

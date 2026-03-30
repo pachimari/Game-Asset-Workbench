@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Obsidian Workbench - 条目工作台</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-fixed": "#ff8ed2",
+                        "surface-bright": "#1f2b49",
+                        "on-primary": "#0f00a4",
+                        "on-error": "#490013",
+                        "on-tertiary": "#701455",
+                        "surface": "#060e20",
+                        "outline": "#6d758c",
+                        "primary-dim": "#6063ee",
+                        "inverse-primary": "#494bd7",
+                        "tertiary": "#ffa5d9",
+                        "tertiary-container": "#ff8ed2",
+                        "surface-container": "#0f1930",
+                        "background": "#060e20",
+                        "primary-fixed": "#9396ff",
+                        "on-surface": "#dee5ff",
+                        "on-tertiary-fixed": "#3b002b",
+                        "secondary-dim": "#a28efc",
+                        "surface-container-low": "#091328",
+                        "primary-container": "#9396ff",
+                        "surface-container-lowest": "#000000",
+                        "primary-fixed-dim": "#8387ff",
+                        "on-tertiary-container": "#63054a",
+                        "on-primary-fixed-variant": "#0e009d",
+                        "on-background": "#dee5ff",
+                        "error": "#ff6e84",
+                        "on-primary-container": "#0a0081",
+                        "surface-dim": "#060e20",
+                        "tertiary-fixed-dim": "#ef81c4",
+                        "on-secondary-container": "#d4c9ff",
+                        "inverse-on-surface": "#4d556b",
+                        "on-tertiary-fixed-variant": "#6e1354",
+                        "error-dim": "#d73357",
+                        "on-error-container": "#ffb2b9",
+                        "on-primary-fixed": "#000000",
+                        "surface-variant": "#192540",
+                        "secondary-fixed": "#d6cbff",
+                        "surface-container-high": "#141f38",
+                        "primary": "#a3a6ff",
+                        "on-secondary-fixed": "#361c89",
+                        "secondary-container": "#49339d",
+                        "tertiary-dim": "#ef81c4",
+                        "error-container": "#a70138",
+                        "outline-variant": "#40485d",
+                        "on-secondary-fixed-variant": "#533ea7",
+                        "surface-container-highest": "#192540",
+                        "on-surface-variant": "#a3aac4",
+                        "on-secondary": "#21006d",
+                        "inverse-surface": "#faf8ff",
+                        "secondary-fixed-dim": "#c8bbff",
+                        "surface-tint": "#a3a6ff",
+                        "secondary": "#a28efc"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter", "Noto Sans SC"],
+                        "body": ["Inter", "Noto Sans SC"],
+                        "label": ["Inter", "Noto Sans SC"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #060e20;
+            color: #dee5ff;
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(163, 166, 255, 0.08);
+            backdrop-filter: blur(12px);
+        }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #40485d; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+<!-- SideNavBar (The Anchor) -->
+<aside class="flex flex-col h-full py-4 bg-[#091328] h-screen w-64 fixed left-0 top-0 z-50">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-xl">folder_open</span>
+</div>
+<div>
+<h2 class="text-[#dee5ff] font-semibold text-sm leading-tight">项目资产</h2>
+<p class="text-[0.625rem] text-on-surface-variant tracking-wider uppercase">Icon Workbench</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 border-l-2 border-[#a3a6ff] bg-[#192540] text-[#dee5ff] font-['Inter','PingFang_SC'] text-[0.75rem] uppercase tracking-wider transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span>批次</span>
+</a>
+</nav>
+<div class="px-4 mt-auto space-y-4">
+<button class="w-full py-2 bg-gradient-to-br from-primary to-primary-dim text-on-primary text-xs font-bold rounded-sm shadow-lg active:scale-95 transition-transform uppercase tracking-widest">
+                新建批次
+            </button>
+<div class="pt-4 border-t border-outline-variant/15">
+<a class="flex items-center gap-3 px-3 py-2 text-[#a3aac4] hover:bg-[#0f1930] hover:text-[#dee5ff] font-['Inter','PingFang_SC'] text-[0.75rem] uppercase tracking-wider transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>设置</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Workspace Area -->
+<main class="flex-1 ml-64 flex flex-col h-full relative">
+<!-- TopNavBar -->
+<header class="flex items-center justify-between px-6 w-full h-14 bg-[#091328] font-['Inter','PingFang_SC'] text-sm antialiased z-40">
+<div class="flex items-center gap-4">
+<span class="text-lg font-bold text-[#dee5ff] tracking-tight">Obsidian Workbench</span>
+<nav class="flex items-center gap-2 text-[#a3aac4]">
+<span class="text-[0.6875rem] opacity-40">/</span>
+<span class="text-[#a3a6ff] font-medium">批次 &gt; 条目</span>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-[#a3aac4] hover:text-[#dee5ff] transition-colors cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="professional user avatar placeholder with abstract geometric patterns in shades of blue and indigo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyanFsKMno85cAMr5voHqfw8br75tNLhRbcmVlAFp-NG-eWRy9D7ChMj3SdzYbAqmUv429CnuSnXNq6pHizEQfqyur9_h-xkxwjc424Zlb0rqLBOrW0LXJT0zEwYkIr-qeMZYqPBEtj4TZfvN1K5FXyBhgDDIsCslEjnmTKnC8v-kz_0aGOklfzlwqHedcmRQ7dKbF1NAuko9m39Uti9CKaoCrbxgvzAm_It5dqTihqMWinCjR5Sf9wPKJTDy6Sbhnk5BAA1kJtXY2"/>
+</div>
+</div>
+</header>
+<!-- Workbench Layout (3 Panes) -->
+<div class="flex flex-1 overflow-hidden p-4 gap-4 bg-surface">
+<!-- Left Pane: Entry Summary & Original Requirements -->
+<section class="w-72 flex flex-col gap-4 overflow-y-auto">
+<div class="bg-surface-container-low p-4 rounded-md">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xs font-bold text-on-surface-variant uppercase tracking-widest">原始需求</h3>
+<span class="material-symbols-outlined text-primary text-sm">info</span>
+</div>
+<div class="space-y-6">
+<div>
+<label class="block text-[0.625rem] text-on-surface-variant mb-1 uppercase tracking-tighter">条目名称</label>
+<p class="text-lg font-bold text-on-surface">Fireball (火球)</p>
+</div>
+<div>
+<label class="block text-[0.625rem] text-on-surface-variant mb-1 uppercase tracking-tighter">类别</label>
+<div class="inline-flex items-center px-2 py-0.5 bg-secondary-container text-on-secondary-container text-[0.6875rem] font-bold rounded-sm">
+                                攻击技能
+                            </div>
+</div>
+<div>
+<label class="block text-[0.625rem] text-on-surface-variant mb-1 uppercase tracking-tighter">描述</label>
+<p class="text-sm text-on-surface leading-relaxed">向目标发射一个巨大的魔法火球，造成范围爆炸伤害。核心元素是旋转的熔岩核心与放射状的火舌。</p>
+</div>
+<div class="p-3 bg-surface-container rounded-sm border-l-2 border-primary-dim/30">
+<label class="block text-[0.625rem] text-primary mb-1 uppercase tracking-tighter">补充说明</label>
+<p class="text-xs text-on-surface-variant leading-relaxed italic">需符合《暗影纪元》的哥特暗黑美术风格，不要过于明亮的卡通配色。</p>
+</div>
+</div>
+</div>
+<!-- Reference Strip -->
+<div class="bg-surface-container-low p-4 rounded-md flex-1">
+<h3 class="text-xs font-bold text-on-surface-variant mb-3 uppercase tracking-widest">参考图集</h3>
+<div class="grid grid-cols-2 gap-2">
+<div class="aspect-square bg-surface-container-lowest rounded-sm overflow-hidden group relative">
+<img class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="conceptual dark fantasy fireball magic effect with glowing orange core and dark smoke trails" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfWY3I-RZ_Lr3cRJUjOVe_ULPPoafHMecfIKrNRAqzlVGJC0rIwnI1gm7U0Uwjgb-Rge1VxMnHmR0PT0HB0mmAj9LWWWvCTQVonn5FMeRQArmWTaUCGWBGwWe3XPQLFIHZ9HRkRthFNcKakGwDbvqnN-iQrpNl3CX7sbuPAJC6N-lDcWA3cjtJWI_qQTP5WN0j6PKw8sdknhGp35UTkL0uggWsI4G2M0kFQ93Prf-JQsrzt39oc0kCy3IPAmwjjyCkKm9KvGC6ajnO"/>
+</div>
+<div class="aspect-square bg-surface-container-lowest rounded-sm overflow-hidden group relative border border-primary/20">
+<img class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="cinematic explosion of fire against a dark background with sparks and high contrast lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3sGa9lWS-xKILoz_OrpSx18WSfkDtP1SnRQoNyJq2N_yWxeWcquLFkwIoMCrxzQXPpT67HytzeS_8cMmJ8MBFyJ1JDHkJNFqIz9Z4mO9YVceUMhfkSZ07BRzNOD_b8JSGuV8pLsrnuwam2QiL1L_ZQZI66_ad9Jqm6OJnPj5jNGwg7Z9N96WlikBR5Ray_12HE4717IOWl3qk2bK3OI_1T0Q8hfHJSNELqA0i4oldsL0uSYAHdeBXlXwpDE1H3MPACFmqdLQAoglD"/>
+</div>
+</div>
+</div>
+</section>
+<!-- Center Pane: Main Workspace Canvas -->
+<section class="flex-1 flex flex-col gap-4 overflow-hidden">
+<!-- Inner Tabs -->
+<div class="flex items-center gap-1 bg-surface-container-low p-1 rounded-sm w-fit">
+<button class="px-4 py-1.5 text-xs font-medium bg-surface-container-highest text-primary rounded-sm">总览</button>
+<button class="px-4 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface">设计说明</button>
+<button class="px-4 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface">出图指令</button>
+<button class="px-4 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface">候选池</button>
+</div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-1">
+<!-- Currently Adopted (Hero Section) -->
+<div class="relative rounded-md overflow-hidden bg-surface-container-lowest border border-outline-variant/10 group">
+<div class="absolute top-4 left-4 z-10">
+<span class="px-2 py-1 bg-primary text-on-primary text-[0.625rem] font-black uppercase tracking-widest rounded-sm">当前采用</span>
+</div>
+<img alt="Current Output" class="w-full h-[320px] object-cover opacity-80 group-hover:opacity-100 transition-opacity" data-alt="professional digital painting of a menacing fireball with purple and orange flames floating in a dark dungeon atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC54iftjW8bdXED3v1-_F2GnVSB4lO6UJoChm-2ocdbBmDzyXsFsak3t6ncSN6aJFj8EeVMEXNaQvkxMXm1E3hcU6FproJla8cOjmJS1eMXbezpA_A275KPXHV53ZrR33LU9xiGOmIYSWNI-xtS_wtJJIyYOorxhF33jhMth2LBGj5qsEUJjQG394WhRL0dxC9vA9BeQOurpE7scXmfNKcgwsw0B5FbnSFmp7RL_roPJrRXgDiDK45ZcQVQmFImeGo4sTzJEg9_bEiq"/>
+<div class="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-surface-container-lowest to-transparent">
+<div class="flex items-end justify-between">
+<div>
+<p class="text-[0.625rem] text-on-surface-variant uppercase mb-1">Asset ID: FIRE-092-B</p>
+<h4 class="text-base font-bold text-on-surface">V4.2.0 Final Render Candidate</h4>
+</div>
+<div class="flex gap-2">
+<button class="p-2 bg-surface-bright/20 backdrop-blur-md rounded-sm border border-outline-variant/20 hover:bg-surface-bright/40">
+<span class="material-symbols-outlined text-sm">fullscreen</span>
+</button>
+<button class="p-2 bg-surface-bright/20 backdrop-blur-md rounded-sm border border-outline-variant/20 hover:bg-surface-bright/40">
+<span class="material-symbols-outlined text-sm">download</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Generation Progress / Queue -->
+<div class="grid grid-cols-3 gap-4">
+<div class="aspect-[4/3] bg-surface-container-low rounded-md flex flex-col items-center justify-center border-2 border-dashed border-outline-variant/20 relative overflow-hidden">
+<div class="absolute inset-0 bg-primary/5 animate-pulse"></div>
+<span class="material-symbols-outlined text-3xl text-primary-dim mb-2 animate-spin">sync</span>
+<span class="text-[0.6875rem] font-bold text-on-surface">正在排队中...</span>
+<div class="w-24 h-1 bg-surface-container-highest mt-3 rounded-full overflow-hidden">
+<div class="w-[45%] h-full bg-primary shadow-[0_0_8px_rgba(163,166,255,0.8)]"></div>
+</div>
+<span class="mt-1 text-[0.625rem] text-on-surface-variant">45% 渲染完成</span>
+</div>
+<!-- Placeholder Slots -->
+<div class="aspect-[4/3] bg-surface-container-lowest rounded-md border border-outline-variant/10 flex flex-col items-center justify-center opacity-40">
+<span class="material-symbols-outlined text-2xl mb-1">image_search</span>
+<span class="text-[0.625rem] uppercase tracking-tighter">等待任务</span>
+</div>
+<div class="aspect-[4/3] bg-surface-container-lowest rounded-md border border-outline-variant/10 flex flex-col items-center justify-center opacity-40">
+<span class="material-symbols-outlined text-2xl mb-1">image_search</span>
+<span class="text-[0.625rem] uppercase tracking-tighter">等待任务</span>
+</div>
+</div>
+<!-- Design Spec Card -->
+<div class="bg-surface-container-low p-5 rounded-md border-l-2 border-primary">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-base">architecture</span>
+<h3 class="text-xs font-bold text-on-surface uppercase tracking-widest">设计说明 (Design Spec)</h3>
+</div>
+<div class="grid grid-cols-3 gap-6">
+<div class="space-y-1">
+<label class="text-[0.625rem] text-on-surface-variant uppercase">主体 Object</label>
+<p class="text-xs font-semibold">Magical Fire Core</p>
+</div>
+<div class="space-y-1">
+<label class="text-[0.625rem] text-on-surface-variant uppercase">视觉焦点 Focal Point</label>
+<p class="text-xs font-semibold">Internal Lava Texture</p>
+</div>
+<div class="space-y-1">
+<label class="text-[0.625rem] text-on-surface-variant uppercase">关键词 Keywords</label>
+<div class="flex flex-wrap gap-1">
+<span class="text-[0.5rem] px-1 bg-surface-container-highest text-primary-fixed border border-primary/10">DARK-FANTASY</span>
+<span class="text-[0.5rem] px-1 bg-surface-container-highest text-primary-fixed border border-primary/10">VOLUMETRIC</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Sticky Controls (Quick Action) -->
+<div class="glass-panel p-3 rounded-md border border-outline-variant/15 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="text-[0.6875rem] font-bold text-on-surface">Agent 正在分析视觉差异...</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-1.5 text-[0.6875rem] font-bold bg-surface-container-highest text-on-surface hover:bg-surface-bright transition-colors rounded-sm uppercase">微调参数</button>
+<button class="px-4 py-1.5 text-[0.6875rem] font-bold bg-primary text-on-primary hover:bg-primary-dim transition-colors rounded-sm uppercase">重新生成</button>
+</div>
+</div>
+</section>
+<!-- Right Pane: Context & Controls -->
+<section class="w-80 flex flex-col gap-4 overflow-y-auto">
+<!-- Model Override -->
+<div class="bg-surface-container-low p-4 rounded-md">
+<h3 class="text-xs font-bold text-on-surface-variant mb-4 uppercase tracking-widest">当前条目模型</h3>
+<div class="bg-surface-container p-3 rounded-sm border border-outline-variant/10 mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-secondary-container rounded-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-on-secondary-container">model_training</span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface">SDXL-Obsidian-V4</p>
+<p class="text-[0.625rem] text-on-surface-variant">LORA: Dark_Fantasy_UI_V1 (0.8)</p>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between text-[0.6875rem]">
+<span class="text-on-surface-variant">当前状态</span>
+<span class="text-tertiary-fixed font-bold">待选择候选图</span>
+</div>
+<div class="flex items-center justify-between text-[0.6875rem]">
+<span class="text-on-surface-variant">采样步数</span>
+<span class="text-on-surface">32 Steps (Eular a)</span>
+</div>
+</div>
+</div>
+<!-- Chat Control (The Engine) -->
+<div class="flex-1 bg-surface-container-low flex flex-col rounded-md overflow-hidden min-h-[300px]">
+<div class="px-4 py-2 bg-surface-container-highest flex items-center justify-between">
+<h3 class="text-[0.625rem] font-black text-primary-fixed uppercase tracking-widest">聊天控制</h3>
+<span class="material-symbols-outlined text-sm opacity-40">terminal</span>
+</div>
+<div class="flex-1 p-4 space-y-4 overflow-y-auto text-[0.6875rem]">
+<div class="flex flex-col gap-1 items-start max-w-[90%]">
+<div class="bg-surface-container p-2 rounded-sm text-on-surface-variant leading-normal">
+                                我已经根据您的原始需求更新了 Prompt，增加了 "internal volcanic veins" 权重。
+                            </div>
+<span class="text-[0.5rem] opacity-30">SYSTEM 10:42 AM</span>
+</div>
+<div class="flex flex-col gap-1 items-end ml-auto max-w-[90%]">
+<div class="bg-primary-container/20 text-on-primary-container p-2 rounded-sm leading-normal border border-primary/20">
+                                颜色稍微再暗一点，边缘加一些黑烟，不要太亮。
+                            </div>
+<span class="text-[0.5rem] opacity-30">YOU 10:43 AM</span>
+</div>
+<div class="flex flex-col gap-1 items-start max-w-[90%]">
+<div class="bg-surface-container p-2 rounded-sm text-on-surface-variant leading-normal italic">
+                                收到。正在调整 Negative Prompt 中关于 "bloom" 的权重并重新生成。
+                            </div>
+<span class="text-[0.5rem] opacity-30">SYSTEM 10:43 AM</span>
+</div>
+</div>
+<div class="p-2 bg-surface-container border-t border-outline-variant/10">
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none text-[0.6875rem] focus:ring-1 focus:ring-primary rounded-sm pr-10 py-2" placeholder="输入控制指令..." type="text"/>
+<span class="material-symbols-outlined absolute right-2 top-1.5 text-primary text-lg cursor-pointer">send</span>
+</div>
+</div>
+</div>
+<!-- Event Log & Version History (Mini) -->
+<div class="bg-surface-container-low p-4 rounded-md">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xs font-bold text-on-surface-variant uppercase tracking-widest">版本历史</h3>
+<span class="text-[0.625rem] text-primary cursor-pointer hover:underline">查看全部</span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center gap-3 group cursor-pointer">
+<div class="w-8 h-8 rounded-sm bg-surface-container-lowest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="v4.1 thumbnail of a fireball asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzljZIiB4Csv9ofJ-2wB-lvK2_sy9d3DzlCmC7cWM9O4WgJYa5J5tUdPU9OOz7R9mXmvuPQ9dr4fjiuGTs4uDH5NudwA3OekQ7Q-j1GvxRFgpzKG41UudWJoPbc3H7BLqI68A7c4TgAH3ydCFverVDclS_mF2nqETYeXOxB1-l-SCwq_Ok1ZBoqw4f1ZQ6WlWROhxFI0jKpHjKPE4S9B23D-MCcgb_OeWz8kKGu7DPsCixN7EAU3apbbwCthcREWaw0rCNHLNDrKSP"/>
+</div>
+<div>
+<p class="text-[0.625rem] font-bold text-on-surface">V4.1.2 - Reduced Bloom</p>
+<p class="text-[0.5rem] text-on-surface-variant">2023.10.24 10:15</p>
+</div>
+</div>
+<div class="flex items-center gap-3 group cursor-pointer">
+<div class="w-8 h-8 rounded-sm bg-surface-container-lowest overflow-hidden">
+<img class="w-full h-full object-cover opacity-50" data-alt="v4.0 thumbnail of a fireball asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSZMYApKujLm3j8sowA_3KgFdTFn80j4x1vP0nkmuqIb1RnUX0yhAgxRj86wEXASxjta3xhzQ0jpwtz7JsY33bFZRt6ODal7xd-E2PaKEJseg18fvtIo1iWJSN81qOThmTbPUgVv-5LXrmHRjVcR6cR0IlO7Z2CZIeYQAL4faNRJzWe3awNE_jJwJn-fP5eOKqVm3sZ8Wz7fvAJRGBpRZMSsq4dP50oVtI_J026cjyRZdU5zHe0UNCxjNNsJXtATlcqNtZyVvZfv1T"/>
+</div>
+<div>
+<p class="text-[0.625rem] font-bold text-on-surface-variant">V4.0.0 - Initial Draft</p>
+<p class="text-[0.5rem] text-on-surface-variant">2023.10.24 09:30</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- BottomNavBar (The Shell) -->
+<nav class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-[#0f1930]/80 backdrop-blur-xl rounded-md px-6 py-2 border border-[#40485d]/15 shadow-[0_24px_48px_-12px_rgba(163,166,255,0.06)] scale-95 active:scale-90 transition-transform">
+<a class="text-[#a3aac4] px-4 py-1 hover:text-[#dee5ff] flex items-center gap-2 group" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="description">description</span>
+<span class="font-['Inter','PingFang_SC'] text-[0.6875rem] font-medium">设计说明</span>
+</a>
+<a class="text-[#a3aac4] px-4 py-1 hover:text-[#dee5ff] flex items-center gap-2 group" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="terminal">terminal</span>
+<span class="font-['Inter','PingFang_SC'] text-[0.6875rem] font-medium">出图指令</span>
+</a>
+<a class="text-[#a3a6ff] bg-[#a3a6ff]/10 rounded-sm px-4 py-1 flex items-center gap-2 group" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="collections" style="font-variation-settings: 'FILL' 1;">collections</span>
+<span class="font-['Inter','PingFang_SC'] text-[0.6875rem] font-medium">候选池</span>
+</a>
+<a class="text-[#a3aac4] px-4 py-1 hover:text-[#dee5ff] flex items-center gap-2 group" href="#">
+<span class="material-symbols-outlined text-lg" data-icon="analytics">analytics</span>
+<span class="font-['Inter','PingFang_SC'] text-[0.6875rem] font-medium">控制台</span>
+</a>
+</nav>
+</main>
+</body></html>

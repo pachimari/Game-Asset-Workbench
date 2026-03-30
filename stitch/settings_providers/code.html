@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "secondary-fixed": "#d8e2ff",
+            "on-background": "#dae2fd",
+            "on-tertiary-fixed-variant": "#703700",
+            "inverse-surface": "#dae2fd",
+            "tertiary-fixed-dim": "#ffb783",
+            "surface-container-highest": "#2d3449",
+            "on-primary-fixed": "#07006c",
+            "surface": "#0b1326",
+            "error": "#ffb4ab",
+            "outline": "#908fa0",
+            "primary-fixed-dim": "#c0c1ff",
+            "inverse-on-surface": "#283044",
+            "surface-dim": "#0b1326",
+            "secondary": "#adc6ff",
+            "on-error-container": "#ffdad6",
+            "on-secondary-fixed": "#001a42",
+            "on-tertiary-fixed": "#301400",
+            "on-tertiary-container": "#452000",
+            "on-surface": "#dae2fd",
+            "tertiary-container": "#d97721",
+            "on-secondary-fixed-variant": "#004395",
+            "error-container": "#93000a",
+            "on-primary-fixed-variant": "#2f2ebe",
+            "on-surface-variant": "#c7c4d7",
+            "surface-variant": "#2d3449",
+            "primary-container": "#8083ff",
+            "primary-fixed": "#e1e0ff",
+            "surface-tint": "#c0c1ff",
+            "outline-variant": "#464554",
+            "on-primary-container": "#0d0096",
+            "surface-container-low": "#131b2e",
+            "on-secondary-container": "#e6ecff",
+            "on-error": "#690005",
+            "on-secondary": "#002e6a",
+            "background": "#0b1326",
+            "primary": "#c0c1ff",
+            "on-primary": "#1000a9",
+            "tertiary": "#ffb783",
+            "inverse-primary": "#494bd6",
+            "surface-container": "#171f33",
+            "secondary-fixed-dim": "#adc6ff",
+            "surface-container-high": "#222a3d",
+            "surface-container-lowest": "#060e20",
+            "secondary-container": "#0566d9",
+            "on-tertiary": "#4f2500",
+            "surface-bright": "#31394d",
+            "tertiary-fixed": "#ffdcc5"
+          },
+          fontFamily: {
+            "headline": ["Manrope"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #464554; border-radius: 10px; }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- Shared Component: TopNavBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-14 bg-[#0b1326]">
+<div class="flex items-center gap-4">
+<span class="text-xl font-bold tracking-tight text-[#c0c1ff] font-headline">Obsidian Workbench</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-slate-400">
+<button class="hover:text-white transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="hover:text-white transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-xl">bolt</span>
+</button>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img alt="User profile" data-alt="Close-up professional portrait of a software engineer with soft studio lighting and neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5iUm-zhBctLIW-hyyvIMYuPk5yYH7vj48dwJ7WqtP_z2TaihWYPoH_3TbRAT6ABWh0zJ1wAi2JTO424ugxtZc5tl6K-XmIASqgYOZFFmjvvjllZwWl3XMvuzsa9g1nD-hM6m8WHujaT9KsVQ_63Ghqjao0lk-e6PeEp8SUQIqQw-ZmFBOq8NiGR8UYX42rpnI_U0kuBrb37IjpryQ26Qg_WR8165wAWagMpUEflmmahuwU5Y3mwotTqD9x1nAxMPhYrRE6BNMKh7Q"/>
+</div>
+</div>
+</header>
+<!-- Shared Component: SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col items-center py-6 z-40 bg-[#131b2e] w-20 border-r border-[#464554]/15 shadow-2xl pt-20">
+<nav class="flex flex-col items-center w-full gap-2">
+<a class="flex flex-col items-center justify-center text-slate-500 w-full py-4 hover:bg-[#222a3d] hover:text-[#adc6ff] transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1">layers</span>
+<span class="font-manrope text-xs font-medium">Batches</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500 w-full py-4 hover:bg-[#222a3d] hover:text-[#adc6ff] transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1">add_box</span>
+<span class="font-manrope text-xs font-medium">New Batch</span>
+</a>
+</nav>
+<div class="mt-auto w-full">
+<a class="flex flex-col items-center justify-center text-[#c0c1ff] border-l-2 border-[#c0c1ff] bg-[#222a3d] w-full py-4 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span class="font-manrope text-xs font-medium">Settings</span>
+</a>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-20 pt-14 min-h-screen bg-surface">
+<div class="max-w-7xl mx-auto p-8">
+<!-- Settings Header -->
+<div class="mb-10 flex justify-between items-end">
+<div>
+<h1 class="text-4xl font-headline font-extrabold text-on-surface tracking-tight mb-2">Workbench Settings</h1>
+<p class="text-on-surface-variant max-w-2xl">Manage your AI provider infrastructure, model inheritance rules, and system-wide design templates.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-5 py-2 text-sm font-medium text-on-surface bg-surface-container-high rounded-lg hover:bg-surface-bright transition-colors border border-outline-variant/10">Discard Changes</button>
+<button class="px-5 py-2 text-sm font-medium text-on-primary bg-gradient-to-br from-primary to-primary-container rounded-lg shadow-lg shadow-primary/20">Save Configuration</button>
+</div>
+</div>
+<!-- Bento Grid for Settings -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Section: AI Provider Management -->
+<div class="col-span-12 lg:col-span-8 space-y-6">
+<section class="bg-surface-container-low rounded-xl p-6 border border-outline-variant/5">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">hub</span>
+<h2 class="text-xl font-headline font-bold text-on-surface">Provider Configuration</h2>
+</div>
+<button class="text-xs font-medium text-primary flex items-center gap-1 hover:underline">
+<span class="material-symbols-outlined text-sm">add</span> Add Custom Provider
+              </button>
+</div>
+<!-- Built-in Providers -->
+<div class="grid grid-cols-3 gap-4 mb-8">
+<div class="p-4 bg-surface-container-high rounded-lg flex items-center gap-4 relative overflow-hidden group border border-outline-variant/5">
+<div class="w-10 h-10 rounded-md bg-[#2d3449] flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">google</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">Gemini Pro</p>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+<span class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Active</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high rounded-lg flex items-center gap-4 relative overflow-hidden group border border-outline-variant/5">
+<div class="w-10 h-10 rounded-md bg-[#2d3449] flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">token</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">DeepSeek</p>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+<span class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Connected</span>
+</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high rounded-lg flex items-center gap-4 relative overflow-hidden group border border-outline-variant/5">
+<div class="w-10 h-10 rounded-md bg-[#2d3449] flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">memory</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-on-surface">Mock Latency</p>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-outline shadow-[0_0_8px_rgba(144,143,160,0.5)]"></span>
+<span class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Offline</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Provider Edit Form -->
+<div class="bg-surface-container-highest/40 rounded-xl p-6 border border-outline-variant/10">
+<h3 class="text-sm font-bold text-primary mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">edit</span> EDITING: TOAPIS - MAIN PRODUCTION
+              </h3>
+<div class="grid grid-cols-2 gap-6">
+<div class="space-y-1.5">
+<label class="text-[11px] font-bold text-outline-variant uppercase tracking-widest">Instance Name</label>
+<input class="w-full bg-surface-container-highest border-none rounded-lg text-sm text-on-surface focus:ring-1 focus:ring-primary h-10 px-3" type="text" value="ToAPIs - Main"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-[11px] font-bold text-outline-variant uppercase tracking-widest">Base URL</label>
+<input class="w-full bg-surface-container-highest border-none rounded-lg text-sm text-on-surface focus:ring-1 focus:ring-primary h-10 px-3 font-mono" type="text" value="https://api.toapis.com/v1"/>
+</div>
+<div class="col-span-2 space-y-1.5">
+<label class="text-[11px] font-bold text-outline-variant uppercase tracking-widest">API Key</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none rounded-lg text-sm text-on-surface focus:ring-1 focus:ring-primary h-10 px-3 font-mono" type="password" value="••••••••••••••••••••••••••••••••"/>
+<button class="absolute right-3 top-2.5 text-outline hover:text-on-surface">
+<span class="material-symbols-outlined text-lg">visibility</span>
+</button>
+</div>
+</div>
+<div class="col-span-2 space-y-2">
+<label class="text-[11px] font-bold text-outline-variant uppercase tracking-widest">Enabled Models</label>
+<div class="flex flex-wrap gap-2">
+<span class="px-2.5 py-1 bg-primary/10 border border-primary/20 text-primary text-xs font-medium rounded-full flex items-center gap-1.5">
+                      gpt-4-turbo <span class="material-symbols-outlined text-[14px] cursor-pointer">close</span>
+</span>
+<span class="px-2.5 py-1 bg-primary/10 border border-primary/20 text-primary text-xs font-medium rounded-full flex items-center gap-1.5">
+                      claude-3-opus <span class="material-symbols-outlined text-[14px] cursor-pointer">close</span>
+</span>
+<span class="px-2.5 py-1 bg-surface-container-high border border-outline-variant/20 text-on-surface-variant text-xs font-medium rounded-full flex items-center gap-1.5 hover:bg-surface-bright cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">add</span> Add Model
+                    </span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Template Management -->
+<section class="bg-surface-container-low rounded-xl p-6 border border-outline-variant/5">
+<div class="flex items-center justify-between mb-6">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">description</span>
+<h2 class="text-xl font-headline font-bold text-on-surface">System Templates</h2>
+</div>
+<div class="flex gap-2 p-1 bg-surface-container-high rounded-lg">
+<button class="px-3 py-1.5 text-xs font-bold bg-surface-bright text-primary rounded-md">Design Spec</button>
+<button class="px-3 py-1.5 text-xs font-bold text-on-surface-variant hover:text-on-surface">Prompts</button>
+</div>
+</div>
+<div class="grid grid-cols-12 gap-6">
+<!-- Sidebar of templates -->
+<div class="col-span-4 space-y-2 border-r border-outline-variant/10 pr-6">
+<div class="p-3 bg-surface-container-highest border-l-2 border-primary rounded-r-md">
+<p class="text-xs font-bold text-on-surface">Mobile App UI V2</p>
+<p class="text-[10px] text-outline mt-0.5">Last edited: 2h ago</p>
+</div>
+<div class="p-3 hover:bg-surface-container-high rounded-md transition-colors cursor-pointer group">
+<p class="text-xs font-bold text-on-surface-variant group-hover:text-on-surface">E-Commerce Flow</p>
+<p class="text-[10px] text-outline mt-0.5">Last edited: 1d ago</p>
+</div>
+<div class="p-3 hover:bg-surface-container-high rounded-md transition-colors cursor-pointer group">
+<p class="text-xs font-bold text-on-surface-variant group-hover:text-on-surface">Dashboard Lithograph</p>
+<p class="text-[10px] text-outline mt-0.5">Last edited: 3d ago</p>
+</div>
+</div>
+<!-- Editor Canvas -->
+<div class="col-span-8 flex flex-col h-[320px]">
+<div class="flex-1 bg-[#060e20] rounded-lg p-4 font-mono text-sm overflow-y-auto custom-scrollbar border border-outline-variant/10">
+<span class="text-slate-500">// Mobile App UI Design Spec Template</span><br/>
+<span class="text-secondary">{</span><br/>
+<span class="ml-4 text-primary">"version"</span>: <span class="text-tertiary">"2.4.0"</span>,<br/>
+<span class="ml-4 text-primary">"grid_system"</span>: <span class="text-secondary">{</span><br/>
+<span class="ml-8 text-primary">"columns"</span>: <span class="text-tertiary">4</span>,<br/>
+<span class="ml-8 text-primary">"gutter"</span>: <span class="text-tertiary">"16px"</span>,<br/>
+<span class="ml-8 text-primary">"margin"</span>: <span class="text-tertiary">"20px"</span><br/>
+<span class="ml-4 text-secondary">}</span>,<br/>
+<span class="ml-4 text-primary">"typography"</span>: <span class="text-secondary">[</span><br/>
+<span class="ml-8 text-secondary">{</span> <span class="text-primary">"role"</span>: <span class="text-tertiary">"Display"</span>, <span class="text-primary">"size"</span>: <span class="text-tertiary">"32px"</span> <span class="text-secondary">}</span>,<br/>
+<span class="ml-8 text-secondary">{</span> <span class="text-primary">"role"</span>: <span class="text-tertiary">"Body"</span>, <span class="text-primary">"size"</span>: <span class="text-tertiary">"16px"</span> <span class="text-secondary">}</span><br/>
+<span class="ml-4 text-secondary">]</span><br/>
+<span class="text-secondary">}</span>
+</div>
+<div class="mt-3 flex justify-between items-center">
+<p class="text-[10px] font-mono text-outline">Validating JSON format...</p>
+<button class="px-3 py-1 bg-surface-container-high text-xs font-bold rounded hover:bg-surface-bright transition-colors">Preview Output</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Section: Model Inheritance Diagram (Right Column) -->
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<section class="bg-surface-container-low rounded-xl p-6 border border-outline-variant/5 h-full">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-primary">account_tree</span>
+<h2 class="text-xl font-headline font-bold text-on-surface">Inheritance Hierarchy</h2>
+</div>
+<div class="relative flex flex-col items-center gap-12 py-4">
+<!-- Global Tier -->
+<div class="w-full p-4 bg-surface-container-high rounded-xl border-l-4 border-primary shadow-xl relative z-10">
+<div class="flex justify-between items-start mb-2">
+<span class="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded uppercase">Global Default</span>
+<span class="material-symbols-outlined text-outline text-lg">public</span>
+</div>
+<p class="text-sm font-bold text-on-surface">GPT-4 Turbo</p>
+<p class="text-xs text-on-surface-variant mt-1">Used for all new batches unless overridden.</p>
+</div>
+<!-- Connecting Line -->
+<div class="absolute top-[80px] bottom-[160px] w-0.5 bg-gradient-to-b from-primary/40 to-secondary/40"></div>
+<!-- Batch Tier -->
+<div class="w-full p-4 bg-surface-container-high rounded-xl border-l-4 border-secondary shadow-xl relative z-10 ml-8">
+<div class="flex justify-between items-start mb-2">
+<span class="px-2 py-0.5 bg-secondary/20 text-secondary text-[10px] font-bold rounded uppercase tracking-wider">Batch Override</span>
+<span class="material-symbols-outlined text-outline text-lg">folder_open</span>
+</div>
+<p class="text-sm font-bold text-on-surface">Claude 3.5 Sonnet</p>
+<p class="text-xs text-on-surface-variant mt-1">Defined in Batch #234 Configuration.</p>
+</div>
+<!-- Connecting Line -->
+<div class="absolute top-[210px] bottom-[50px] w-0.5 bg-gradient-to-b from-secondary/40 to-tertiary/40 ml-8"></div>
+<!-- Item Tier -->
+<div class="w-full p-4 bg-surface-container-high rounded-xl border-l-4 border-tertiary shadow-xl relative z-10 ml-16">
+<div class="flex justify-between items-start mb-2">
+<span class="px-2 py-0.5 bg-tertiary/20 text-tertiary text-[10px] font-bold rounded uppercase tracking-wider">Item Override</span>
+<span class="material-symbols-outlined text-outline text-lg">description</span>
+</div>
+<p class="text-sm font-bold text-on-surface">DeepSeek Coder</p>
+<p class="text-xs text-on-surface-variant mt-1">Specific override for "LoginUI.tsx"</p>
+</div>
+</div>
+<!-- Inheritance Logic Detail -->
+<div class="mt-12 p-4 bg-surface-container-highest/60 rounded-lg border border-outline-variant/10">
+<h4 class="text-xs font-bold text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">info</span> Resolution Logic
+              </h4>
+<ul class="space-y-2 text-[11px] text-on-surface-variant">
+<li class="flex items-start gap-2">
+<span class="w-1 h-1 rounded-full bg-primary mt-1.5 shrink-0"></span>
+<span>Inheritance follows a <strong>specific-to-general</strong> priority.</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="w-1 h-1 rounded-full bg-primary mt-1.5 shrink-0"></span>
+<span>Overrides persist across re-generation attempts within the same session.</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="w-1 h-1 rounded-full bg-primary mt-1.5 shrink-0"></span>
+<span>"Batch" templates can force-reset all item-level overrides.</span>
+</li>
+</ul>
+</div>
+</section>
+</div>
+<!-- Section: Usage Tracking / Footer Stats (Asymmetric Bento Piece) -->
+<div class="col-span-12">
+<div class="bg-gradient-to-r from-surface-container-low to-surface-container-high p-1 rounded-xl">
+<div class="bg-[#0b1326] rounded-[10px] px-8 py-6 flex justify-between items-center">
+<div class="flex gap-12">
+<div>
+<p class="text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">Monthly Token Budget</p>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-headline font-bold text-on-surface">2.4M</span>
+<span class="text-xs text-emerald-400 mb-1">42% Remaining</span>
+</div>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">Active Instances</p>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-headline font-bold text-on-surface">08</span>
+<span class="text-xs text-on-surface-variant mb-1">Across 3 Clusters</span>
+</div>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">System Version</p>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-headline font-bold text-secondary">V2.4 Stable</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="text-right">
+<p class="text-xs font-bold text-on-surface">Production Health</p>
+<p class="text-[10px] text-on-surface-variant">All providers online</p>
+</div>
+<div class="w-12 h-12 rounded-full border-2 border-primary/20 flex items-center justify-center p-1">
+<div class="w-full h-full rounded-full border-b-2 border-primary animate-spin"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Visual Texture Elements -->
+<div class="fixed top-0 right-0 -z-10 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none"></div>
+<div class="fixed bottom-0 left-0 -z-10 w-[400px] h-[400px] bg-secondary/5 rounded-full blur-[100px] pointer-events-none"></div>
+</body></html>

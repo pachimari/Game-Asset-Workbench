@@ -138,6 +138,21 @@ M5 不做：
 - 做出基本导航与工作台骨架
 - 接最少但完整的一条主流程
 
+当前已落地：
+
+- `web/` 目录已建立，技术栈为 `React + TypeScript + Vite + Tailwind CSS`
+- 已实现：
+  - 左侧批次导航
+  - 批次页骨架
+  - 条目工作台骨架
+  - 设置弹窗骨架
+- 已接通本地 API：
+  - `/tasks`
+  - `/tasks/{task_id}`
+  - `/tasks/{task_id}/items`
+  - `/tasks/{task_id}/items/{item_id}`
+  - `/providers`
+
 ### M5.3 Streamlit 降级
 
 目标：

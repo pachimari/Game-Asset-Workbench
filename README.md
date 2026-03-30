@@ -67,6 +67,19 @@ python3 -m pip install "fastapi>=0.115" "uvicorn>=0.30"
 PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
 ```
 
+启动 M5 正式前端：
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+默认开发地址：
+
+- 前端：`http://127.0.0.1:4173`
+- 本地 API：`http://127.0.0.1:8000`
+
 先创建一个空批次：
 
 ```bash
