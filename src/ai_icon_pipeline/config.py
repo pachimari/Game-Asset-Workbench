@@ -15,6 +15,7 @@ STATUS_BRIEF_GENERATED = "brief_generated"
 STATUS_BRIEF_APPROVED = "brief_approved"
 STATUS_PROMPT_GENERATED = "prompt_generated"
 STATUS_PROMPT_APPROVED = "prompt_approved"
+STATUS_IMAGE_GENERATING = "image_generating"
 STATUS_IMAGE_GENERATED = "image_generated"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
@@ -40,9 +41,14 @@ DEFAULT_RUNTIME_CONFIG = {
     "brief_provider": "mock",
     "prompt_provider": "mock",
     "image_provider": "mock",
-    "candidate_count": 2,
+    "candidate_count": 1,
     "image_size": "512x512",
+    "image_aspect_ratio": "1:1",
+    "image_resolution": "1K",
 }
+
+IMAGE_ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"]
+IMAGE_RESOLUTION_OPTIONS = ["auto", "512", "1K", "2K", "4K"]
 
 # 1x1 transparent PNG.
 PLACEHOLDER_PNG_BASE64 = (
