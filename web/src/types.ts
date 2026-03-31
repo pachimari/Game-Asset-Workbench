@@ -33,6 +33,11 @@ export type TaskSummary = {
   style_spec_ref: string
   runtime_config_ref: string
   items_summary?: Record<string, number>
+  runtime_config?: {
+    image_aspect_ratio: string | null
+    image_resolution: string | null
+    image_size?: string | null
+  }
   model_overrides: Record<StageName, ModelOverride>
 }
 

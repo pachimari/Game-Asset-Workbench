@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   approveItemStep,
   cancelItemImage,
@@ -19,6 +19,7 @@ import {
   saveGlobalDefaults,
   savePromptTemplates,
   syncProviderModels,
+  updateTask,
   updateProvider,
 } from './lib/api'
 import type {
@@ -37,6 +38,8 @@ import GlobalSettings from './components/GlobalSettings'
 type View = 'dashboard' | 'workspace'
 
 function App() {
+  const dashboardScrollRef = useRef<HTMLDivElement | null>(null)
+  const dashboardScrollTopRef = useRef(0)
   const [tasks, setTasks] = useState<TaskSummary[]>([])
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [activeTask, setActiveTask] = useState<TaskSummary | null>(null)
@@ -147,6 +150,7 @@ function App() {
   }, [activeTaskId, activeItemId])
 
   function handleSelectTask(taskId: string) {
+    dashboardScrollTopRef.current = 0
     setActiveTaskId(taskId)
     setActiveItemId(null)
     setActiveItem(null)
@@ -155,6 +159,7 @@ function App() {
   }
 
   function handleSelectItem(itemId: string) {
+    dashboardScrollTopRef.current = dashboardScrollRef.current?.scrollTop ?? 0
     setActiveItemId(itemId)
     setView('workspace')
   }
@@ -248,6 +253,28 @@ function App() {
       setView('dashboard')
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '删除批次失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleUpdateTaskSettings(payload: {
+    task_name: string
+    project_background: string
+    style_requirements: string
+    asset_domain: string
+    image_aspect_ratio: string
+    image_resolution: string
+  }) {
+    if (!activeTaskId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      const updated = await updateTask(activeTaskId, payload)
+      setActiveTask(updated)
+      await reloadTaskList(activeTaskId)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '保存批次设定失败')
     } finally {
       setActionBusy(false)
     }
@@ -376,6 +403,16 @@ function App() {
     return () => window.clearInterval(timer)
   }, [activeTaskId, activeItemId, workspace?.status])
 
+  useEffect(() => {
+    if (view !== 'dashboard') return
+    const container = dashboardScrollRef.current
+    if (!container) return
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTop = dashboardScrollTopRef.current
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [view, activeTaskId])
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface">
@@ -401,7 +438,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
+    <div className="h-screen overflow-hidden bg-background text-on-surface">
       <Sidebar
         tasks={tasks}
         activeTaskId={activeTaskId}
@@ -412,7 +449,7 @@ function App() {
         productName=""
       />
 
-      <main className="ml-60 flex min-h-screen flex-col">
+      <main className="ml-52 flex h-screen min-h-0 flex-col overflow-hidden">
         <TopBar
           title="工作台"
           breadcrumb={
@@ -422,49 +459,45 @@ function App() {
           }
         />
 
-        {view === 'workspace' && activeItem && workspace ? (
-          <>
-            <div className="border-b border-outline-variant/10 bg-surface-container-low/50 px-8 py-2">
-              <button
-                onClick={handleBackToDashboard}
-                className="flex items-center gap-2 text-xs text-on-surface-variant transition-colors hover:text-on-surface"
-              >
-                <span className="material-symbols-outlined text-sm">arrow_back</span>
-                返回批次
-              </button>
-            </div>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {view === 'workspace' && activeItem && workspace ? (
             <ItemWorkspace
               item={activeItem}
               workspace={workspace}
               actionBusy={actionBusy}
               actionError={actionError}
+              taskName={activeTask?.task_name ?? ''}
+              onBackToDashboard={handleBackToDashboard}
               onRunStep={(step) => handleWorkspaceAction('run', step)}
               onApproveStep={(step) => handleWorkspaceAction('approve', step)}
               onRollbackStep={(step) => handleWorkspaceAction('rollback', step)}
               onPollImage={(version) => handleWorkspaceAction('poll', undefined, version)}
               onCancelImage={() => handleWorkspaceAction('cancel')}
             />
-          </>
-        ) : activeTask ? (
-          <BatchDashboard
-            task={activeTask}
-            items={items}
-            activeItemId={activeItemId}
-            onSelectItem={handleSelectItem}
-            onCreateItem={handleCreateItem}
-            onCreateItemsBulk={handleCreateItemsBulk}
-            actionBusy={actionBusy}
-            actionError={actionError}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center p-8">
-            <div className="text-center">
-              <span className="material-symbols-outlined mb-4 text-4xl text-outline">inbox</span>
-              <h3 className="mb-2 text-2xl font-bold text-on-surface">还没有批次</h3>
-              <p className="text-sm text-on-surface-variant">创建一个批次后开始工作</p>
+          ) : activeTask ? (
+            <div ref={dashboardScrollRef} className="h-full overflow-y-auto">
+              <BatchDashboard
+                task={activeTask}
+                items={items}
+                activeItemId={activeItemId}
+                onSelectItem={handleSelectItem}
+                onSaveTaskSettings={handleUpdateTaskSettings}
+                onCreateItem={handleCreateItem}
+                onCreateItemsBulk={handleCreateItemsBulk}
+                actionBusy={actionBusy}
+                actionError={actionError}
+              />
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex h-full items-center justify-center p-8">
+              <div className="text-center">
+                <span className="material-symbols-outlined mb-4 text-4xl text-outline">inbox</span>
+                <h3 className="mb-2 text-2xl font-bold text-on-surface">还没有批次</h3>
+                <p className="text-sm text-on-surface-variant">创建一个批次后开始工作</p>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
 
       <GlobalSettings

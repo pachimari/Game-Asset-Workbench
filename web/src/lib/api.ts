@@ -80,6 +80,23 @@ export async function deleteTask(taskId: string): Promise<{ ok: boolean; task_id
   })
 }
 
+export async function updateTask(
+  taskId: string,
+  payload: {
+    task_name?: string | null
+    project_background?: string | null
+    style_requirements?: string | null
+    asset_domain?: string | null
+    image_aspect_ratio?: string | null
+    image_resolution?: string | null
+  },
+): Promise<TaskSummary> {
+  return request<TaskSummary>(`/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function createTaskItem(
   taskId: string,
   payload: {

@@ -40,24 +40,21 @@ const clampTwoLinesStyle = {
   overflow: 'hidden',
 }
 
-const clampThreeLinesStyle = {
-  display: '-webkit-box',
-  WebkitBoxOrient: 'vertical' as const,
-  WebkitLineClamp: 3,
-  overflow: 'hidden',
-}
-
 function descriptionFallback(task: TaskSummary) {
   if (task.project_background) return task.project_background
   if (task.style_requirements) return `风格要求：${task.style_requirements}`
   return '这个批次还没有填写项目背景和统一风格要求。'
 }
 
+const IMAGE_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9']
+const IMAGE_RESOLUTION_OPTIONS = ['auto', '512', '1K', '2K', '4K']
+
 export default function BatchDashboard({
   task,
   items,
   activeItemId,
   onSelectItem,
+  onSaveTaskSettings,
   onCreateItem,
   onCreateItemsBulk,
   actionBusy,
@@ -67,6 +64,14 @@ export default function BatchDashboard({
   items: ItemSummary[]
   activeItemId: string | null
   onSelectItem: (itemId: string) => void
+  onSaveTaskSettings: (payload: {
+    task_name: string
+    project_background: string
+    style_requirements: string
+    asset_domain: string
+    image_aspect_ratio: string
+    image_resolution: string
+  }) => Promise<void>
   onCreateItem: (payload: {
     asset_type: string
     title: string
@@ -87,17 +92,37 @@ export default function BatchDashboard({
   actionError: string | null
 }) {
   const [modal, setModal] = useState<'single' | 'bulk' | null>(null)
+  const [settingsExpanded, setSettingsExpanded] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('combat')
   const [assetType, setAssetType] = useState('skill_icon')
   const [extraContext, setExtraContext] = useState('')
+  const [taskName, setTaskName] = useState(task.task_name)
+  const [projectBackground, setProjectBackground] = useState(task.project_background)
+  const [styleRequirements, setStyleRequirements] = useState(task.style_requirements)
+  const [assetDomain, setAssetDomain] = useState(task.asset_domain)
+  const [imageAspectRatio, setImageAspectRatio] = useState(
+    task.runtime_config?.image_aspect_ratio || '1:1',
+  )
+  const [imageResolution, setImageResolution] = useState(
+    task.runtime_config?.image_resolution || '1K',
+  )
   const [bulkText, setBulkText] = useState('')
   const [bulkSummary, setBulkSummary] = useState<string | null>(null)
 
   const completed = task.items_summary?.completed ?? 0
   const inProgress = task.items_summary?.in_progress ?? 0
   const draft = task.items_summary?.draft ?? 0
+
+  function resetTaskSettingsDraft() {
+    setTaskName(task.task_name)
+    setProjectBackground(task.project_background)
+    setStyleRequirements(task.style_requirements)
+    setAssetDomain(task.asset_domain)
+    setImageAspectRatio(task.runtime_config?.image_aspect_ratio || '1:1')
+    setImageResolution(task.runtime_config?.image_resolution || '1K')
+  }
 
   async function handleBulkFileChange(file: File | null) {
     if (!file) return
@@ -154,6 +179,180 @@ export default function BatchDashboard({
               <div className="mt-1 text-2xl font-black text-primary">{completed}</div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="mb-4 rounded-xl border border-outline-variant/12 bg-surface-container-low">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-on-surface">批次设定</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+              <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
+                资产域：{task.asset_domain || '未填写'}
+              </span>
+              <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
+                宽高比：{task.runtime_config?.image_aspect_ratio || '1:1'}
+              </span>
+              <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
+                分辨率：{task.runtime_config?.image_resolution || '1K'}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (settingsExpanded) {
+                setSettingsExpanded(false)
+                return
+              }
+              resetTaskSettingsDraft()
+              setSettingsExpanded(true)
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container"
+          >
+            <Icon name={settingsExpanded ? 'expand_less' : 'tune'} className="text-[16px]" />
+            {settingsExpanded ? '收起批次设定' : '编辑批次设定'}
+          </button>
+        </div>
+
+        <div className="border-t border-outline-variant/10 px-4 pb-3 pt-0">
+          <div className="grid gap-3 py-3 lg:grid-cols-[1.2fr_1fr]">
+            <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                项目背景
+              </div>
+              <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+                {task.project_background || '未填写'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                统一风格要求
+              </div>
+              <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+                {task.style_requirements || '未填写'}
+              </p>
+            </div>
+          </div>
+
+          {settingsExpanded ? (
+            <form
+              className="grid gap-3 border-t border-outline-variant/10 pt-3"
+              onSubmit={async (event) => {
+                event.preventDefault()
+                await onSaveTaskSettings({
+                  task_name: taskName || '未命名批次',
+                  project_background: projectBackground,
+                  style_requirements: styleRequirements,
+                  asset_domain: assetDomain,
+                  image_aspect_ratio: imageAspectRatio,
+                  image_resolution: imageResolution,
+                })
+                setSettingsExpanded(false)
+              }}
+            >
+              <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr_0.6fr_0.6fr]">
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    批次名称
+                  </span>
+                  <input
+                    value={taskName}
+                    onChange={(event) => setTaskName(event.target.value)}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                    placeholder="批次名称"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    资产域
+                  </span>
+                  <input
+                    value={assetDomain}
+                    onChange={(event) => setAssetDomain(event.target.value)}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                    placeholder="game_icon_assets"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    宽高比
+                  </span>
+                  <select
+                    value={imageAspectRatio}
+                    onChange={(event) => setImageAspectRatio(event.target.value)}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  >
+                    {IMAGE_ASPECT_RATIO_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    分辨率
+                  </span>
+                  <select
+                    value={imageResolution}
+                    onChange={(event) => setImageResolution(event.target.value)}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  >
+                    {IMAGE_RESOLUTION_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    项目背景
+                  </span>
+                  <textarea
+                    value={projectBackground}
+                    onChange={(event) => setProjectBackground(event.target.value)}
+                    className="min-h-28 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm leading-6 text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                    placeholder="低权重背景信息，用于帮助所有条目保持同一世界观。"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    统一风格要求
+                  </span>
+                  <textarea
+                    value={styleRequirements}
+                    onChange={(event) => setStyleRequirements(event.target.value)}
+                    className="min-h-28 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm leading-6 text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                    placeholder="例如：统一材质、光照、边框、禁用项。"
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetTaskSettingsDraft()
+                    setSettingsExpanded(false)
+                  }}
+                  className="rounded-xl px-3 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionBusy}
+                  className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actionBusy ? '保存中…' : '保存批次设定'}
+                </button>
+              </div>
+            </form>
+          ) : null}
         </div>
       </section>
 

@@ -38,6 +38,7 @@ from .storage import (
     load_item,
     load_item_chat,
     load_item_events,
+    load_runtime_config,
     load_task,
     update_item,
     update_item_model_override,
@@ -316,6 +317,12 @@ def _workspace_payload(task_id: str, item_id: str) -> dict:
     }
 
 
+def _task_payload(task_id: str) -> dict:
+    task = load_task(task_id)
+    task["runtime_config"] = load_runtime_config(task_id)
+    return task
+
+
 def _provider_rows() -> list[dict]:
     settings = load_global_settings()
     rows: list[dict] = []
@@ -368,7 +375,7 @@ def create_app() -> FastAPI:
     @app.get("/tasks/{task_id}")
     def get_task(task_id: str) -> dict:
         try:
-            return load_task(task_id)
+            return _task_payload(task_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -413,7 +420,7 @@ def create_app() -> FastAPI:
             style_requirements=payload.style_requirements,
             asset_domain=payload.asset_domain,
         )
-        return task
+        return _task_payload(task["task_id"])
 
     @app.patch("/tasks/{task_id}")
     async def patch_task(task_id: str, payload: TaskUpdatePayload) -> dict:
@@ -434,7 +441,7 @@ def create_app() -> FastAPI:
                     image_aspect_ratio=payload.image_aspect_ratio,
                     image_resolution=payload.image_resolution,
                 )
-            return load_task(task_id)
+            return _task_payload(task_id)
         except Exception as exc:
             raise _to_http_error(exc) from exc
 

@@ -78,6 +78,8 @@ export default function ItemWorkspace({
   workspace,
   actionBusy,
   actionError,
+  taskName,
+  onBackToDashboard,
   onRunStep,
   onApproveStep,
   onRollbackStep,
@@ -88,6 +90,8 @@ export default function ItemWorkspace({
   workspace: WorkspacePayload
   actionBusy: boolean
   actionError: string | null
+  taskName: string
+  onBackToDashboard: () => void
   onRunStep: (step: 'brief_generation' | 'image_prompt' | 'image_generation') => void
   onApproveStep: (step: 'brief_generation' | 'image_prompt' | 'image_generation') => void
   onRollbackStep: (step: 'brief_generation' | 'image_prompt' | 'image_generation') => void
@@ -191,9 +195,28 @@ export default function ItemWorkspace({
   ] as const
 
   return (
-    <div className="flex flex-1 gap-4 overflow-hidden p-4 bg-surface">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface">
+      <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container-low/92 px-4 py-3 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={onBackToDashboard}
+            className="inline-flex items-center gap-2 rounded-lg border border-outline-variant/14 bg-surface-container px-3 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:border-primary/25 hover:text-primary"
+          >
+            <Icon name="arrow_back" className="text-[16px]" />
+            返回批次
+          </button>
+          <div className="min-w-0 text-right">
+            <div className="truncate text-[11px] uppercase tracking-[0.16em] text-outline">
+              {taskName || '当前批次'}
+            </div>
+            <div className="truncate text-sm font-bold text-on-surface">{item.title}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
       {/* Left Pane: Original Requirements */}
-      <section className="flex w-72 flex-col gap-4 overflow-y-auto">
+      <section className="flex min-h-0 w-72 flex-col gap-4 overflow-y-auto pr-1">
         <div className="rounded-md bg-surface-container-low p-4">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
@@ -311,7 +334,7 @@ export default function ItemWorkspace({
       </section>
 
       {/* Center Pane: Output Canvas */}
-      <section className="flex flex-1 flex-col gap-4 overflow-hidden">
+      <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
         {/* Tabs */}
         <div className="flex w-fit items-center gap-1 rounded bg-surface-container-low p-1">
           {tabs.map(([value, label]) => (
@@ -619,7 +642,7 @@ export default function ItemWorkspace({
       </section>
 
       {/* Right Pane: Chat & Version History */}
-      <section className="flex w-80 flex-col gap-4 overflow-y-auto">
+      <section className="flex min-h-0 w-80 flex-col gap-4 overflow-y-auto pl-1">
         {/* Chat Control */}
         <div className="flex min-h-[300px] flex-1 flex-col overflow-hidden rounded-md bg-surface-container-low">
           <div className="flex items-center justify-between bg-surface-container-highest px-4 py-2">
@@ -715,6 +738,7 @@ export default function ItemWorkspace({
           </div>
         </div>
       </section>
+      </div>
     </div>
   )
 }
