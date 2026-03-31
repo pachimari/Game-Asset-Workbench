@@ -52,6 +52,7 @@ export type ItemSummary = {
     image_aspect_ratio: string | null
     image_resolution: string | null
   }
+  preview_image_url?: string | null
 }
 
 export type ProviderSummary = {
@@ -110,4 +111,32 @@ export type WorkspacePayload = {
   }
   events: Array<Record<string, unknown>>
   chat: Array<Record<string, unknown>>
+}
+
+export type ModelEntry = {
+  id: string
+  label: string
+  stages: string[]
+  compatibility: string
+}
+
+export type ProviderDetail = {
+  id: string
+  label: string
+  provider_type: string
+  base_url: string
+  builtin: boolean
+  api_key_masked: string
+  models: ModelEntry[]
+  last_synced_at: string | null
+  last_error: string | null
+}
+
+export type GlobalSettingsData = {
+  defaults: Record<StageName, { provider: string; model: string }>
+  prompt_templates: {
+    brief_system_prompt: string
+    prompt_system_prompt: string
+  }
+  providers: ProviderDetail[]
 }

@@ -6,3 +6,5 @@ build/
 *.egg-info/
 .local/
 tasks/
+.gstack/
+.DS_Store

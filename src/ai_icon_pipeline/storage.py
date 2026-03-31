@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 import json
 import re
+import shutil
 
 from .config import (
     DEFAULT_RUNTIME_CONFIG,
@@ -210,6 +211,13 @@ def create_task(
     )
     refresh_task_summary(resolved_task_id)
     return load_task(resolved_task_id)
+
+
+def delete_task(task_id: str) -> None:
+    root = task_dir(task_id)
+    if not root.exists():
+        raise ValueError(f"Task not found: {task_id}")
+    shutil.rmtree(root)
 
 
 def update_runtime_config(

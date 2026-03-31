@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "on-primary-fixed-variant": "#0e009d",
+            "error-container": "#a70138",
+            "on-secondary-fixed-variant": "#533ea7",
+            "on-surface-variant": "#a3aac4",
+            "primary-container": "#9396ff",
+            "surface-tint": "#a3a6ff",
+            "surface-container-low": "#091328",
+            "on-primary-container": "#0a0081",
+            "tertiary": "#ffa5d9",
+            "on-primary": "#0f00a4",
+            "surface-container-high": "#141f38",
+            "surface-bright": "#1f2b49",
+            "on-tertiary": "#701455",
+            "surface-container-lowest": "#000000",
+            "tertiary-fixed-dim": "#ef81c4",
+            "surface-container-highest": "#192540",
+            "inverse-surface": "#faf8ff",
+            "secondary-fixed": "#d6cbff",
+            "on-background": "#dee5ff",
+            "error": "#ff6e84",
+            "surface": "#060e20",
+            "on-primary-fixed": "#000000",
+            "inverse-on-surface": "#4d556b",
+            "primary-fixed-dim": "#8387ff",
+            "surface-dim": "#060e20",
+            "on-secondary-fixed": "#361c89",
+            "on-tertiary-container": "#63054a",
+            "on-surface": "#dee5ff",
+            "error-dim": "#d73357",
+            "surface-variant": "#192540",
+            "secondary-dim": "#a28efc",
+            "primary-fixed": "#9396ff",
+            "outline-variant": "#40485d",
+            "on-secondary": "#21006d",
+            "background": "#060e20",
+            "on-secondary-container": "#d4c9ff",
+            "on-error": "#490013",
+            "surface-container": "#0f1930",
+            "inverse-primary": "#494bd7",
+            "primary": "#a3a6ff",
+            "secondary-fixed-dim": "#c8bbff",
+            "tertiary-fixed": "#ff8ed2",
+            "secondary-container": "#49339d",
+            "primary-dim": "#6063ee",
+            "on-tertiary-fixed-variant": "#6e1354",
+            "tertiary-dim": "#ef81c4",
+            "outline": "#6d758c",
+            "on-error-container": "#ffb2b9",
+            "secondary": "#a28efc",
+            "tertiary-container": "#ff8ed2",
+            "on-tertiary-fixed": "#3b002b"
+          },
+          fontFamily: {
+            "headline": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      line-height: 1;
+      text-transform: none;
+      letter-spacing: normal;
+      word-wrap: normal;
+      white-space: nowrap;
+      direction: ltr;
+    }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #060e20; }
+    ::-webkit-scrollbar-thumb { background: #40485d; border-radius: 2px; }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 antialiased">
+<!-- SideNavBar Anchor -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant/15 flex flex-col z-50">
+<div class="px-6 py-6 flex flex-col gap-1">
+<div class="flex items-center gap-3 mb-8">
+<div class="w-8 h-8 bg-primary rounded-sm flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">deployed_code</span>
+</div>
+<div class="flex flex-col">
+<span class="text-on-surface font-bold text-sm tracking-tight">Game Assets Pro</span>
+<span class="font-['Inter'] text-[0.65rem] font-medium uppercase tracking-widest text-on-surface-variant">V3 Production Pipeline</span>
+</div>
+</div>
+<nav class="flex flex-col gap-1 flex-1">
+<!-- Sidebar Navigation Items from JSON logic -->
+<a class="flex items-center gap-3 px-3 py-2.5 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container hover:text-on-surface group" href="#">
+<span class="material-symbols-outlined text-[20px]">layers</span>
+<span class="font-['Inter'] text-[0.75rem] font-medium uppercase tracking-wider">Current Batch</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 transition-all duration-200 ease-in-out bg-gradient-to-r from-primary/10 to-transparent border-l-2 border-primary text-on-surface" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">history</span>
+<span class="font-['Inter'] text-[0.75rem] font-medium uppercase tracking-wider">Production History</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#">
+<span class="material-symbols-outlined text-[20px]">database</span>
+<span class="font-['Inter'] text-[0.75rem] font-medium uppercase tracking-wider">Asset Library</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 transition-all duration-200 ease-in-out text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+<span class="font-['Inter'] text-[0.75rem] font-medium uppercase tracking-wider">Pipeline Status</span>
+</a>
+<div class="mt-8 mb-2 px-3">
+<span class="text-[0.6rem] font-bold text-outline uppercase tracking-[0.2em]">Active Batches</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<div class="px-3 py-2 text-[0.75rem] text-on-surface bg-surface-container rounded-sm border-l-2 border-primary-fixed flex items-center justify-between">
+<span class="truncate">Neon Protocol - Skills</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+</div>
+<div class="px-3 py-2 text-[0.75rem] text-on-surface-variant hover:bg-surface-container/50 cursor-pointer">
+<span class="truncate">Project Alpha - Buffs</span>
+</div>
+</div>
+</nav>
+<!-- Footer Tab Labels -->
+<div class="pt-6 border-t border-outline-variant/10 flex flex-col gap-1">
+<button class="w-full flex items-center gap-3 px-3 py-2.5 transition-all duration-200 ease-in-out bg-primary hover:bg-primary-dim text-on-primary-fixed rounded-sm mb-4">
+<span class="material-symbols-outlined text-[20px]">add_box</span>
+<span class="font-['Inter'] text-[0.75rem] font-bold uppercase tracking-wider">Create Batch</span>
+</button>
+<a class="flex items-center gap-3 px-3 py-2 transition-all duration-200 ease-in-out text-on-surface-variant hover:text-on-surface" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="font-['Inter'] text-[0.75rem] font-medium uppercase tracking-wider">Settings</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Workboard Area -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- TopNavBar Anchor -->
+<header class="w-full h-14 bg-surface-container-low flex justify-between items-center px-8 border-b border-outline-variant/15">
+<div class="flex items-center gap-6">
+<h1 class="text-lg font-black text-on-surface tracking-tighter">The Kinetic Archive</h1>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<nav class="flex gap-6 items-center">
+<a class="text-[0.8rem] font-semibold text-on-surface border-b-2 border-primary h-14 flex items-center" href="#">Workbench</a>
+<a class="text-[0.8rem] font-semibold text-on-surface-variant hover:text-on-surface transition-colors" href="#">Approvals</a>
+<a class="text-[0.8rem] font-semibold text-on-surface-variant hover:text-on-surface transition-colors" href="#">Team</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="absolute inset-y-0 left-3 flex items-center text-outline">
+<span class="material-symbols-outlined text-sm">search</span>
+</span>
+<input class="bg-surface-container-highest border-none rounded-sm pl-9 pr-4 py-1.5 text-xs w-64 focus:ring-1 focus:ring-primary/50 text-on-surface placeholder:text-outline transition-all" placeholder="Search items..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-bright rounded-sm transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:bg-surface-bright rounded-sm transition-colors">
+<span class="material-symbols-outlined text-[20px]">account_circle</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-8 flex-1 bg-surface">
+<!-- Batch Header Card -->
+<section class="mb-8 p-6 bg-surface-container-low rounded-md relative overflow-hidden">
+<div class="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-[120px]">neurology</span>
+</div>
+<div class="flex flex-col md:flex-row justify-between items-start gap-8">
+<div class="max-w-2xl">
+<div class="flex items-center gap-3 mb-2">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-widest rounded-sm">In Production</span>
+<span class="text-on-surface-variant text-xs font-medium">Batch #B-2024-081</span>
+</div>
+<h2 class="text-2xl font-extrabold text-on-surface tracking-tight mb-2">Neon Protocol - Skills</h2>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-4">
+              Project Context: Designing high-fidelity skill icons for a fast-paced cyberpunk tactical shooter. Visuals need to pop against dark HUD elements.
+            </p>
+<div class="flex flex-wrap gap-4">
+<div class="flex flex-col gap-1">
+<span class="text-[0.65rem] uppercase tracking-wider text-outline font-bold">Style Requirements</span>
+<div class="flex gap-2">
+<span class="bg-surface-container-highest text-primary text-[0.7rem] px-2 py-1 rounded-sm border border-outline-variant/20">Cyberpunk</span>
+<span class="bg-surface-container-highest text-primary text-[0.7rem] px-2 py-1 rounded-sm border border-outline-variant/20">High Contrast</span>
+<span class="bg-surface-container-highest text-primary text-[0.7rem] px-2 py-1 rounded-sm border border-outline-variant/20">Vectorized</span>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-6 bg-surface-container rounded-lg p-5 border border-outline-variant/10">
+<div class="flex flex-col">
+<span class="text-[0.65rem] uppercase tracking-wider text-outline font-bold mb-1">Total Items</span>
+<span class="text-2xl font-black text-on-surface">20</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[0.65rem] uppercase tracking-wider text-outline font-bold mb-1">Completed</span>
+<span class="text-2xl font-black text-primary">14</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[0.65rem] uppercase tracking-wider text-outline font-bold mb-1">Pending</span>
+<span class="text-2xl font-black text-secondary">06</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Item Overview Table -->
+<section class="bg-surface-container-low rounded-md overflow-hidden border border-outline-variant/5">
+<div class="px-6 py-4 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low/50">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">view_list</span>
+<span class="text-sm font-bold tracking-tight uppercase">Item Overview • 批次条目</span>
+</div>
+<div class="flex gap-2">
+<button class="text-xs px-3 py-1.5 bg-surface-container-highest text-on-surface hover:bg-surface-bright transition-colors rounded-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">filter_list</span> Filter
+            </button>
+<button class="text-xs px-3 py-1.5 bg-surface-container-highest text-on-surface hover:bg-surface-bright transition-colors rounded-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">sort</span> Sort
+            </button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[0.65rem] font-bold uppercase tracking-widest text-outline border-b border-outline-variant/10 bg-surface-container-lowest/20">
+<th class="px-6 py-3 font-semibold">Thumbnail</th>
+<th class="px-6 py-3 font-semibold">Item Title &amp; ID</th>
+<th class="px-6 py-3 font-semibold">Current Stage • 阶段</th>
+<th class="px-6 py-3 font-semibold">Version/Result</th>
+<th class="px-4 py-3 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<!-- Row 1 -->
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img class="w-full h-full object-cover" data-alt="abstract glowing geometric neon fireball icon design in cyberpunk blue and orange colors, high detail vector style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASCdXPc_MM41dMytcNbDCM9XNlvlxoNuJFNpYzcD5FgF_9EYWzaIeDnL-q_sKXLwODHRKUrZXXSkxZFGEaj-skOTZsZyTAeYt4pQWIzH4chYtDxwzxZhaRTyd3gsAnlyWnSBvPVXxh7oU0BU-JCbwDR6xe4ftSXzik6XYZphPidWfcceugvXrguxFHvida3H36rtA7-92_yRC3mM1tjkobRnpZteq01yVaJ7epQ7aIdiQgyWKAYmeUqmDxtoZvYqKtIGZi9pOb-dP4"/>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Fireball Icon</span>
+<span class="text-[0.65rem] font-mono text-outline">#SK-001</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="text-[0.75rem] font-medium text-on-surface-variant uppercase">Candidate Pool</span>
+<span class="text-[0.6rem] text-outline ml-1">候选池</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-[0.75rem] font-mono bg-surface-container-highest px-2 py-0.5 rounded-sm border border-outline-variant/20 text-on-surface-variant">12 Candidates</span>
+</td>
+<td class="px-4 py-4 text-right">
+<button class="bg-primary/10 text-primary hover:bg-primary hover:text-on-primary-fixed px-3 py-1.5 text-[0.7rem] font-bold rounded-sm transition-all active:scale-95">
+                    Enter Workspace
+                  </button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img class="w-full h-full object-cover" data-alt="cybernetic electric pulse icon, bright lightning bolt in neon violet and cyan, sleek minimalist UI game asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4RVF1Z2QcD2oc4GIensHoKgqelxPk2B_mKczZzSV8N7RBtnH84qQ06KHnXQhC3g_9KcZLTAsAjroAc01RIj0-_l8zohg6JayQQI8OrRn7QL9yoYJ4C6RdLipfv5e80030lh-Q0SmtrUp08IjmNOJ81kHEtwxTXLw3Uiqd-8cB_9jePA16pOP_-xqepgwZRt4sllUSVPe2wQZDS814zYsUs7i398V103TASW0P_-WMYg5zt6y1gTxwPNX_9u39JgVrEylyy585kRJQ"/>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Electric Pulse</span>
+<span class="text-[0.65rem] font-mono text-outline">#SK-002</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-[0.75rem] font-medium text-on-surface-variant uppercase">Completed</span>
+<span class="text-[0.6rem] text-outline ml-1">已完成</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-[0.75rem] font-mono bg-surface-container-highest px-2 py-0.5 rounded-sm border border-outline-variant/20 text-on-surface-variant">v2.4 Final</span>
+</td>
+<td class="px-4 py-4 text-right">
+<button class="bg-outline-variant/20 text-on-surface-variant hover:bg-primary hover:text-on-primary-fixed px-3 py-1.5 text-[0.7rem] font-bold rounded-sm transition-all active:scale-95">
+                    Enter Workspace
+                  </button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline text-[24px]">description</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Stealth Mode</span>
+<span class="text-[0.65rem] font-mono text-outline">#SK-003</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-outline animate-pulse"></span>
+<span class="text-[0.75rem] font-medium text-on-surface-variant uppercase">Design Brief</span>
+<span class="text-[0.6rem] text-outline ml-1">设计说明</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-[0.75rem] font-mono bg-surface-container-highest px-2 py-0.5 rounded-sm border border-outline-variant/20 text-on-surface-variant">Queueing</span>
+</td>
+<td class="px-4 py-4 text-right">
+<button class="bg-outline-variant/20 text-on-surface-variant hover:bg-primary hover:text-on-primary-fixed px-3 py-1.5 text-[0.7rem] font-bold rounded-sm transition-all active:scale-95">
+                    Enter Workspace
+                  </button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<div class="w-full h-full bg-gradient-to-br from-secondary/40 to-primary/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface animate-spin text-[18px]">cached</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Data Breach</span>
+<span class="text-[0.65rem] font-mono text-outline">#SK-004</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="text-[0.75rem] font-medium text-on-surface-variant uppercase">Image Prompt</span>
+<span class="text-[0.6rem] text-outline ml-1">出图指令</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-[0.75rem] font-mono bg-surface-container-highest px-2 py-0.5 rounded-sm border border-outline-variant/20 text-on-surface-variant">Generating...</span>
+</td>
+<td class="px-4 py-4 text-right">
+<button class="bg-outline-variant/20 text-on-surface-variant hover:bg-primary hover:text-on-primary-fixed px-3 py-1.5 text-[0.7rem] font-bold rounded-sm transition-all active:scale-95">
+                    Enter Workspace
+                  </button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="px-6 py-4">
+<div class="w-12 h-12 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/20">
+<img class="w-full h-full object-cover" data-alt="abstract nanotech shield icon, honeycomb pattern with glowing green edges, tactical RPG skill icon style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-lLT2TUWNyJbPB1b22iGQbHX82py99iO-PRJgml6A-NYF0lMzKc9KY4aEG56hmG7ceth-_W63h9S7Hn_mflDwAB5D3dTfhk0fX252S79GeQO94jSLRIwl075Eil5Wu6lrSjdoa031KntySt85B182YeCl8bQaCsL2-Zvkvlc7k9yH8L74Srw8-NIZtVYEawimkhSin8eY_ao3eNQy37PctaxL_EjsFNlDFTUZkV158eYR4RM_cv4k4Y0-65IF8oe8E_JSQLc-rKTh"/>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Nanotech Shield</span>
+<span class="text-[0.65rem] font-mono text-outline">#SK-005</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-[0.75rem] font-medium text-on-surface-variant uppercase">Completed</span>
+<span class="text-[0.6rem] text-outline ml-1">已完成</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-[0.75rem] font-mono bg-surface-container-highest px-2 py-0.5 rounded-sm border border-outline-variant/20 text-on-surface-variant">v1.1 Selected</span>
+</td>
+<td class="px-4 py-4 text-right">
+<button class="bg-outline-variant/20 text-on-surface-variant hover:bg-primary hover:text-on-primary-fixed px-3 py-1.5 text-[0.7rem] font-bold rounded-sm transition-all active:scale-95">
+                    Enter Workspace
+                  </button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination/Footer of Table -->
+<div class="px-6 py-4 bg-surface-container-lowest/10 flex justify-between items-center text-[0.7rem] text-outline font-medium">
+<span>Showing 5 of 20 items</span>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-1 hover:text-on-surface transition-colors opacity-50 cursor-not-allowed">
+<span class="material-symbols-outlined text-[14px]">chevron_left</span> Previous
+            </button>
+<div class="flex gap-1">
+<span class="w-6 h-6 flex items-center justify-center bg-primary text-on-primary-fixed rounded-sm font-bold">1</span>
+<span class="w-6 h-6 flex items-center justify-center hover:bg-surface-container rounded-sm cursor-pointer">2</span>
+<span class="w-6 h-6 flex items-center justify-center hover:bg-surface-container rounded-sm cursor-pointer">3</span>
+<span class="w-6 h-6 flex items-center justify-center hover:bg-surface-container rounded-sm cursor-pointer">4</span>
+</div>
+<button class="flex items-center gap-1 hover:text-on-surface transition-colors">
+              Next <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Specialized Component: Candidate Strip (Quick Peek) -->
+<section class="mt-8">
+<h3 class="text-[0.65rem] font-bold uppercase tracking-widest text-outline mb-4 flex items-center gap-2">
+          Recently Generated Candidates <span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+</h3>
+<div class="flex gap-3 overflow-x-auto pb-4">
+<!-- Candidate Cards -->
+<div class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest rounded-sm border border-outline-variant/10 p-1 group cursor-pointer relative">
+<img class="w-full h-full object-cover" data-alt="abstract fluid neon wave icon asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUqjzI1LYeqh3TCkRe2MPHLRI5Ory_k8Tk28iMIiRoRUEPdkCQnG92JLckDs1RNlmp34-rNcErnZ17cpdu5MmSXlc-0goFweJnwHNhozBqqlkLqmeQkQX20zxuwyX-HA0hGbpQyrJU2KoScriJCuCXfN_6wmFN91jWY7IJVymWSlwqlKnjqQpC5H911c6uXk5VLDFg3wJOnWGX_5MqMbm_7Rk7Kjuthp_11B88V9DcdOo63P3z0cWurMui2E7hpo9ERodlmZdCQw_l"/>
+<div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">zoom_in</span>
+</div>
+</div>
+<div class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest rounded-sm border border-outline-variant/10 p-1 group cursor-pointer relative">
+<img class="w-full h-full object-cover" data-alt="abstract crystal neon burst icon asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFrEE-UuxzausY76Lb_uN3nE_VnR29Yjhd3Bq_a2C09ecMyxSoy39NBsj50AJ4vXBeiEjPovIHppOCxxH8YhHonvtOdV-0_IfX0Nw3qC5-tylesfnMnvjof9nfwId5-b3ijV3jycqU7xtIrzr9nmKknp4EWvefR5iXlL1XBPbpMfURjzOOjJoZgQ7UzXpX5g9mGNuHcdJkeeIJKPWeamGRNjGr_B6Ijg8GtudHORSPQ3AGTKsAcvonHofgxM0BdnRheQl5uZWfcvH9"/>
+<div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">zoom_in</span>
+</div>
+</div>
+<div class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest rounded-sm border border-outline-variant/10 p-1 group cursor-pointer relative">
+<img class="w-full h-full object-cover" data-alt="cyberpunk circuit pattern icon asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1_ZII6mrnhSf0o1S1Sm_bX_RnShEdg5yJBQ8u5-G9VG4ABTq-NX4Sfhxg9dUlZtkiHvhQbNd0J9RtBLt5djyDICfQEoQU-6dxgYxO_qJn1Hlb2YRzu9EFR0fKXT0A7JRpHtiF9mOfm2FaXgzhc-FgX3Vbx5TISPJZU8PsNT7I7XOS91Q-9KyHtY86_ZrDxABIY-X3vmyZfQHsG1aNf87wXurNXLtrSqOkMraQmiMOq2B2sKw-zjsi_IzLEq6i7wVs85DY4K4WLDbH"/>
+<div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">zoom_in</span>
+</div>
+</div>
+<div class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest rounded-sm border border-outline-variant/10 p-1 group cursor-pointer relative">
+<img class="w-full h-full object-cover" data-alt="neon skull glitch icon asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYwC2CRuZzG8u9Rb2idqDfswBftRMJYDodZSNB3MIqmZmaxffiBsj98PWkSWKOryMD-iPuiJkUwLSSXX_Lk_lJc7KWZYyHFC6OUqQm_ja1bQeV5zqBQtfG4tgZUNqQeVPZzqs8GClQGJThKOIgsV-E_zTL3pF8G9rlGkufMzXCK0bjUusPW7p779xoift8WF0loJRa03gwAr5Lz_i0Qzkmdxq3Q9Mvv--WVaz48W14ZHLAelCH9pg2JoWYLFiifFuqSU7KO4U23JSH"/>
+<div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">zoom_in</span>
+</div>
+</div>
+<div class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest rounded-sm border border-outline-variant/10 p-1 group cursor-pointer relative">
+<img class="w-full h-full object-cover" data-alt="futuristic tactical visor icon asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCD9RwZkk8rtbB47IczItGZEGuZ3HefuBAKyCcGw_yEc5kxXOX7dKf3OVnDlSFR_a2WuB6bKjfANgpMwakdzh7-FtqGEqIoL8KFd5AemcS1vhkOjkMjLzSYd6i4uguI2vajxD3Ocll3Xa3SmRZckzbjm5qCCiawK7rsUHjPRM-VB2y-i4vHvf50mNEnEq3hJQAsU-KmD2Yj_mXCJMBvYHplzNkGfDmjntIgQyqwpjCu3nEBTTx6ve-ASb7gKylZvWExFrSI371I9VmI"/>
+<div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">zoom_in</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Contextual Floating Action Button -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary rounded-full text-on-primary-fixed shadow-2xl flex items-center justify-center active:scale-95 transition-all z-[60] group">
+<span class="material-symbols-outlined text-[28px] group-hover:rotate-90 transition-transform">add</span>
+<span class="absolute right-full mr-4 bg-primary text-on-primary-fixed px-3 py-1.5 rounded-sm text-[0.7rem] font-bold uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-lg">New Item</span>
+</button>
+</body></html>

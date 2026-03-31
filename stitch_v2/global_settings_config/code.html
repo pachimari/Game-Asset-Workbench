@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "on-tertiary-container": "#63054a",
+            "primary-dim": "#6063ee",
+            "surface-container-highest": "#192540",
+            "on-surface": "#dee5ff",
+            "inverse-primary": "#494bd7",
+            "secondary-container": "#49339d",
+            "on-secondary-container": "#d4c9ff",
+            "surface-dim": "#060e20",
+            "on-primary-container": "#0a0081",
+            "on-surface-variant": "#a3aac4",
+            "on-tertiary-fixed": "#3b002b",
+            "surface": "#060e20",
+            "secondary-fixed-dim": "#c8bbff",
+            "secondary-fixed": "#d6cbff",
+            "outline": "#6d758c",
+            "error": "#ff6e84",
+            "on-primary-fixed-variant": "#0e009d",
+            "on-tertiary-fixed-variant": "#6e1354",
+            "on-secondary-fixed-variant": "#533ea7",
+            "primary-fixed": "#9396ff",
+            "outline-variant": "#40485d",
+            "secondary": "#a28efc",
+            "tertiary": "#ffa5d9",
+            "primary-container": "#9396ff",
+            "surface-container-high": "#141f38",
+            "surface-bright": "#1f2b49",
+            "on-secondary-fixed": "#361c89",
+            "on-error-container": "#ffb2b9",
+            "primary-fixed-dim": "#8387ff",
+            "tertiary-container": "#ff8ed2",
+            "tertiary-fixed": "#ff8ed2",
+            "on-background": "#dee5ff",
+            "surface-container-low": "#091328",
+            "inverse-on-surface": "#4d556b",
+            "error-dim": "#d73357",
+            "surface-container": "#0f1930",
+            "inverse-surface": "#faf8ff",
+            "surface-container-lowest": "#000000",
+            "on-primary-fixed": "#000000",
+            "on-primary": "#0f00a4",
+            "on-secondary": "#21006d",
+            "tertiary-dim": "#ef81c4",
+            "surface-variant": "#192540",
+            "secondary-dim": "#a28efc",
+            "primary": "#a3a6ff",
+            "tertiary-fixed-dim": "#ef81c4",
+            "on-tertiary": "#701455",
+            "on-error": "#490013",
+            "error-container": "#a70138",
+            "background": "#060e20",
+            "surface-tint": "#a3a6ff"
+          },
+          fontFamily: {
+            "headline": ["Inter"],
+            "body": ["Inter"],
+            "label": ["Inter"]
+          },
+          borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #40485d; border-radius: 2px; }
+    .glass-panel { background: rgba(163, 166, 255, 0.08); backdrop-filter: blur(12px); }
+    .code-editor { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.75rem; line-height: 1.5; }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 antialiased overflow-hidden">
+<!-- Top Navigation Bar -->
+<nav class="bg-[#060e20] text-[#a3a6ff] font-['Inter'] antialiased text-[0.75rem] tracking-tight w-full h-12 flex items-center justify-between px-4 z-50">
+<div class="flex items-center space-x-8">
+<div class="text-sm font-bold text-[#dee5ff] tracking-tighter uppercase">Indigo Forge</div>
+<div class="hidden md:flex space-x-6">
+<span class="text-[#a3aac4] hover:bg-[#1f2b49] transition-colors cursor-pointer active:opacity-80 px-2 py-1">Batch Name</span>
+<span class="text-[#a3aac4] hover:bg-[#1f2b49] transition-colors cursor-pointer active:opacity-80 px-2 py-1">Item Name</span>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<span class="material-symbols-outlined text-[#a3aac4] cursor-pointer hover:text-[#dee5ff]">notifications</span>
+<span class="material-symbols-outlined text-[#dee5ff] cursor-pointer" style="font-variation-settings: 'FILL' 1;">account_circle</span>
+</div>
+</nav>
+<div class="flex h-[calc(100vh-3rem)]">
+<!-- Side Navigation Bar -->
+<aside class="bg-[#091328] border-r border-[#40485d]/15 h-screen w-64 flex flex-col font-['Inter'] text-[0.6875rem] font-medium uppercase tracking-widest py-4 space-y-2">
+<div class="px-6 mb-6">
+<div class="text-[#dee5ff] text-[0.75rem] font-bold tracking-tight mb-1">Project Alpha</div>
+<div class="text-[#a3aac4] text-[0.625rem] lowercase tracking-normal">Game Assets</div>
+</div>
+<button class="mx-4 mb-6 bg-gradient-to-br from-primary to-primary-dim text-on-primary py-2 px-4 rounded-sm font-bold tracking-widest flex items-center justify-center space-x-2 transition-transform active:scale-[0.98]">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>New Batch</span>
+</button>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center px-6 py-3 space-x-3 text-[#a3aac4] hover:text-[#dee5ff] hover:bg-[#0f1930] transition-all cursor-pointer">
+<span class="material-symbols-outlined text-lg">folder_open</span>
+<span>Cyberpunk Skill Icons</span>
+</div>
+<div class="flex items-center px-6 py-3 space-x-3 text-[#a3aac4] hover:text-[#dee5ff] hover:bg-[#0f1930] transition-all cursor-pointer">
+<span class="material-symbols-outlined text-lg">folder_open</span>
+<span>Medieval Item Icons</span>
+</div>
+</nav>
+<div class="mt-auto px-4">
+<div class="flex items-center px-4 py-3 space-x-3 text-[#a3a6ff] border-l-2 border-[#a3a6ff] bg-[#0f1930] cursor-pointer">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span>Settings</span>
+</div>
+</div>
+</aside>
+<!-- Main Workspace -->
+<main class="flex-1 bg-surface-dim overflow-y-auto custom-scrollbar p-8">
+<header class="mb-10">
+<h1 class="text-on-surface text-2xl font-extrabold tracking-tight mb-2">Global Settings</h1>
+<p class="text-on-surface-variant text-sm">System-wide configurations for asset production pipelines.</p>
+</header>
+<div class="grid grid-cols-12 gap-6">
+<!-- Provider Configuration -->
+<section class="col-span-12 lg:col-span-7 space-y-6">
+<div class="bg-surface-container-low p-6 rounded-md">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-on-surface text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">hub</span>
+                Provider Configuration
+              </h2>
+<button class="text-primary text-[0.6875rem] font-bold uppercase tracking-widest hover:underline">Add Provider</button>
+</div>
+<div class="space-y-3">
+<!-- Gemini -->
+<div class="bg-surface-container p-4 flex items-start justify-between border-l-2 border-primary">
+<div class="flex gap-4">
+<div class="w-10 h-10 bg-surface-container-highest rounded-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-on-surface text-sm font-semibold">Gemini</span>
+<span class="bg-secondary-container/30 text-secondary text-[0.625rem] px-1.5 py-0.5 rounded-sm font-bold uppercase">Connected</span>
+</div>
+<div class="text-on-surface-variant text-[0.6875rem] mb-2">Instance: <span class="text-on-surface">production-gemini-v1</span></div>
+<div class="flex flex-wrap gap-2">
+<span class="bg-surface-container-lowest text-on-surface-variant text-[0.625rem] px-2 py-1 rounded-sm border border-outline-variant/15">gemini-1.5-pro</span>
+<span class="bg-surface-container-lowest text-on-surface-variant text-[0.625rem] px-2 py-1 rounded-sm border border-outline-variant/15">gemini-1.5-flash</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<!-- DeepSeek -->
+<div class="bg-surface-container p-4 flex items-start justify-between">
+<div class="flex gap-4">
+<div class="w-10 h-10 bg-surface-container-highest rounded-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant">terminal</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-on-surface text-sm font-semibold">DeepSeek</span>
+<span class="bg-error-container/20 text-error text-[0.625rem] px-1.5 py-0.5 rounded-sm font-bold uppercase">Offline</span>
+</div>
+<div class="text-on-surface-variant text-[0.6875rem] mb-2">Instance: <span class="text-on-surface">main-node-cn</span></div>
+<div class="flex flex-wrap gap-2">
+<span class="bg-surface-container-lowest text-on-surface-variant text-[0.625rem] px-2 py-1 rounded-sm border border-outline-variant/15 opacity-50">deepseek-coder</span>
+<span class="bg-surface-container-lowest text-on-surface-variant text-[0.625rem] px-2 py-1 rounded-sm border border-outline-variant/15 opacity-50">deepseek-chat</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<!-- ToAPIs-Main -->
+<div class="bg-surface-container p-4 flex items-start justify-between border-l-2 border-primary">
+<div class="flex gap-4">
+<div class="w-10 h-10 bg-surface-container-highest rounded-sm flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">api</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-on-surface text-sm font-semibold">ToAPIs-Main</span>
+<span class="bg-secondary-container/30 text-secondary text-[0.625rem] px-1.5 py-0.5 rounded-sm font-bold uppercase">Connected</span>
+</div>
+<div class="text-on-surface-variant text-[0.6875rem] mb-2">Instance: <span class="text-on-surface">edge-proxy-primary</span></div>
+<div class="flex flex-wrap gap-2">
+<span class="bg-surface-container-lowest text-on-surface-variant text-[0.625rem] px-2 py-1 rounded-sm border border-outline-variant/15">flux-pro</span>
+<span class="bg-surface-container-lowest text-on-surface-variant text-[0.625rem] px-2 py-1 rounded-sm border border-outline-variant/15">stable-diffusion-xl</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+</div>
+</div>
+<!-- Template Editor Section -->
+<div class="bg-surface-container-low p-6 rounded-md">
+<h2 class="text-on-surface text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">edit_note</span>
+              Template Editor
+            </h2>
+<div class="space-y-6">
+<div>
+<label class="block text-on-surface-variant text-[0.625rem] uppercase font-bold tracking-widest mb-2">Design Brief Template</label>
+<div class="bg-surface-container-lowest border border-outline-variant/20 rounded-sm p-4 code-editor text-primary-fixed min-h-[120px]">
+<span class="text-secondary opacity-80"># DESIGN BRIEF v2.4</span><br/>
+                  CONTEXT: <span class="text-on-surface">"{context}"</span><br/>
+                  THEME: <span class="text-on-surface">"cyberpunk_noir"</span><br/>
+                  PALETTE: <span class="text-on-surface">["#00F0FF", "#FF00AA", "#121212"]</span><br/>
+<span class="text-on-surface-variant">// AI will extrapolate visual hierarchy from these keys</span>
+</div>
+</div>
+<div>
+<label class="block text-on-surface-variant text-[0.625rem] uppercase font-bold tracking-widest mb-2">Image Prompt Template</label>
+<div class="bg-surface-container-lowest border border-outline-variant/20 rounded-sm p-4 code-editor text-primary-fixed min-h-[120px]">
+<span class="text-on-surface-variant italic">/generate</span> high-fidelity, <span class="text-on-surface">"{asset_type}"</span>, <br/>
+                  meticulous detail, cinematic lighting, 8k resolution,<br/>
+<span class="text-on-surface">"style: {global_style_override}"</span>, <br/>
+                  --no text, watermark, blur
+                </div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Side: Model Inheritance & Metadata -->
+<section class="col-span-12 lg:col-span-5 space-y-6">
+<!-- Inheritance Visualization -->
+<div class="bg-surface-container-low p-6 rounded-md">
+<h2 class="text-on-surface text-xs font-bold uppercase tracking-widest mb-8 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">account_tree</span>
+              Model Inheritance Flow
+            </h2>
+<div class="relative space-y-12 pl-6">
+<!-- Vertical Line Connector -->
+<div class="absolute left-[34px] top-6 bottom-6 w-px bg-gradient-to-b from-primary via-primary/30 to-transparent"></div>
+<!-- Node 1: Global -->
+<div class="relative flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center border border-primary z-10">
+<span class="material-symbols-outlined text-sm text-primary">public</span>
+</div>
+<div>
+<div class="text-on-surface text-xs font-bold uppercase">Global Default</div>
+<div class="text-on-surface-variant text-[0.625rem]">Gemini 1.5 Pro | Default Token: 4096</div>
+</div>
+</div>
+<!-- Node 2: Batch -->
+<div class="relative flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center border border-primary z-10">
+<span class="material-symbols-outlined text-sm text-primary">layers</span>
+</div>
+<div>
+<div class="text-on-surface text-xs font-bold uppercase">Batch Override</div>
+<div class="text-on-surface-variant text-[0.625rem]">Flux-Pro | Quality: Hyper-Res</div>
+<div class="mt-1 flex items-center gap-1">
+<span class="text-secondary text-[0.625rem] font-medium italic">Active Context: Cyberpunk Skill Icons</span>
+</div>
+</div>
+</div>
+<!-- Node 3: Item -->
+<div class="relative flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center border border-primary/20 z-10">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">radio_button_checked</span>
+</div>
+<div>
+<div class="text-on-surface text-xs font-bold uppercase">Item Level</div>
+<div class="text-on-surface-variant text-[0.625rem]">Inheriting from Batch (98.2%)</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Glassmorphism Stats Card -->
+<div class="glass-panel p-6 rounded-md border border-primary/10">
+<h3 class="text-on-surface text-[0.6875rem] font-bold uppercase tracking-[0.2em] mb-4">Pipeline Health</h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container/40 p-3 rounded-sm">
+<div class="text-on-surface-variant text-[0.625rem] mb-1">Total Providers</div>
+<div class="text-primary text-xl font-black">04</div>
+</div>
+<div class="bg-surface-container/40 p-3 rounded-sm">
+<div class="text-on-surface-variant text-[0.625rem] mb-1">Active Batches</div>
+<div class="text-primary text-xl font-black">12</div>
+</div>
+<div class="bg-surface-container/40 p-3 rounded-sm col-span-2">
+<div class="flex justify-between items-end mb-2">
+<div class="text-on-surface-variant text-[0.625rem]">API Load Intensity</div>
+<div class="text-secondary text-[0.625rem] font-bold">24%</div>
+</div>
+<div class="w-full h-1.5 bg-surface-container-lowest rounded-full overflow-hidden">
+<div class="w-[24%] h-full bg-primary shadow-[0_0_8px_rgba(163,166,255,0.4)]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Operational Footer buttons -->
+<div class="flex gap-3">
+<button class="flex-1 bg-surface-container-highest border border-outline-variant/30 text-on-surface py-3 text-[0.6875rem] font-bold uppercase tracking-widest rounded-sm hover:bg-surface-bright transition-colors">
+              Reset to Defaults
+            </button>
+<button class="flex-1 bg-gradient-to-r from-primary to-primary-dim text-on-primary py-3 text-[0.6875rem] font-bold uppercase tracking-widest rounded-sm shadow-lg shadow-primary/10">
+              Apply Changes
+            </button>
+</div>
+</section>
+</div>
+</main>
+</div>
+<!-- Subtle Texture Overlay -->
+<div class="fixed inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay" data-alt="subtle dark carbon fiber texture overlay for professional industrial look" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAL5UQpuoookDzoMac7Ukjhlhk6DpeygYnMSCQz9pohcJwJCYMeFdeWvzWEBTktSHU7pa2offnFWZ7XaY9zAw_zksCMaWInRfpoTcwhJ5S5XVSPtR0AYw2QLKCR4uPZtuAoCNhayDkRTjCnKPhelEE0LkcEk_iNxMgQcWWBEE4A7Xqq6_kebu78a5sAynGT_HBbBmAFNzedpuPskH_63Sq_FD0csdP-P0jm2P6ubJEkBq8iLl7RZz8GuV1H4qUuw7VwHmkNP0DAVuGL');">
+</div>
+</body></html>
