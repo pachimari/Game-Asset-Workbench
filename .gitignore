@@ -8,3 +8,6 @@ build/
 tasks/
 .gstack/
 .DS_Store
+stitch/
+stitch_batch_dashboard/
+stitch_v2/
