@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from base64 import b64decode
 import json
+import socket
 from urllib import error, parse, request
 
 from .openai_compatible import ProviderRequestError
@@ -15,11 +16,21 @@ except Exception:  # pragma: no cover - optional dependency at runtime
 
 
 class GeminiNativeProvider:
-    def __init__(self) -> None:
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-        self.label = "Gemini Native"
+    REQUEST_TIMEOUT_SECONDS = 300
 
-    def _request_json(
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://generativelanguage.googleapis.com/v1beta",
+        label: str = "Gemini Native",
+    ) -> None:
+        normalized = base_url.rstrip("/")
+        if not normalized.endswith("/v1beta"):
+            normalized = f"{normalized}/v1beta"
+        self.base_url = normalized
+        self.label = label
+
+    def _request_json_with_api_key_query(
         self,
         *,
         method: str,
@@ -32,14 +43,62 @@ class GeminiNativeProvider:
         headers = {"Content-Type": "application/json"}
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         req = request.Request(url, data=data, headers=headers, method=method)
-        try:
-            with request.urlopen(req, timeout=120) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="ignore")
-            raise ProviderRequestError(f"{self.label} request failed: {exc.code} {body or exc.reason}") from exc
-        except error.URLError as exc:
-            raise ProviderRequestError(f"{self.label} request failed: {exc.reason}") from exc
+        with request.urlopen(req, timeout=self.REQUEST_TIMEOUT_SECONDS) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def _request_json_with_bearer(
+        self,
+        *,
+        method: str,
+        path: str,
+        api_key: str,
+        payload: dict | None = None,
+    ) -> dict:
+        url = f"{self.base_url}{path}"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "ai-icon-pipeline/0.1",
+        }
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        req = request.Request(url, data=data, headers=headers, method=method)
+        with request.urlopen(req, timeout=self.REQUEST_TIMEOUT_SECONDS) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def _request_json(
+        self,
+        *,
+        method: str,
+        path: str,
+        api_key: str,
+        payload: dict | None = None,
+    ) -> dict:
+        last_error: Exception | None = None
+        request_attempts = (
+            self._request_json_with_api_key_query,
+            self._request_json_with_bearer,
+        )
+        for request_attempt in request_attempts:
+            try:
+                return request_attempt(
+                    method=method,
+                    path=path,
+                    api_key=api_key,
+                    payload=payload,
+                )
+            except error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="ignore")
+                last_error = ProviderRequestError(
+                    f"{self.label} request failed: {exc.code} {body or exc.reason}"
+                )
+            except error.URLError as exc:
+                last_error = ProviderRequestError(f"{self.label} request failed: {exc.reason}")
+            except socket.timeout:
+                last_error = ProviderRequestError(
+                    f"{self.label} request timed out after {self.REQUEST_TIMEOUT_SECONDS}s"
+                )
+        raise last_error or ProviderRequestError(f"{self.label} request failed")
 
     def list_models(self, *, api_key: str) -> list[dict]:
         payload = self._request_json(method="GET", path="/models", api_key=api_key)
@@ -96,7 +155,13 @@ class GeminiNativeProvider:
         aspect_ratio: str | None,
         image_resolution: str | None,
     ) -> list[bytes]:
-        if model.startswith("gemini-3") and genai is not None and types is not None:
+        use_sdk_stream = (
+            model.startswith("gemini-3")
+            and genai is not None
+            and types is not None
+            and self.base_url.startswith("https://generativelanguage.googleapis.com")
+        )
+        if use_sdk_stream:
             return self._generate_gemini_images_via_sdk(
                 api_key=api_key,
                 model=model,

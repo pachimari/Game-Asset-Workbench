@@ -58,6 +58,7 @@ export type ItemSummary = {
     image_resolution: string | null
   }
   preview_image_url?: string | null
+  pending_image_jobs?: number
 }
 
 export type ProviderSummary = {
@@ -84,6 +85,7 @@ export type CandidateVersion = {
   model: string | null
   created_at: string | null
   is_current: boolean
+  is_starred: boolean
   async_job: {
     status?: string
     progress?: number

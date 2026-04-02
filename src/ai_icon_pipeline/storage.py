@@ -37,6 +37,10 @@ def default_item_runtime_overrides() -> dict:
     }
 
 
+def default_starred_image_versions() -> list[str]:
+    return []
+
+
 def normalize_runtime_config(runtime_config: dict | None) -> dict:
     merged = deepcopy(DEFAULT_RUNTIME_CONFIG)
     if isinstance(runtime_config, dict):
@@ -117,6 +121,7 @@ def _normalize_item(raw_item: dict, item_id: str, timestamp: str) -> dict:
         "status": STATUS_DRAFT,
         "created_at": timestamp,
         "updated_at": timestamp,
+        "starred_image_versions": list(raw_item.get("starred_image_versions", default_starred_image_versions())),
         "current_versions": {
             "brief_generation": None,
             "image_prompt": None,
@@ -145,6 +150,7 @@ def _ensure_item_schema(item: dict) -> dict:
     item.setdefault("runtime_overrides", deepcopy(default_item_runtime_overrides()))
     for key, value in default_item_runtime_overrides().items():
         item["runtime_overrides"].setdefault(key, value)
+    item.setdefault("starred_image_versions", list(default_starred_image_versions()))
     return item
 
 
@@ -374,6 +380,7 @@ def update_item(
     item["runtime_overrides"] = updated_runtime_overrides
     if source_changed:
         item["status"] = STATUS_DRAFT
+        item["starred_image_versions"] = []
         item["current_versions"] = {
             "brief_generation": None,
             "image_prompt": None,
@@ -404,6 +411,43 @@ def update_item(
             "item_id": item_id,
             "to": item["status"],
             "source_changed": source_changed,
+        },
+    )
+    refresh_task_summary(task_id)
+    return load_item(task_id, item_id)
+
+
+def update_item_starred_versions(
+    task_id: str,
+    item_id: str,
+    versions: list[str],
+    *,
+    source: str = "user",
+) -> dict:
+    item = load_item(task_id, item_id)
+    deduped_versions = list(dict.fromkeys(version for version in versions if version))
+    item["starred_image_versions"] = deduped_versions
+    save_item(task_id, item)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "update_starred_image_versions",
+            "starred_versions": deduped_versions,
+            "count": len(deduped_versions),
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "update_starred_image_versions",
+            "item_id": item_id,
+            "starred_versions": deduped_versions,
+            "count": len(deduped_versions),
         },
     )
     refresh_task_summary(task_id)

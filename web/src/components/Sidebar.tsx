@@ -36,10 +36,34 @@ export default function Sidebar({
   productName?: string
 }) {
   const [creating, setCreating] = useState(false)
+  const [createBusy, setCreateBusy] = useState(false)
   const [taskName, setTaskName] = useState('')
   const [projectBackground, setProjectBackground] = useState('')
   const [styleRequirements, setStyleRequirements] = useState('')
   const [assetDomain, setAssetDomain] = useState('game_icon_assets')
+
+  function resetCreateDraft() {
+    setTaskName('')
+    setProjectBackground('')
+    setStyleRequirements('')
+    setAssetDomain('game_icon_assets')
+  }
+
+  async function submitCreateTask() {
+    setCreateBusy(true)
+    try {
+      await onCreateTask({
+        task_name: taskName || '未命名批次',
+        project_background: projectBackground,
+        style_requirements: styleRequirements,
+        asset_domain: assetDomain,
+      })
+      resetCreateDraft()
+      setCreating(false)
+    } finally {
+      setCreateBusy(false)
+    }
+  }
 
   return (
     <aside className="fixed left-0 top-0 z-50 flex h-screen w-52 flex-col border-r border-outline-variant/15 bg-surface-container-low">
@@ -138,74 +162,156 @@ export default function Sidebar({
       </div>
 
       {creating ? (
-        <div className="absolute inset-0 z-10 flex items-end bg-black/30 p-3 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/72 p-6 backdrop-blur-md">
+          <button
+            type="button"
+            aria-label="关闭新建批次"
+            className="absolute inset-0"
+            onClick={() => {
+              setCreating(false)
+              resetCreateDraft()
+            }}
+          />
           <form
-            className="w-full rounded-xl bg-surface-container-high p-4 shadow-xl"
+            className="relative z-10 w-full max-w-3xl overflow-hidden rounded-[28px] border border-outline-variant/12 bg-surface-container-low shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
             onSubmit={async (event) => {
               event.preventDefault()
-              await onCreateTask({
-                task_name: taskName || '未命名批次',
-                project_background: projectBackground,
-                style_requirements: styleRequirements,
-                asset_domain: assetDomain,
-              })
-              setTaskName('')
-              setProjectBackground('')
-              setStyleRequirements('')
-              setAssetDomain('game_icon_assets')
-              setCreating(false)
+              await submitCreateTask()
             }}
           >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-on-surface">新建批次</h3>
-              <button
-                type="button"
-                onClick={() => setCreating(false)}
-                className="rounded p-1 text-on-surface-variant hover:bg-surface-container"
-              >
-                <Icon name="close" className="text-base" />
-              </button>
+            <div className="border-b border-outline-variant/10 bg-[radial-gradient(circle_at_top_left,_rgba(161,155,255,0.16),_transparent_38%),linear-gradient(180deg,_rgba(17,26,49,0.96)_0%,_rgba(12,20,38,0.96)_100%)] px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-outline">
+                    Create Batch
+                  </div>
+                  <h3 className="mt-2 text-[1.8rem] font-black tracking-tight text-on-surface">
+                    新建批次
+                  </h3>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-on-surface-variant">
+                    先定义这个批次的共同背景和风格要求，后面新增的 item 默认都会在这套上下文里工作。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreating(false)
+                    resetCreateDraft()
+                  }}
+                  className="rounded-xl border border-outline-variant/14 bg-surface-container/60 p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+                >
+                  <Icon name="close" className="text-[18px]" />
+                </button>
+              </div>
             </div>
-            <div className="space-y-3">
-              <input
-                value={taskName}
-                onChange={(event) => setTaskName(event.target.value)}
-                className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="批次名称"
-              />
-              <textarea
-                value={projectBackground}
-                onChange={(event) => setProjectBackground(event.target.value)}
-                className="min-h-20 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="项目背景"
-              />
-              <textarea
-                value={styleRequirements}
-                onChange={(event) => setStyleRequirements(event.target.value)}
-                className="min-h-16 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="统一风格要求"
-              />
-              <input
-                value={assetDomain}
-                onChange={(event) => setAssetDomain(event.target.value)}
-                className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="资产域"
-              />
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCreating(false)}
-                className="rounded px-3 py-2 text-xs text-on-surface-variant hover:bg-surface-container"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed"
-              >
-                创建
-              </button>
+
+            <div className="grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
+              <div className="border-b border-outline-variant/10 bg-surface-container px-6 py-6 lg:border-b-0 lg:border-r">
+                <div className="rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-4">
+                  <div className="mb-3 flex items-center gap-2 text-primary">
+                    <Icon name="deployed_code" filled className="text-[18px]" />
+                    <span className="text-sm font-bold text-on-surface">这个批次会共享什么</span>
+                  </div>
+                  <div className="space-y-3 text-sm text-on-surface-variant">
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">项目背景</div>
+                      <div className="mt-1 leading-6">世界观、产品语境、使用场景。</div>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">统一风格要求</div>
+                      <div className="mt-1 leading-6">材质、光感、边框、禁用项和整体调性。</div>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">资产域</div>
+                      <div className="mt-1 leading-6">主要用于区分任务类型，默认填当前图标资产工作流即可。</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-6">
+                <div className="space-y-4">
+                  <label className="block">
+                    <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                      批次名称
+                    </span>
+                    <input
+                      value={taskName}
+                      onChange={(event) => setTaskName(event.target.value)}
+                      className="w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-[1.05rem] font-semibold text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="例如：M5 正式批量图标、四月技能图第一轮"
+                      autoFocus
+                    />
+                  </label>
+
+                  <label className="block">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                        项目背景
+                      </span>
+                      <span className="text-[11px] text-outline">可选，但建议填写</span>
+                    </div>
+                    <textarea
+                      value={projectBackground}
+                      onChange={(event) => setProjectBackground(event.target.value)}
+                      className="min-h-28 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="这个批次服务于什么项目、什么题材、什么场景。"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                        统一风格要求
+                      </span>
+                      <span className="text-[11px] text-outline">后面所有 item 默认参考它</span>
+                    </div>
+                    <textarea
+                      value={styleRequirements}
+                      onChange={(event) => setStyleRequirements(event.target.value)}
+                      className="min-h-24 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="例如：高对比、厚重边框、材质统一、避免文字和复杂背景。"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                      资产域
+                    </span>
+                    <input
+                      value={assetDomain}
+                      onChange={(event) => setAssetDomain(event.target.value)}
+                      className="w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="game_icon_assets"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between gap-3">
+                  <div className="text-xs text-on-surface-variant">
+                    创建后就可以往这个批次里继续加 item。
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreating(false)
+                        resetCreateDraft()
+                      }}
+                      className="rounded-xl px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={createBusy}
+                      className="rounded-2xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {createBusy ? '创建中…' : '创建批次'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </form>
         </div>

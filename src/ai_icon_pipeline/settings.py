@@ -186,6 +186,8 @@ def _infer_custom_stages(provider_type: str, model_id: str, model: dict) -> list
         return explicit
     if provider_type == "async_image":
         return [STEP_IMAGE_GENERATION]
+    if provider_type == "gemini_native":
+        return infer_stages("gemini", model_id)
     if provider_type == "openai_compatible":
         return infer_stages("deepseek", model_id)
     return []
@@ -326,7 +328,7 @@ def update_provider_settings(
         provider_settings["label"] = label
     if base_url is not None:
         provider_settings["base_url"] = base_url
-    if api_key is not None:
+    if api_key is not None and api_key != "":
         provider_settings["api_key"] = api_key
     if models is not None:
         provider_settings["models"] = models

@@ -77,6 +77,14 @@ class ToApisAsyncImageProvider:
             raise ProviderRequestError(f"{self.label} 未返回任务 id")
         return response
 
+    def list_models(self, *, api_key: str) -> list[dict]:
+        payload = self._request_json(
+            method="GET",
+            path="/models",
+            api_key=api_key,
+        )
+        return payload.get("data", [])
+
     def poll_generation(
         self,
         *,

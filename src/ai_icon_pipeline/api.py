@@ -11,10 +11,14 @@ from starlette.concurrency import run_in_threadpool
 from .pipeline import (
     approve_step,
     cancel_pending_image_generations,
+    edit_brief,
+    edit_prompt,
     poll_image_generation,
     poll_image_generation_version,
     rollback_step,
+    run_pipeline,
     run_step,
+    set_current_version,
 )
 from .providers.registry import sync_provider_models
 from .settings import (
@@ -42,6 +46,7 @@ from .storage import (
     load_task,
     update_item,
     update_item_model_override,
+    update_item_starred_versions,
     update_runtime_config,
     update_task_model_override,
     update_task_settings,
@@ -101,6 +106,31 @@ class StepActionPayload(BaseModel):
     source: str = "web"
 
 
+class BriefEditPayload(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    visual_focus: Optional[str] = None
+    keywords: Optional[list[str]] = None
+    note: Optional[str] = None
+
+
+class PromptEditPayload(BaseModel):
+    prompt: Optional[str] = None
+    negative_prompt: Optional[str] = None
+    note: Optional[str] = None
+
+
+class VersionSelectPayload(BaseModel):
+    version: str
+    source: str = "web"
+
+
+class CandidateStarPayload(BaseModel):
+    version: str
+    starred: bool = True
+    source: str = "web"
+
+
 class ImagePollPayload(BaseModel):
     source: str = "web"
     version: Optional[str] = None
@@ -134,6 +164,11 @@ class PromptTemplatesPayload(BaseModel):
     prompt_system_prompt: Optional[str] = None
 
 
+class TaskPipelinePayload(BaseModel):
+    auto_approve: bool = True
+    source: str = "web"
+
+
 def _to_http_error(exc: Exception) -> HTTPException:
     message = str(exc)
     status_code = 400
@@ -143,24 +178,30 @@ def _to_http_error(exc: Exception) -> HTTPException:
 
 
 def _apply_task_model_overrides(task_id: str, payload: TaskUpdatePayload) -> None:
+    provided = getattr(payload, "model_fields_set", set())
     overrides = [
-        ("brief_generation", payload.brief_provider, payload.brief_model),
-        ("image_prompt", payload.prompt_provider, payload.prompt_model),
-        ("image_generation", payload.image_provider, payload.image_model),
+        ("brief_generation", "brief_provider", "brief_model"),
+        ("image_prompt", "prompt_provider", "prompt_model"),
+        ("image_generation", "image_provider", "image_model"),
     ]
-    for step, provider, model in overrides:
-        if provider is not None or model is not None:
+    for step, provider_field, model_field in overrides:
+        if provider_field in provided or model_field in provided:
+            provider = getattr(payload, provider_field)
+            model = getattr(payload, model_field)
             update_task_model_override(task_id, step, provider=provider, model=model)
 
 
 def _apply_item_model_overrides(task_id: str, item_id: str, payload: ItemUpdatePayload) -> None:
+    provided = getattr(payload, "model_fields_set", set())
     overrides = [
-        ("brief_generation", payload.brief_provider, payload.brief_model),
-        ("image_prompt", payload.prompt_provider, payload.prompt_model),
-        ("image_generation", payload.image_provider, payload.image_model),
+        ("brief_generation", "brief_provider", "brief_model"),
+        ("image_prompt", "prompt_provider", "prompt_model"),
+        ("image_generation", "image_provider", "image_model"),
     ]
-    for step, provider, model in overrides:
-        if provider is not None or model is not None:
+    for step, provider_field, model_field in overrides:
+        if provider_field in provided or model_field in provided:
+            provider = getattr(payload, provider_field)
+            model = getattr(payload, model_field)
             update_item_model_override(task_id, item_id, step, provider=provider, model=model)
 
 
@@ -221,6 +262,7 @@ def _file_url(path: Path) -> str:
 
 def _candidate_rows(task_id: str, item_id: str) -> dict:
     item = load_item(task_id, item_id)
+    starred_versions = set(item.get("starred_image_versions", []))
     rows: list[dict] = []
     approved_url = None
     for suffix in (".png", ".jpg", ".jpeg", ".webp"):
@@ -255,6 +297,7 @@ def _candidate_rows(task_id: str, item_id: str) -> dict:
                 "created_at": artifact.get("created_at"),
                 "is_current": item["current_versions"].get("image_generation")
                 == artifact.get("version", meta["version"]),
+                "is_starred": artifact.get("version", meta["version"]) in starred_versions,
                 "async_job": async_job or None,
                 "candidates": candidates,
             }
@@ -293,7 +336,14 @@ def _item_preview_url(task_id: str, item_id: str) -> str | None:
 
 def _item_summary_payload(task_id: str, item: dict) -> dict:
     payload = dict(item)
+    candidate_rows = _candidate_rows(task_id, item["item_id"])
     payload["preview_image_url"] = _item_preview_url(task_id, item["item_id"])
+    payload["pending_image_jobs"] = sum(
+        1
+        for version in candidate_rows.get("versions", [])
+        if str((version.get("async_job") or {}).get("status", "")).lower()
+        in {"queued", "processing", "pending", "running", "in_progress"}
+    )
     return payload
 
 
@@ -490,11 +540,89 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise _to_http_error(exc) from exc
 
+    @app.post("/tasks/{task_id}/items/{item_id}/brief/edit")
+    async def post_edit_brief(task_id: str, item_id: str, payload: BriefEditPayload) -> dict:
+        try:
+            result = await run_in_threadpool(
+                edit_brief,
+                task_id,
+                item_id,
+                title=payload.title,
+                description=payload.description,
+                keywords=payload.keywords,
+                visual_focus=payload.visual_focus,
+                note=payload.note,
+                source="web",
+            )
+            return {"result": result, "workspace": _workspace_payload(task_id, item_id)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/items/{item_id}/prompt/edit")
+    async def post_edit_prompt(task_id: str, item_id: str, payload: PromptEditPayload) -> dict:
+        try:
+            result = await run_in_threadpool(
+                edit_prompt,
+                task_id,
+                item_id,
+                prompt=payload.prompt,
+                negative_prompt=payload.negative_prompt,
+                note=payload.note,
+                source="web",
+            )
+            return {"result": result, "workspace": _workspace_payload(task_id, item_id)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
     @app.post("/tasks/{task_id}/items/{item_id}/steps/{step}/run")
     async def post_run_step(task_id: str, item_id: str, step: str, payload: StepActionPayload) -> dict:
         try:
             result = await run_in_threadpool(run_step, task_id, item_id, step, source=payload.source)
             return {"result": result, "workspace": _workspace_payload(task_id, item_id)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/items/{item_id}/steps/{step}/select-version")
+    async def post_select_version(
+        task_id: str,
+        item_id: str,
+        step: str,
+        payload: VersionSelectPayload,
+    ) -> dict:
+        try:
+            result = await run_in_threadpool(
+                set_current_version,
+                task_id,
+                item_id,
+                step,
+                payload.version,
+                source=payload.source,
+            )
+            return {"result": result, "workspace": _workspace_payload(task_id, item_id)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/items/{item_id}/image/star")
+    async def post_star_image_version(
+        task_id: str,
+        item_id: str,
+        payload: CandidateStarPayload,
+    ) -> dict:
+        try:
+            item = load_item(task_id, item_id)
+            versions = set(item.get("starred_image_versions", []))
+            if payload.starred:
+                versions.add(payload.version)
+            else:
+                versions.discard(payload.version)
+            await run_in_threadpool(
+                update_item_starred_versions,
+                task_id,
+                item_id,
+                sorted(versions, reverse=True),
+                source=payload.source,
+            )
+            return {"workspace": _workspace_payload(task_id, item_id)}
         except Exception as exc:
             raise _to_http_error(exc) from exc
 
@@ -546,6 +674,23 @@ def create_app() -> FastAPI:
                 source=payload.source,
             )
             return {"result": result, "workspace": _workspace_payload(task_id, item_id)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/pipeline/run")
+    async def post_run_task_pipeline(task_id: str, payload: TaskPipelinePayload) -> dict:
+        try:
+            result = await run_in_threadpool(
+                run_pipeline,
+                task_id,
+                auto_approve=payload.auto_approve,
+                source=payload.source,
+            )
+            return {
+                "result": result,
+                "task": _task_payload(task_id),
+                "items": [_item_summary_payload(task_id, item) for item in list_items(task_id)],
+            }
         except Exception as exc:
             raise _to_http_error(exc) from exc
 

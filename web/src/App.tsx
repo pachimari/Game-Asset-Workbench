@@ -7,6 +7,8 @@ import {
   createTask,
   createProvider,
   deleteProvider,
+  editTaskItemBrief,
+  editTaskItemPrompt,
   fetchSettings,
   fetchTask,
   fetchTaskItem,
@@ -16,10 +18,14 @@ import {
   pollItemImage,
   rollbackItemStep,
   runItemStep,
+  runTaskPipeline,
   saveGlobalDefaults,
   savePromptTemplates,
+  selectTaskItemVersion,
   syncProviderModels,
+  toggleTaskItemCandidateStar,
   updateTask,
+  updateTaskItem,
   updateProvider,
 } from './lib/api'
 import type {
@@ -40,6 +46,10 @@ type View = 'dashboard' | 'workspace'
 function App() {
   const dashboardScrollRef = useRef<HTMLDivElement | null>(null)
   const dashboardScrollTopRef = useRef(0)
+  const workspacePollInFlightRef = useRef(false)
+  const dashboardPollInFlightRef = useRef(false)
+  const activeTaskIdRef = useRef<string | null>(null)
+  const activeItemIdRef = useRef<string | null>(null)
   const [tasks, setTasks] = useState<TaskSummary[]>([])
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [activeTask, setActiveTask] = useState<TaskSummary | null>(null)
@@ -55,6 +65,23 @@ function App() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
   const [settingsBusy, setSettingsBusy] = useState(false)
+  const [pendingRunStep, setPendingRunStep] = useState<
+    'brief_generation' | 'image_prompt' | 'image_generation' | null
+  >(null)
+
+  useEffect(() => {
+    activeTaskIdRef.current = activeTaskId
+  }, [activeTaskId])
+
+  useEffect(() => {
+    activeItemIdRef.current = activeItemId
+  }, [activeItemId])
+
+  function clearWorkspaceActionState() {
+    setActionBusy(false)
+    setPendingRunStep(null)
+    setActionError(null)
+  }
 
   async function reloadTaskList(preferredTaskId?: string) {
     const rows = await fetchTasks()
@@ -132,6 +159,7 @@ function App() {
   }, [activeTaskId])
 
   useEffect(() => {
+    if (view !== 'workspace') return
     if (!activeTaskId || !activeItemId) {
       setActiveItem(null)
       setWorkspace(null)
@@ -147,10 +175,11 @@ function App() {
       }
     }
     void load()
-  }, [activeTaskId, activeItemId])
+  }, [activeTaskId, activeItemId, view])
 
   function handleSelectTask(taskId: string) {
     dashboardScrollTopRef.current = 0
+    clearWorkspaceActionState()
     setActiveTaskId(taskId)
     setActiveItemId(null)
     setActiveItem(null)
@@ -160,11 +189,13 @@ function App() {
 
   function handleSelectItem(itemId: string) {
     dashboardScrollTopRef.current = dashboardScrollRef.current?.scrollTop ?? 0
+    clearWorkspaceActionState()
     setActiveItemId(itemId)
     setView('workspace')
   }
 
   function handleBackToDashboard() {
+    clearWorkspaceActionState()
     setView('dashboard')
   }
 
@@ -234,6 +265,27 @@ function App() {
     }
   }
 
+  async function handleUpdateItemInput(payload: {
+    title?: string | null
+    category?: string | null
+    description?: string | null
+    extra_context?: string | null
+    image_aspect_ratio?: string | null
+    image_resolution?: string | null
+  }) {
+    if (!activeTaskId || !activeItemId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await updateTaskItem(activeTaskId, activeItemId, payload)
+      await afterMutation({ taskId: activeTaskId, itemId: activeItemId })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '保存原始输入失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   async function handleDeleteTask(taskId: string) {
     const targetTask = tasks.find((task) => task.task_id === taskId)
     const confirmed = window.confirm(`确认删除批次「${targetTask?.task_name ?? taskId}」？此操作不可撤销。`)
@@ -280,29 +332,189 @@ function App() {
     }
   }
 
+  async function handleRunBatchPipeline(options?: { autoApprove?: boolean }) {
+    if (!activeTaskId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      const response = await runTaskPipeline(activeTaskId, {
+        auto_approve: options?.autoApprove ?? true,
+      })
+      setActiveTask(response.task)
+      setItems(response.items)
+      await reloadTaskList(activeTaskId)
+      if (activeItemId && response.items.some((item) => item.item_id === activeItemId)) {
+        await reloadWorkspace(activeTaskId, activeItemId)
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '批量执行失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   async function handleWorkspaceAction(
     action: 'run' | 'approve' | 'rollback' | 'poll' | 'cancel',
     step?: string,
     version?: string,
+    options?: { passive?: boolean },
   ) {
+    if (!activeTaskId || !activeItemId) return
+    const requestTaskId = activeTaskId
+    const requestItemId = activeItemId
+    const passive = options?.passive ?? false
+    if (!passive) {
+      setActionError(null)
+      setActionBusy(true)
+      setPendingRunStep(action === 'run' && step ? (step as typeof pendingRunStep) : null)
+    }
+    try {
+      let response:
+        | { result: Record<string, unknown>; workspace: WorkspacePayload }
+        | undefined
+
+      if (action === 'run' && step) {
+        response = await runItemStep(activeTaskId, activeItemId, step)
+      } else if (action === 'approve' && step) {
+        response = await approveItemStep(activeTaskId, activeItemId, step)
+      } else if (action === 'rollback' && step) {
+        response = await rollbackItemStep(activeTaskId, activeItemId, step)
+      } else if (action === 'poll') {
+        response = await pollItemImage(activeTaskId, activeItemId, version)
+      } else if (action === 'cancel') {
+        response = await cancelItemImage(activeTaskId, activeItemId)
+      }
+
+      const stillViewingSameItem =
+        activeTaskIdRef.current === requestTaskId && activeItemIdRef.current === requestItemId
+
+      if (response?.workspace && stillViewingSameItem) {
+        setWorkspace(response.workspace)
+        setActiveItem((current) =>
+          current
+            ? {
+                ...current,
+                status: response?.workspace.status ?? current.status,
+                current_versions: response?.workspace.current_versions ?? current.current_versions,
+              }
+            : current,
+        )
+      }
+      if (stillViewingSameItem) {
+        await afterMutation({ taskId: requestTaskId, itemId: requestItemId })
+      } else if (requestTaskId === activeTaskIdRef.current) {
+        await reloadTaskContext(requestTaskId, activeItemIdRef.current)
+        await reloadTaskList(requestTaskId)
+      }
+    } catch (err) {
+      if (!passive) {
+        setActionError(err instanceof Error ? err.message : '执行动作失败')
+      }
+    } finally {
+      if (!passive) {
+        setActionBusy(false)
+        setPendingRunStep(null)
+      }
+    }
+  }
+
+  async function handleEditBrief(payload: {
+    title?: string | null
+    description?: string | null
+    visual_focus?: string | null
+    keywords?: string[] | null
+    note?: string | null
+  }) {
     if (!activeTaskId || !activeItemId) return
     setActionError(null)
     setActionBusy(true)
     try {
-      if (action === 'run' && step) {
-        await runItemStep(activeTaskId, activeItemId, step)
-      } else if (action === 'approve' && step) {
-        await approveItemStep(activeTaskId, activeItemId, step)
-      } else if (action === 'rollback' && step) {
-        await rollbackItemStep(activeTaskId, activeItemId, step)
-      } else if (action === 'poll') {
-        await pollItemImage(activeTaskId, activeItemId, version)
-      } else if (action === 'cancel') {
-        await cancelItemImage(activeTaskId, activeItemId)
-      }
+      await editTaskItemBrief(activeTaskId, activeItemId, payload)
       await afterMutation({ taskId: activeTaskId, itemId: activeItemId })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : '执行动作失败')
+      setActionError(err instanceof Error ? err.message : '保存设计说明失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleEditPrompt(payload: {
+    prompt?: string | null
+    negative_prompt?: string | null
+    note?: string | null
+  }) {
+    if (!activeTaskId || !activeItemId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await editTaskItemPrompt(activeTaskId, activeItemId, payload)
+      await afterMutation({ taskId: activeTaskId, itemId: activeItemId })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '保存出图指令失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleUpdateItemModel(stage: 'brief_generation' | 'image_prompt' | 'image_generation', token: string) {
+    if (!activeTaskId || !activeItemId) return
+    const payload =
+      stage === 'brief_generation'
+        ? token === '__inherit__'
+          ? { brief_provider: null, brief_model: null }
+          : {
+              brief_provider: token.split('::')[0] ?? null,
+              brief_model: token.split('::')[1] ?? null,
+            }
+        : stage === 'image_prompt'
+          ? token === '__inherit__'
+            ? { prompt_provider: null, prompt_model: null }
+            : {
+                prompt_provider: token.split('::')[0] ?? null,
+                prompt_model: token.split('::')[1] ?? null,
+              }
+          : token === '__inherit__'
+            ? { image_provider: null, image_model: null }
+            : {
+                image_provider: token.split('::')[0] ?? null,
+                image_model: token.split('::')[1] ?? null,
+              }
+
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await updateTaskItem(activeTaskId, activeItemId, payload)
+      await afterMutation({ taskId: activeTaskId, itemId: activeItemId })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '更新模型失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleSelectCurrentVersion(step: 'brief_generation' | 'image_prompt' | 'image_generation', version: string) {
+    if (!activeTaskId || !activeItemId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await selectTaskItemVersion(activeTaskId, activeItemId, step, version)
+      await afterMutation({ taskId: activeTaskId, itemId: activeItemId })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '切换当前版本失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleToggleCandidateStar(version: string, starred: boolean) {
+    if (!activeTaskId || !activeItemId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await toggleTaskItemCandidateStar(activeTaskId, activeItemId, version, starred)
+      await afterMutation({ taskId: activeTaskId, itemId: activeItemId })
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '更新星标失败')
     } finally {
       setActionBusy(false)
     }
@@ -346,8 +558,19 @@ function App() {
   }) {
     setSettingsBusy(true)
     try {
+      const previousIds = new Set(globalSettings?.providers.map((provider) => provider.id) ?? [])
       const next = await createProvider(payload)
       setGlobalSettings(next)
+      const created =
+        next.providers.find((provider) => !previousIds.has(provider.id)) ??
+        next.providers.find(
+          (provider) =>
+            !provider.builtin &&
+            provider.label === payload.label &&
+            provider.provider_type === payload.provider_type &&
+            provider.base_url === payload.base_url,
+        )
+      return created?.id ?? ''
     } finally {
       setSettingsBusy(false)
     }
@@ -359,13 +582,14 @@ function App() {
       label: string
       provider_type: string
       base_url: string
-      api_key: string
+      api_key?: string
     },
   ) {
     setSettingsBusy(true)
     try {
       const next = await updateProvider(providerId, payload)
       setGlobalSettings(next)
+      return providerId
     } finally {
       setSettingsBusy(false)
     }
@@ -392,16 +616,45 @@ function App() {
   }
 
   const pollCurrentWorkspace = useEffectEvent(() => {
-    void handleWorkspaceAction('poll')
+    if (workspacePollInFlightRef.current) return
+    workspacePollInFlightRef.current = true
+    void handleWorkspaceAction('poll', undefined, undefined, { passive: true }).finally(() => {
+      workspacePollInFlightRef.current = false
+    })
   })
 
   useEffect(() => {
-    if (!activeTaskId || !activeItemId || workspace?.status !== 'image_generating') return
+    const pendingCount =
+      workspace?.candidate_pool.versions.filter((version) =>
+        ['queued', 'processing', 'pending', 'running', 'in_progress'].includes(
+          String(version.async_job?.status ?? '').toLowerCase(),
+        ),
+      ).length ?? 0
+    if (!activeTaskId || !activeItemId || pendingCount === 0) return
     const timer = window.setInterval(() => {
       pollCurrentWorkspace()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [activeTaskId, activeItemId, workspace?.status])
+  }, [activeTaskId, activeItemId, workspace?.candidate_pool.versions])
+
+  const pollDashboardTask = useEffectEvent(() => {
+    if (!activeTaskId || dashboardPollInFlightRef.current) return
+    dashboardPollInFlightRef.current = true
+    void reloadTaskContext(activeTaskId, activeItemId)
+      .then(() => reloadTaskList(activeTaskId))
+      .finally(() => {
+        dashboardPollInFlightRef.current = false
+      })
+  })
+
+  useEffect(() => {
+    const pendingCount = items.reduce((sum, item) => sum + (item.pending_image_jobs ?? 0), 0)
+    if (view !== 'dashboard' || !activeTaskId || pendingCount === 0) return
+    const timer = window.setInterval(() => {
+      pollDashboardTask()
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [view, activeTaskId, activeItemId, items])
 
   useEffect(() => {
     if (view !== 'dashboard') return
@@ -463,15 +716,23 @@ function App() {
           {view === 'workspace' && activeItem && workspace ? (
             <ItemWorkspace
               item={activeItem}
+              task={activeTask}
+              globalSettings={globalSettings}
               workspace={workspace}
               actionBusy={actionBusy}
+              pendingRunStep={pendingRunStep}
               actionError={actionError}
               taskName={activeTask?.task_name ?? ''}
               onBackToDashboard={handleBackToDashboard}
+              onUpdateItemInput={handleUpdateItemInput}
+              onEditBrief={handleEditBrief}
+              onEditPrompt={handleEditPrompt}
+              onUpdateItemModel={handleUpdateItemModel}
+              onSelectVersion={handleSelectCurrentVersion}
+              onToggleCandidateStar={handleToggleCandidateStar}
               onRunStep={(step) => handleWorkspaceAction('run', step)}
               onApproveStep={(step) => handleWorkspaceAction('approve', step)}
               onRollbackStep={(step) => handleWorkspaceAction('rollback', step)}
-              onPollImage={(version) => handleWorkspaceAction('poll', undefined, version)}
               onCancelImage={() => handleWorkspaceAction('cancel')}
             />
           ) : activeTask ? (
@@ -482,6 +743,7 @@ function App() {
                 activeItemId={activeItemId}
                 onSelectItem={handleSelectItem}
                 onSaveTaskSettings={handleUpdateTaskSettings}
+                onRunBatchPipeline={handleRunBatchPipeline}
                 onCreateItem={handleCreateItem}
                 onCreateItemsBulk={handleCreateItemsBulk}
                 actionBusy={actionBusy}

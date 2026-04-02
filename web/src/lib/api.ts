@@ -126,6 +126,62 @@ export async function updateTaskItem(
   })
 }
 
+export async function editTaskItemBrief(
+  taskId: string,
+  itemId: string,
+  payload: {
+    title?: string | null
+    description?: string | null
+    visual_focus?: string | null
+    keywords?: string[] | null
+    note?: string | null
+  },
+): Promise<{ result: Record<string, unknown>; workspace: WorkspacePayload }> {
+  return request(`/tasks/${taskId}/items/${itemId}/brief/edit`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function editTaskItemPrompt(
+  taskId: string,
+  itemId: string,
+  payload: {
+    prompt?: string | null
+    negative_prompt?: string | null
+    note?: string | null
+  },
+): Promise<{ result: Record<string, unknown>; workspace: WorkspacePayload }> {
+  return request(`/tasks/${taskId}/items/${itemId}/prompt/edit`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function selectTaskItemVersion(
+  taskId: string,
+  itemId: string,
+  step: string,
+  version: string,
+): Promise<{ result: Record<string, unknown>; workspace: WorkspacePayload }> {
+  return request(`/tasks/${taskId}/items/${itemId}/steps/${step}/select-version`, {
+    method: 'POST',
+    body: JSON.stringify({ version, source: 'web' }),
+  })
+}
+
+export async function toggleTaskItemCandidateStar(
+  taskId: string,
+  itemId: string,
+  version: string,
+  starred: boolean,
+): Promise<{ workspace: WorkspacePayload }> {
+  return request(`/tasks/${taskId}/items/${itemId}/image/star`, {
+    method: 'POST',
+    body: JSON.stringify({ version, starred, source: 'web' }),
+  })
+}
+
 export async function runItemStep(
   taskId: string,
   itemId: string,
@@ -177,6 +233,18 @@ export async function cancelItemImage(
   return request(`/tasks/${taskId}/items/${itemId}/image/cancel`, {
     method: 'POST',
     body: JSON.stringify({ source: 'web' }),
+  })
+}
+
+export async function runTaskPipeline(
+  taskId: string,
+  payload: {
+    auto_approve?: boolean
+  } = {},
+): Promise<{ result: Record<string, unknown>; task: TaskSummary; items: ItemSummary[] }> {
+  return request(`/tasks/${taskId}/pipeline/run`, {
+    method: 'POST',
+    body: JSON.stringify({ source: 'web', auto_approve: payload.auto_approve ?? true }),
   })
 }
 

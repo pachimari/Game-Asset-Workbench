@@ -126,6 +126,16 @@ def _latest_successful_image_version(task_id: str, item_id: str) -> str | None:
     return latest
 
 
+def _pending_image_generation_versions(task_id: str, item_id: str) -> list[str]:
+    versions: list[str] = []
+    for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        status = str(artifact.get("async_job", {}).get("status", "")).lower()
+        if status in PENDING_ASYNC_STATUSES:
+            versions.append(artifact_meta["version"])
+    return versions
+
+
 def _effective_runtime_config(task_id: str, item: dict) -> dict:
     runtime_config = load_runtime_config(task_id)
     runtime_overrides = item.get("runtime_overrides", {})
@@ -229,6 +239,11 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             if not brief_version:
                 raise ValueError("No approved brief version found for prompt generation")
             brief_artifact = load_artifact(task_id, item_id, STEP_BRIEF_GENERATION, brief_version)
+            brief_output = dict(brief_artifact.get("output", {}))
+            brief_output["project_background"] = str(
+                task.get("project_background", task.get("project_context", "")) or ""
+            )
+            brief_output["style_requirements"] = str(task.get("style_requirements", "") or "")
             runtime_config = _effective_runtime_config(task_id, item)
             style_spec = load_style_spec(task_id)
             output = generate_prompt_output(
@@ -236,7 +251,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 provider_config=provider_settings,
                 api_key=api_key,
                 model=model_id,
-                brief_output=brief_artifact["output"],
+                brief_output=brief_output,
                 style_spec=style_spec,
                 runtime_config=runtime_config,
                 system_prompt=prompt_templates.get("prompt_system_prompt"),
@@ -299,6 +314,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             else:
                 candidates = generate_image_candidates(
                     provider_id=provider_id,
+                    provider_config=provider_settings,
                     api_key=api_key,
                     model=model_id,
                     output_dir=item_dir(task_id, item_id) / "images",
@@ -381,11 +397,25 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
 
 
 def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") -> dict:
+    pending_versions = _pending_image_generation_versions(task_id, item_id)
+    if not pending_versions:
+        item = load_item(task_id, item_id)
+        version = item["current_versions"].get(STEP_IMAGE_GENERATION)
+        if not version:
+            raise ValueError("当前没有候选图任务")
+        return poll_image_generation_version(task_id, item_id, version, source=source)
+
+    results = [poll_image_generation_version(task_id, item_id, version, source=source) for version in pending_versions]
     item = load_item(task_id, item_id)
-    version = item["current_versions"].get(STEP_IMAGE_GENERATION)
-    if not version:
-        raise ValueError("当前没有候选图任务")
-    return poll_image_generation_version(task_id, item_id, version, source=source)
+    return {
+        "task_id": task_id,
+        "item_id": item_id,
+        "step": STEP_IMAGE_GENERATION,
+        "polled_versions": pending_versions,
+        "pending_count": len(_pending_image_generation_versions(task_id, item_id)),
+        "status": item.get("status"),
+        "results": results,
+    }
 
 
 def poll_image_generation_version(task_id: str, item_id: str, version: str, *, source: str = "cli") -> dict:
@@ -653,6 +683,7 @@ def edit_brief(
     note: str | None = None,
     source: str = "cli",
 ) -> dict:
+    task = load_task(task_id)
     item = load_item(task_id, item_id)
     current_version = item["current_versions"][STEP_BRIEF_GENERATION]
     base_output = {}
@@ -681,8 +712,8 @@ def edit_brief(
                 else base_output.get("icon_subject", item.get("title", "") or "图标主体")
             ),
             "visual_focus": visual_focus if visual_focus is not None else base_output.get("visual_focus", ""),
-            "project_background": base_output.get("project_background", base_input.get("project_background", "")),
-            "style_requirements": base_output.get("style_requirements", base_input.get("style_requirements", "")),
+            "project_background": str(task.get("project_background", task.get("project_context", "")) or ""),
+            "style_requirements": str(task.get("style_requirements", "") or ""),
         },
     }
     version = write_artifact(task_id, item_id, STEP_BRIEF_GENERATION, payload, manual=True)
@@ -705,6 +736,7 @@ def edit_prompt(
     note: str | None = None,
     source: str = "cli",
 ) -> dict:
+    task = load_task(task_id)
     item = load_item(task_id, item_id)
     current_version = item["current_versions"][STEP_IMAGE_PROMPT]
     base_output = {}
@@ -728,6 +760,10 @@ def edit_prompt(
                 else base_output.get("negative_prompt", "")
             ),
             "constraints": base_output.get("constraints", {}),
+            "batch_context": {
+                "project_background": str(task.get("project_background", task.get("project_context", "")) or ""),
+                "style_requirements": str(task.get("style_requirements", "") or ""),
+            },
         },
     }
     version = write_artifact(task_id, item_id, STEP_IMAGE_PROMPT, payload, manual=True)

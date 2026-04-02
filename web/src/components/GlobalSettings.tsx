@@ -177,8 +177,11 @@ export default function GlobalSettings({
     image_provider?: string | null
     image_model?: string | null
   }) => Promise<void>
-  onCreateProvider: (payload: ProviderDraft) => Promise<void>
-  onUpdateProvider: (providerId: string, payload: ProviderDraft) => Promise<void>
+  onCreateProvider: (payload: ProviderDraft) => Promise<string>
+  onUpdateProvider: (
+    providerId: string,
+    payload: Omit<ProviderDraft, 'api_key'> & { api_key?: string },
+  ) => Promise<string>
   onDeleteProvider: (providerId: string) => Promise<void>
   onSyncProvider: (providerId: string) => Promise<void>
 }) {
@@ -270,11 +273,18 @@ export default function GlobalSettings({
     resetProviderDraft()
   }
 
-  async function handleProviderSubmit() {
+  async function handleProviderSubmit(syncAfterSave = false) {
+    let providerId: string
     if (editingProviderId) {
-      await onUpdateProvider(editingProviderId, providerDraft)
+      providerId = await onUpdateProvider(editingProviderId, {
+        ...providerDraft,
+        api_key: providerDraft.api_key.trim() ? providerDraft.api_key : undefined,
+      })
     } else {
-      await onCreateProvider(providerDraft)
+      providerId = await onCreateProvider(providerDraft)
+    }
+    if (syncAfterSave && providerId) {
+      await onSyncProvider(providerId)
     }
     closeProviderEditor()
   }
@@ -456,6 +466,13 @@ export default function GlobalSettings({
                 className="rounded-xl border border-outline-variant/20 px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high"
               >
                 取消
+              </button>
+              <button
+                disabled={!canSubmitProvider}
+                onClick={() => void handleProviderSubmit(true)}
+                className="rounded-xl border border-primary/20 bg-primary/10 px-5 py-2.5 text-sm font-bold text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? '处理中…' : editingProviderId ? '保存并同步模型' : '新增并同步模型'}
               </button>
               <button
                 disabled={!canSubmitProvider}

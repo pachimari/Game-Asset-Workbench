@@ -48,6 +48,21 @@ function descriptionFallback(task: TaskSummary) {
 
 const IMAGE_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9']
 const IMAGE_RESOLUTION_OPTIONS = ['auto', '512', '1K', '2K', '4K']
+const ASSET_TYPE_OPTIONS = [
+  { value: 'skill_icon', label: '技能图标', description: '最常见。用于技能、法术、被动、效果图标。' },
+  { value: 'item_icon', label: '道具图标', description: '装备、材料、消耗品、宝物。' },
+  { value: 'buff_icon', label: '状态图标', description: 'Buff、Debuff、状态效果。' },
+  { value: 'generic_icon', label: '通用图标', description: '先不细分时用它，后面也能再调整。' },
+  { value: '__custom__', label: '自定义类型', description: '如果你的项目有自己的类型命名，可以手动填。' },
+] as const
+
+const CATEGORY_OPTIONS = [
+  { value: 'combat', label: '战斗', description: '伤害、技能、武器、攻击类内容。' },
+  { value: 'support', label: '辅助', description: '治疗、增益、减益、控制。' },
+  { value: 'system', label: '系统', description: '菜单、功能、流程、系统图标。' },
+  { value: 'resource', label: '资源', description: '货币、材料、掉落、道具。' },
+  { value: '__custom__', label: '自定义标签', description: '如果你有自己的分类体系，可以手动填。' },
+] as const
 
 export default function BatchDashboard({
   task,
@@ -55,6 +70,7 @@ export default function BatchDashboard({
   activeItemId,
   onSelectItem,
   onSaveTaskSettings,
+  onRunBatchPipeline,
   onCreateItem,
   onCreateItemsBulk,
   actionBusy,
@@ -72,6 +88,7 @@ export default function BatchDashboard({
     image_aspect_ratio: string
     image_resolution: string
   }) => Promise<void>
+  onRunBatchPipeline: (options?: { autoApprove?: boolean }) => Promise<void>
   onCreateItem: (payload: {
     asset_type: string
     title: string
@@ -96,7 +113,9 @@ export default function BatchDashboard({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('combat')
+  const [customCategory, setCustomCategory] = useState('')
   const [assetType, setAssetType] = useState('skill_icon')
+  const [customAssetType, setCustomAssetType] = useState('')
   const [extraContext, setExtraContext] = useState('')
   const [taskName, setTaskName] = useState(task.task_name)
   const [projectBackground, setProjectBackground] = useState(task.project_background)
@@ -114,6 +133,7 @@ export default function BatchDashboard({
   const completed = task.items_summary?.completed ?? 0
   const inProgress = task.items_summary?.in_progress ?? 0
   const draft = task.items_summary?.draft ?? 0
+  const totalPendingJobs = items.reduce((sum, item) => sum + (item.pending_image_jobs ?? 0), 0)
 
   function resetTaskSettingsDraft() {
     setTaskName(task.task_name)
@@ -144,6 +164,16 @@ export default function BatchDashboard({
     setModal(null)
   }
 
+  function resetSingleDraft() {
+    setTitle('')
+    setDescription('')
+    setCategory('combat')
+    setCustomCategory('')
+    setAssetType('skill_icon')
+    setCustomAssetType('')
+    setExtraContext('')
+  }
+
   return (
     <div className="flex-1 bg-surface px-4 py-4 md:px-5">
       <section className="mb-4 rounded-xl border border-outline-variant/12 bg-surface-container-low p-4">
@@ -153,7 +183,6 @@ export default function BatchDashboard({
               <span className="rounded-full bg-secondary-container px-2 py-0.5 text-[11px] font-bold text-on-secondary-container">
                 {statusLabel(task.status)}
               </span>
-              <span className="font-mono text-[11px] text-outline">{task.task_id}</span>
             </div>
             <h2 className="text-2xl font-black tracking-tight text-on-surface">{task.task_name}</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
@@ -183,10 +212,13 @@ export default function BatchDashboard({
       </section>
 
       <section className="mb-4 rounded-xl border border-outline-variant/12 bg-surface-container-low">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-on-surface">批次设定</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+        <div className="flex flex-col gap-3 px-4 py-3 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-sm font-bold text-on-surface">批次设定</div>
+              <div className="text-[11px] text-on-surface-variant">批次级公共约束与候选图参数</div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
               <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
                 资产域：{task.asset_domain || '未填写'}
               </span>
@@ -196,6 +228,30 @@ export default function BatchDashboard({
               <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
                 分辨率：{task.runtime_config?.image_resolution || '1K'}
               </span>
+            </div>
+            <div className="mt-2 grid gap-2 lg:grid-cols-2">
+              <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-2.5">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                  项目背景
+                </div>
+                <p
+                  className="mt-1 text-xs leading-5 text-on-surface-variant"
+                  style={clampTwoLinesStyle}
+                >
+                  {task.project_background || '未填写'}
+                </p>
+              </div>
+              <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-2.5">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                  统一风格要求
+                </div>
+                <p
+                  className="mt-1 text-xs leading-5 text-on-surface-variant"
+                  style={clampTwoLinesStyle}
+                >
+                  {task.style_requirements || '未填写'}
+                </p>
+              </div>
             </div>
           </div>
           <button
@@ -207,36 +263,17 @@ export default function BatchDashboard({
               resetTaskSettingsDraft()
               setSettingsExpanded(true)
             }}
-            className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container"
           >
             <Icon name={settingsExpanded ? 'expand_less' : 'tune'} className="text-[16px]" />
             {settingsExpanded ? '收起批次设定' : '编辑批次设定'}
           </button>
         </div>
 
-        <div className="border-t border-outline-variant/10 px-4 pb-3 pt-0">
-          <div className="grid gap-3 py-3 lg:grid-cols-[1.2fr_1fr]">
-            <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                项目背景
-              </div>
-              <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                {task.project_background || '未填写'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                统一风格要求
-              </div>
-              <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                {task.style_requirements || '未填写'}
-              </p>
-            </div>
-          </div>
-
-          {settingsExpanded ? (
+        {settingsExpanded ? (
+          <div className="border-t border-outline-variant/10 px-4 pb-3 pt-3">
             <form
-              className="grid gap-3 border-t border-outline-variant/10 pt-3"
+              className="grid gap-3"
               onSubmit={async (event) => {
                 event.preventDefault()
                 await onSaveTaskSettings({
@@ -352,8 +389,8 @@ export default function BatchDashboard({
                 </button>
               </div>
             </form>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
@@ -372,11 +409,42 @@ export default function BatchDashboard({
               CSV / 表格导入
             </button>
             <button
-              onClick={() => setModal('single')}
+              onClick={() => {
+                resetSingleDraft()
+                setModal('single')
+              }}
               className="flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim"
             >
               <Icon name="add" className="text-[16px]" />
               新增条目
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-lowest/20 px-4 py-3">
+          <div>
+            <div className="text-sm font-bold text-on-surface">批次总控制</div>
+            <div className="mt-1 text-xs text-on-surface-variant">
+              一次推进整个批次。当前先按顺序执行，更稳；后面再加可控并发。
+              {totalPendingJobs > 0 ? ` 现在后台还有 ${totalPendingJobs} 个候选图任务在跑。` : ''}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={actionBusy || items.length === 0}
+              onClick={() => void onRunBatchPipeline({ autoApprove: false })}
+              className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {actionBusy ? '执行中…' : '推进到待审核'}
+            </button>
+            <button
+              type="button"
+              disabled={actionBusy || items.length === 0}
+              onClick={() => void onRunBatchPipeline({ autoApprove: true })}
+              className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {actionBusy ? '执行中…' : '一键跑完整个批次'}
             </button>
           </div>
         </div>
@@ -411,6 +479,8 @@ export default function BatchDashboard({
                   item.current_versions?.image_prompt ||
                   item.current_versions?.brief_generation ||
                   '无'
+                const pendingImageJobs = item.pending_image_jobs ?? 0
+                const effectiveStatus = pendingImageJobs > 0 ? 'image_generating' : item.status
 
                 return (
                   <tr
@@ -478,12 +548,14 @@ export default function BatchDashboard({
                         <span
                           className={clsx(
                             'inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-[0.82rem] font-bold',
-                            statusBadge(item.status),
-                            stageTone(item.status),
+                            statusBadge(effectiveStatus),
+                            stageTone(effectiveStatus),
                           )}
                         >
                           <span className="h-2 w-2 rounded-full bg-current" />
-                          <span className="truncate">{statusLabel(item.status)}</span>
+                          <span className="truncate">
+                            {pendingImageJobs > 0 ? `生成中 · ${pendingImageJobs}` : statusLabel(item.status)}
+                          </span>
                         </span>
                       </div>
                     </td>
@@ -513,83 +585,219 @@ export default function BatchDashboard({
 
       {modal === 'single' ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6 backdrop-blur-sm">
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="关闭新增条目"
+            onClick={() => {
+              setModal(null)
+              resetSingleDraft()
+            }}
+          />
           <form
-            className="w-full max-w-xl rounded-xl bg-surface-container-low p-5 shadow-2xl"
+            className="relative z-10 w-full max-w-3xl overflow-hidden rounded-[28px] border border-outline-variant/12 bg-surface-container-low shadow-[0_28px_80px_rgba(0,0,0,0.45)]"
             onSubmit={async (event) => {
               event.preventDefault()
               await onCreateItem({
-                asset_type: assetType,
+                asset_type: assetType === '__custom__' ? customAssetType.trim() || 'generic_icon' : assetType,
                 title,
                 description,
-                category,
+                category: category === '__custom__' ? customCategory.trim() || 'custom' : category,
                 extra_context: extraContext,
               })
-              setTitle('')
-              setDescription('')
-              setCategory('combat')
-              setAssetType('skill_icon')
-              setExtraContext('')
+              resetSingleDraft()
               setModal(null)
             }}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-on-surface">新增条目</h3>
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="rounded p-1 text-on-surface-variant hover:bg-surface-container"
-              >
-                <Icon name="close" className="text-base" />
-              </button>
-            </div>
-            <div className="grid gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                  placeholder="条目名称"
-                />
-                <input
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                  placeholder="类别"
-                />
+            <div className="border-b border-outline-variant/10 bg-[radial-gradient(circle_at_top_left,_rgba(161,155,255,0.16),_transparent_38%),linear-gradient(180deg,_rgba(17,26,49,0.96)_0%,_rgba(12,20,38,0.96)_100%)] px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-outline">
+                    Create Item
+                  </div>
+                  <h3 className="mt-2 text-[1.7rem] font-black tracking-tight text-on-surface">
+                    新增条目
+                  </h3>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-on-surface-variant">
+                    一个条目就是一个具体要做的 icon。先把名称和需求说清楚，再决定它属于什么类型。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModal(null)
+                    resetSingleDraft()
+                  }}
+                  className="rounded-xl border border-outline-variant/14 bg-surface-container/60 p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+                >
+                  <Icon name="close" className="text-[18px]" />
+                </button>
               </div>
-              <input
-                value={assetType}
-                onChange={(event) => setAssetType(event.target.value)}
-                className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="资产类型"
-              />
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                className="min-h-24 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="条目描述"
-              />
-              <textarea
-                value={extraContext}
-                onChange={(event) => setExtraContext(event.target.value)}
-                className="min-h-16 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-primary/40"
-                placeholder="补充说明"
-              />
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="rounded px-3 py-2 text-xs text-on-surface-variant hover:bg-surface-container"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed"
-              >
-                创建条目
-              </button>
+
+            <div className="grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
+              <div className="border-b border-outline-variant/10 bg-surface-container px-6 py-6 lg:border-b-0 lg:border-r">
+                <div className="rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-4">
+                  <div className="mb-3 flex items-center gap-2 text-primary">
+                    <Icon name="inventory_2" filled className="text-[18px]" />
+                    <span className="text-sm font-bold text-on-surface">怎么理解这几个字段</span>
+                  </div>
+                  <div className="space-y-3 text-sm text-on-surface-variant">
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">条目名称</div>
+                      <div className="mt-1 leading-6">这个 icon 的名字，例如“雷暴”“治疗术”“火球”。</div>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">条目类型</div>
+                      <div className="mt-1 leading-6">更偏技术上的归类，主要帮助后面统一管理和扩展。</div>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">标签分类</div>
+                      <div className="mt-1 leading-6">更偏业务上的分组，比如战斗、辅助、资源。后面筛选会用到。</div>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">条目描述</div>
+                      <div className="mt-1 leading-6">直接写用户需求，越具体越好。</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-6">
+                <div className="space-y-4">
+                  <label className="block">
+                    <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                      条目名称
+                    </span>
+                    <input
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      className="w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-[1.05rem] font-semibold text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="例如：赵云、雷暴、烈焰回旋斧"
+                      autoFocus
+                    />
+                  </label>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <label className="block">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          条目类型
+                        </span>
+                        <span className="text-[11px] text-outline">偏技术归类</span>
+                      </div>
+                      <select
+                        value={assetType}
+                        onChange={(event) => setAssetType(event.target.value)}
+                        className="w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition-colors focus:border-primary/35"
+                      >
+                        {ASSET_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+                        {ASSET_TYPE_OPTIONS.find((option) => option.value === assetType)?.description}
+                      </p>
+                      {assetType === '__custom__' ? (
+                        <input
+                          value={customAssetType}
+                          onChange={(event) => setCustomAssetType(event.target.value)}
+                          className="mt-2 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                          placeholder="输入你自己的条目类型，例如 hero_icon"
+                        />
+                      ) : null}
+                    </label>
+
+                    <label className="block">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          标签分类
+                        </span>
+                        <span className="text-[11px] text-outline">偏业务分组</span>
+                      </div>
+                      <select
+                        value={category}
+                        onChange={(event) => setCategory(event.target.value)}
+                        className="w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition-colors focus:border-primary/35"
+                      >
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+                        {CATEGORY_OPTIONS.find((option) => option.value === category)?.description}
+                      </p>
+                      {category === '__custom__' ? (
+                        <input
+                          value={customCategory}
+                          onChange={(event) => setCustomCategory(event.target.value)}
+                          className="mt-2 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                          placeholder="输入你自己的标签，例如 warrior / mage / ui"
+                        />
+                      ) : null}
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                        条目描述
+                      </span>
+                      <span className="text-[11px] text-outline">真正的用户需求</span>
+                    </div>
+                    <textarea
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      className="min-h-28 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="直接写这个 icon 要表达什么、长什么样、重点突出什么。"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                        补充说明
+                      </span>
+                      <span className="text-[11px] text-outline">可选</span>
+                    </div>
+                    <textarea
+                      value={extraContext}
+                      onChange={(event) => setExtraContext(event.target.value)}
+                      className="min-h-20 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
+                      placeholder="比如颜色偏好、参考元素、禁用元素、和同批次其他 icon 的关系。"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between gap-3">
+                  <div className="text-xs text-on-surface-variant">
+                    创建后可以继续编辑，也可以批量再导入更多条目。
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModal(null)
+                        resetSingleDraft()
+                      }}
+                      className="rounded-xl px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={actionBusy}
+                      className="rounded-2xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {actionBusy ? '创建中…' : '创建条目'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </form>
         </div>

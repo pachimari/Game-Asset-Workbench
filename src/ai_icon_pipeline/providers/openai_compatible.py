@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from base64 import b64decode
 import json
+from json import JSONDecodeError
 from urllib import error, request
+from urllib.parse import urlparse
 
 
 class ProviderRequestError(RuntimeError):
@@ -14,6 +16,13 @@ class OpenAICompatibleProvider:
         self.base_url = base_url.rstrip("/")
         self.label = label
 
+    def _candidate_urls(self, path: str) -> list[str]:
+        urls = [f"{self.base_url}{path}"]
+        parsed = urlparse(self.base_url)
+        if not parsed.path.rstrip("/").endswith("/v1"):
+            urls.append(f"{self.base_url}/v1{path}")
+        return urls
+
     def _request_json(
         self,
         *,
@@ -22,21 +31,40 @@ class OpenAICompatibleProvider:
         api_key: str,
         payload: dict | None = None,
     ) -> dict:
-        url = f"{self.base_url}{path}"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "ai-icon-pipeline/0.1",
         }
         data = None if payload is None else json.dumps(payload).encode("utf-8")
-        req = request.Request(url, data=data, headers=headers, method=method)
-        try:
-            with request.urlopen(req, timeout=90) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="ignore")
-            raise ProviderRequestError(f"{self.label} request failed: {exc.code} {body or exc.reason}") from exc
-        except error.URLError as exc:
-            raise ProviderRequestError(f"{self.label} request failed: {exc.reason}") from exc
+        last_error: Exception | None = None
+        for index, url in enumerate(self._candidate_urls(path)):
+            req = request.Request(url, data=data, headers=headers, method=method)
+            try:
+                with request.urlopen(req, timeout=90) as response:
+                    body = response.read().decode("utf-8")
+                    try:
+                        return json.loads(body)
+                    except JSONDecodeError as exc:
+                        last_error = ProviderRequestError(
+                            f"{self.label} returned non-JSON response from {url}"
+                        )
+                        if index < len(self._candidate_urls(path)) - 1:
+                            continue
+                        raise last_error from exc
+            except error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="ignore")
+                last_error = ProviderRequestError(f"{self.label} request failed: {exc.code} {body or exc.reason}")
+                if index < len(self._candidate_urls(path)) - 1 and exc.code in {404, 405}:
+                    continue
+                raise last_error from exc
+            except error.URLError as exc:
+                last_error = ProviderRequestError(f"{self.label} request failed: {exc.reason}")
+                if index < len(self._candidate_urls(path)) - 1:
+                    continue
+                raise last_error from exc
+        raise last_error or ProviderRequestError(f"{self.label} request failed")
 
     def list_models(self, *, api_key: str) -> list[dict]:
         payload = self._request_json(method="GET", path="/models", api_key=api_key)

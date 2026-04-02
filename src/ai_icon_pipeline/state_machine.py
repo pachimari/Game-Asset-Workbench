@@ -19,11 +19,11 @@ from .config import (
 
 GENERATION_RULES = {
     STEP_BRIEF_GENERATION: {
-        "allowed_statuses": {STATUS_DRAFT, STATUS_BRIEF_GENERATED},
+        "allowed_statuses": {STATUS_DRAFT, STATUS_BRIEF_GENERATED, STATUS_FAILED},
         "next_status": STATUS_BRIEF_GENERATED,
     },
     STEP_IMAGE_PROMPT: {
-        "allowed_statuses": {STATUS_BRIEF_APPROVED, STATUS_PROMPT_GENERATED},
+        "allowed_statuses": {STATUS_BRIEF_APPROVED, STATUS_PROMPT_GENERATED, STATUS_FAILED},
         "next_status": STATUS_PROMPT_GENERATED,
     },
     STEP_IMAGE_GENERATION: {
