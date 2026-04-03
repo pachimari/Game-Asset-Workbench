@@ -23,6 +23,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+function parseDownloadFilename(disposition: string | null, fallback: string) {
+  if (!disposition) return fallback
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+  const plainMatch = disposition.match(/filename="?([^"]+)"?/i)
+  if (plainMatch?.[1]) {
+    return plainMatch[1]
+  }
+  return fallback
+}
+
 export async function fetchTasks(): Promise<TaskSummary[]> {
   const payload = await request<{ tasks: TaskSummary[] }>('/tasks')
   return payload.tasks
@@ -78,6 +91,27 @@ export async function deleteTask(taskId: string): Promise<{ ok: boolean; task_id
   return request(`/tasks/${taskId}`, {
     method: 'DELETE',
   })
+}
+
+export async function downloadTaskStarredImages(taskId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/exports/starred-images.zip`)
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `API request failed: ${response.status}`)
+  }
+  const blob = await response.blob()
+  const filename = parseDownloadFilename(
+    response.headers.get('content-disposition'),
+    `${taskId}-starred-images.zip`,
+  )
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 export async function updateTask(

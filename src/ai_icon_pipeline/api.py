@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -34,6 +35,7 @@ from .storage import (
     create_item,
     create_task,
     delete_task,
+    export_starred_images_zip,
     item_dir,
     list_artifacts,
     list_items,
@@ -258,6 +260,12 @@ def _mask_api_key(key: str) -> str:
 def _file_url(path: Path) -> str:
     relative = path.relative_to(TASKS_DIR)
     return f"/files/{relative.as_posix()}"
+
+
+def _download_filename_fragment(value: str) -> str:
+    cleaned = value.strip().replace("/", "_").replace("\\", "_")
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:80] or "batch"
 
 
 def _candidate_rows(task_id: str, item_id: str) -> dict:
@@ -500,6 +508,20 @@ def create_app() -> FastAPI:
         try:
             await run_in_threadpool(delete_task, task_id)
             return {"ok": True, "task_id": task_id}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.get("/tasks/{task_id}/exports/starred-images.zip")
+    async def get_task_starred_images_export(task_id: str) -> FileResponse:
+        try:
+            archive_path = await run_in_threadpool(export_starred_images_zip, task_id)
+            task = load_task(task_id)
+            filename = f"{_download_filename_fragment(task.get('task_name', task_id))}_星标图.zip"
+            return FileResponse(
+                archive_path,
+                media_type="application/zip",
+                filename=filename,
+            )
         except Exception as exc:
             raise _to_http_error(exc) from exc
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import re
 import shutil
+import zipfile
 
 from .config import (
     DEFAULT_RUNTIME_CONFIG,
@@ -88,6 +89,12 @@ def read_jsonl(path: Path) -> list[dict]:
         if line.strip():
             rows.append(json.loads(line))
     return rows
+
+
+def _safe_path_fragment(value: str) -> str:
+    cleaned = re.sub(r"[\\/:*?\"<>|]+", "_", value).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned[:80] or "untitled"
 
 
 def next_task_id() -> str:
@@ -740,3 +747,85 @@ def list_artifacts(task_id: str, item_id: str, step: str) -> list[dict]:
 
     artifacts.sort(key=lambda artifact: (artifact["version"], artifact["manual"]))
     return artifacts
+
+
+def export_starred_images_zip(task_id: str) -> Path:
+    task = load_task(task_id)
+    items = list_items(task_id)
+    export_root = task_dir(task_id) / "exports"
+    ensure_dir(export_root)
+    archive_path = export_root / "starred-images.zip"
+
+    manifest: dict[str, object] = {
+        "task_id": task_id,
+        "task_name": task.get("task_name", task_id),
+        "exported_at": utc_now(),
+        "items": [],
+    }
+    exported_count = 0
+
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for item in items:
+            starred_versions = list(item.get("starred_image_versions", []))
+            if not starred_versions:
+                continue
+
+            item_name = _safe_path_fragment(item.get("title") or item["item_id"])
+            item_folder = f"{item['item_id']}_{item_name}"
+            item_manifest: dict[str, object] = {
+                "item_id": item["item_id"],
+                "title": item.get("title", ""),
+                "starred_versions": [],
+            }
+
+            for version in starred_versions:
+                try:
+                    artifact = load_artifact(task_id, item["item_id"], STEP_IMAGE_GENERATION, version)
+                except ValueError:
+                    continue
+
+                candidates = (artifact.get("output") or {}).get("candidates", [])
+                exported_files: list[str] = []
+                for index, candidate in enumerate(candidates, start=1):
+                    image_path = candidate.get("image_path")
+                    if not image_path:
+                        continue
+                    source_path = item_dir(task_id, item["item_id"]) / "images" / image_path
+                    if not source_path.exists():
+                        continue
+                    suffix = source_path.suffix or Path(str(image_path)).suffix or ".png"
+                    candidate_id = candidate.get("candidate_id") or f"candidate_{index:02d}"
+                    safe_candidate_id = _safe_path_fragment(str(candidate_id))
+                    file_name = f"{version}_{safe_candidate_id}{suffix}"
+                    archive_name = f"{item_folder}/{file_name}"
+                    archive.write(source_path, arcname=archive_name)
+                    exported_files.append(archive_name)
+                    exported_count += 1
+
+                if exported_files:
+                    casted_versions = item_manifest["starred_versions"]
+                    assert isinstance(casted_versions, list)
+                    casted_versions.append(
+                        {
+                            "version": version,
+                            "provider": artifact.get("provider"),
+                            "model": artifact.get("model"),
+                            "created_at": artifact.get("created_at"),
+                            "files": exported_files,
+                        }
+                    )
+
+            if item_manifest["starred_versions"]:
+                casted_items = manifest["items"]
+                assert isinstance(casted_items, list)
+                casted_items.append(item_manifest)
+
+        if exported_count == 0:
+            raise ValueError("当前批次还没有星标图可导出")
+
+        archive.writestr(
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        )
+
+    return archive_path

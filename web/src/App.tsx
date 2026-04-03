@@ -7,6 +7,7 @@ import {
   createTask,
   createProvider,
   deleteProvider,
+  downloadTaskStarredImages,
   editTaskItemBrief,
   editTaskItemPrompt,
   fetchSettings,
@@ -348,6 +349,19 @@ function App() {
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '批量执行失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleExportStarredImages() {
+    if (!activeTaskId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      await downloadTaskStarredImages(activeTaskId)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '导出星标图失败')
     } finally {
       setActionBusy(false)
     }
@@ -744,6 +758,7 @@ function App() {
                 onSelectItem={handleSelectItem}
                 onSaveTaskSettings={handleUpdateTaskSettings}
                 onRunBatchPipeline={handleRunBatchPipeline}
+                onExportStarredImages={handleExportStarredImages}
                 onCreateItem={handleCreateItem}
                 onCreateItemsBulk={handleCreateItemsBulk}
                 actionBusy={actionBusy}

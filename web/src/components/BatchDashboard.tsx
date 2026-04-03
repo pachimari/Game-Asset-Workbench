@@ -71,6 +71,7 @@ export default function BatchDashboard({
   onSelectItem,
   onSaveTaskSettings,
   onRunBatchPipeline,
+  onExportStarredImages,
   onCreateItem,
   onCreateItemsBulk,
   actionBusy,
@@ -89,6 +90,7 @@ export default function BatchDashboard({
     image_resolution: string
   }) => Promise<void>
   onRunBatchPipeline: (options?: { autoApprove?: boolean }) => Promise<void>
+  onExportStarredImages: () => Promise<void>
   onCreateItem: (payload: {
     asset_type: string
     title: string
@@ -430,6 +432,14 @@ export default function BatchDashboard({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={actionBusy || items.length === 0}
+              onClick={() => void onExportStarredImages()}
+              className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {actionBusy ? '处理中…' : '导出星标 ZIP'}
+            </button>
             <button
               type="button"
               disabled={actionBusy || items.length === 0}
