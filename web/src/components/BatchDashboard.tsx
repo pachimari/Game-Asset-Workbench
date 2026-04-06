@@ -7,9 +7,14 @@ import { Icon } from './Sidebar'
 
 function stageTone(status: string) {
   if (status === 'completed') return 'text-primary'
-  if (status === 'image_generated' || status === 'prompt_generated' || status === 'brief_generated') {
+  if (
+    status === 'image_generated' ||
+    status === 'prompt_generated' ||
+    status === 'brief_generated'
+  ) {
     return 'text-secondary'
   }
+  if (status === 'brief_generating' || status === 'prompt_generating') return 'text-sky-300'
   if (status === 'failed') return 'text-error'
   return 'text-on-surface-variant'
 }
@@ -25,6 +30,9 @@ function statusBadge(status: string) {
     return 'border-amber-400/20 bg-amber-400/10 text-amber-300'
   }
   if (status === 'image_generating') {
+    return 'border-sky-400/20 bg-sky-400/10 text-sky-300'
+  }
+  if (status === 'brief_generating' || status === 'prompt_generating') {
     return 'border-sky-400/20 bg-sky-400/10 text-sky-300'
   }
   if (status === 'prompt_generated' || status === 'brief_generated') {

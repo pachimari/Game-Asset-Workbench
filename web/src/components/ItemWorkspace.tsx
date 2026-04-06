@@ -47,12 +47,15 @@ function stageLabel(stage: StageKey) {
 
 function eventLabel(action: string) {
   const labels: Record<string, string> = {
+    start_brief_generation: '开始生成设计说明',
     run_brief_generation: '生成设计说明',
     approve_brief_generation: '通过设计说明',
     edit_brief: '手动修改设计说明',
+    start_image_prompt: '开始生成出图指令',
     run_image_prompt: '生成出图指令',
     approve_image_prompt: '通过出图指令',
     edit_prompt: '手动修改出图指令',
+    start_image_generation: '开始生成候选图',
     run_image_generation: '生成候选图',
     approve_image_generation: '确认候选图',
     cancel_image_generation: '停止候选图生成',
@@ -73,6 +76,11 @@ function stageSummary(status: string) {
       detail: '先生成设计说明',
       tone: 'border-outline-variant/18 bg-surface-container text-on-surface',
     },
+    brief_generating: {
+      title: '设计说明生成中',
+      detail: '正在整理设计说明',
+      tone: 'border-sky-400/25 bg-sky-400/10 text-sky-200',
+    },
     brief_generated: {
       title: '待确认设计说明',
       detail: '确认后进入出图指令',
@@ -81,6 +89,11 @@ function stageSummary(status: string) {
     brief_approved: {
       title: '可生成出图指令',
       detail: '设计说明已确认',
+      tone: 'border-sky-400/25 bg-sky-400/10 text-sky-200',
+    },
+    prompt_generating: {
+      title: '出图指令生成中',
+      detail: '正在整理新的 prompt',
       tone: 'border-sky-400/25 bg-sky-400/10 text-sky-200',
     },
     prompt_generated: {
@@ -460,8 +473,12 @@ export default function ItemWorkspace({
   }
 
   function stageForModelPicker(status: string): StageKey {
-    if (status === 'draft' || status === 'brief_generated') return 'brief_generation'
-    if (status === 'brief_approved' || status === 'prompt_generated') return 'image_prompt'
+    if (status === 'draft' || status === 'brief_generating' || status === 'brief_generated') {
+      return 'brief_generation'
+    }
+    if (status === 'brief_approved' || status === 'prompt_generating' || status === 'prompt_generated') {
+      return 'image_prompt'
+    }
     return 'image_generation'
   }
 
@@ -520,6 +537,13 @@ export default function ItemWorkspace({
           secondaryLabel: null,
           secondaryAction: null,
         }
+      case 'brief_generating':
+        return {
+          primaryLabel: null,
+          primaryAction: null,
+          secondaryLabel: null,
+          secondaryAction: null,
+        }
       case 'brief_generated':
         return {
           primaryLabel: '通过设计说明',
@@ -533,6 +557,13 @@ export default function ItemWorkspace({
           primaryAction: () => onRunStep('image_prompt'),
           secondaryLabel: '回到设计说明',
           secondaryAction: () => onRollbackStep('brief_generation'),
+        }
+      case 'prompt_generating':
+        return {
+          primaryLabel: null,
+          primaryAction: null,
+          secondaryLabel: null,
+          secondaryAction: null,
         }
       case 'prompt_generated':
         return {
@@ -592,8 +623,10 @@ export default function ItemWorkspace({
   const pendingGenerationCount = pendingVersions.length
   const starredCount = starredVersions.length
   const selectedImageUrl = approvedUrl || selectedVersion?.candidates[0]?.image_url || ''
-  const promptGenerating = actionBusy && pendingRunStep === 'image_prompt'
-  const briefGenerating = actionBusy && pendingRunStep === 'brief_generation'
+  const promptGenerating =
+    workspace.status === 'prompt_generating' || (actionBusy && pendingRunStep === 'image_prompt')
+  const briefGenerating =
+    workspace.status === 'brief_generating' || (actionBusy && pendingRunStep === 'brief_generation')
   const stageTitle =
     promptGenerating
       ? '出图指令生成中'

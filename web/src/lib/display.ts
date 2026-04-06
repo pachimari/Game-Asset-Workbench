@@ -1,8 +1,10 @@
 const stageLabelMap: Record<string, string> = {
   draft: '待开始',
   in_progress: '进行中',
+  brief_generating: '设计说明生成中',
   brief_generated: '待确认设计说明',
   brief_approved: '设计说明已确认',
+  prompt_generating: '出图指令生成中',
   prompt_generated: '待确认出图指令',
   prompt_approved: '可生成候选图',
   image_generating: '候选图生成中',

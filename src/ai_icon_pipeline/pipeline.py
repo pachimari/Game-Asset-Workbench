@@ -4,12 +4,14 @@ import shutil
 
 from .config import (
     STATUS_BRIEF_APPROVED,
+    STATUS_BRIEF_GENERATING,
     STATUS_BRIEF_GENERATED,
     STATUS_COMPLETED,
     STATUS_DRAFT,
     STATUS_FAILED,
     STATUS_IMAGE_GENERATING,
     STATUS_IMAGE_GENERATED,
+    STATUS_PROMPT_GENERATING,
     STATUS_PROMPT_APPROVED,
     STATUS_PROMPT_GENERATED,
     STEP_BRIEF_GENERATION,
@@ -48,6 +50,12 @@ GENERATED_STATUS_BY_STEP = {
     STEP_BRIEF_GENERATION: STATUS_BRIEF_GENERATED,
     STEP_IMAGE_PROMPT: STATUS_PROMPT_GENERATED,
     STEP_IMAGE_GENERATION: STATUS_IMAGE_GENERATED,
+}
+
+IN_PROGRESS_STATUS_BY_STEP = {
+    STEP_BRIEF_GENERATION: STATUS_BRIEF_GENERATING,
+    STEP_IMAGE_PROMPT: STATUS_PROMPT_GENERATING,
+    STEP_IMAGE_GENERATION: STATUS_IMAGE_GENERATING,
 }
 
 DOWNSTREAM_STEPS = {
@@ -200,6 +208,32 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
     api_key = provider_settings.get("api_key", "")
     prompt_templates = global_settings.get("prompt_templates", {})
     next_status = validate_generation(step, item["status"])
+    in_progress_status = IN_PROGRESS_STATUS_BY_STEP[step]
+
+    item["status"] = in_progress_status
+    save_item(task_id, item)
+    _set_metrics_status(task_id, item_id, in_progress_status)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": f"start_{step}",
+            "to": in_progress_status,
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": f"start_{step}",
+            "item_id": item_id,
+            "to": in_progress_status,
+        },
+    )
+    refresh_task_summary(task_id)
 
     try:
         if step == STEP_BRIEF_GENERATION:
@@ -357,11 +391,7 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
 
     version = write_artifact(task_id, item_id, step, payload, version=version)
     item["current_versions"][step] = version
-    item["status"] = (
-        STATUS_IMAGE_GENERATING
-        if step == STEP_IMAGE_GENERATION and payload.get("async_job")
-        else next_status
-    )
+    item["status"] = STATUS_IMAGE_GENERATING if step == STEP_IMAGE_GENERATION and payload.get("async_job") else next_status
     save_item(task_id, item)
     _touch_metrics(task_id, item_id, step)
     append_item_event(

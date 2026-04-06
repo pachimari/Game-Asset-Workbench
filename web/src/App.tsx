@@ -44,6 +44,15 @@ import GlobalSettings from './components/GlobalSettings'
 
 type View = 'dashboard' | 'workspace'
 
+function itemHasBackgroundWork(item: ItemSummary) {
+  return (
+    (item.pending_image_jobs ?? 0) > 0 ||
+    item.status === 'brief_generating' ||
+    item.status === 'prompt_generating' ||
+    item.status === 'image_generating'
+  )
+}
+
 function App() {
   const dashboardScrollRef = useRef<HTMLDivElement | null>(null)
   const dashboardScrollTopRef = useRef(0)
@@ -381,6 +390,33 @@ function App() {
       setActionError(null)
       setActionBusy(true)
       setPendingRunStep(action === 'run' && step ? (step as typeof pendingRunStep) : null)
+      if (action === 'run' && step) {
+        const optimisticStatus =
+          step === 'brief_generation'
+            ? 'brief_generating'
+            : step === 'image_prompt'
+              ? 'prompt_generating'
+              : 'image_generating'
+
+        setItems((current) =>
+          current.map((row) =>
+            row.item_id === requestItemId
+              ? {
+                  ...row,
+                  status: optimisticStatus,
+                  pending_image_jobs:
+                    step === 'image_generation' ? (row.pending_image_jobs ?? 0) + 1 : row.pending_image_jobs,
+                }
+              : row,
+          ),
+        )
+        setActiveItem((current) =>
+          current && current.item_id === requestItemId ? { ...current, status: optimisticStatus } : current,
+        )
+        setWorkspace((current) =>
+          current && current.item_id === requestItemId ? { ...current, status: optimisticStatus } : current,
+        )
+      }
     }
     try {
       let response:
@@ -423,6 +459,12 @@ function App() {
     } catch (err) {
       if (!passive) {
         setActionError(err instanceof Error ? err.message : '执行动作失败')
+        if (requestTaskId === activeTaskIdRef.current) {
+          await reloadTaskContext(requestTaskId, activeItemIdRef.current)
+          if (view === 'workspace' && activeItemIdRef.current) {
+            await reloadWorkspace(requestTaskId, activeItemIdRef.current)
+          }
+        }
       }
     } finally {
       if (!passive) {
@@ -654,7 +696,7 @@ function App() {
   const pollDashboardTask = useEffectEvent(() => {
     if (!activeTaskId || dashboardPollInFlightRef.current) return
     dashboardPollInFlightRef.current = true
-    void reloadTaskContext(activeTaskId, activeItemId)
+    void reloadTaskContext(activeTaskId, activeItemIdRef.current)
       .then(() => reloadTaskList(activeTaskId))
       .finally(() => {
         dashboardPollInFlightRef.current = false
@@ -662,13 +704,18 @@ function App() {
   })
 
   useEffect(() => {
-    const pendingCount = items.reduce((sum, item) => sum + (item.pending_image_jobs ?? 0), 0)
-    if (view !== 'dashboard' || !activeTaskId || pendingCount === 0) return
+    const hasBackgroundWork = items.some(itemHasBackgroundWork)
+    if (!activeTaskId || !hasBackgroundWork) return
     const timer = window.setInterval(() => {
       pollDashboardTask()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [view, activeTaskId, activeItemId, items])
+  }, [activeTaskId, items])
+
+  useEffect(() => {
+    if (view !== 'dashboard' || !activeTaskId || !items.some(itemHasBackgroundWork)) return
+    pollDashboardTask()
+  }, [view, activeTaskId, items])
 
   useEffect(() => {
     if (view !== 'dashboard') return

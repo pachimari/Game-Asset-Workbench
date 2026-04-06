@@ -5,8 +5,10 @@ export type StageName =
 
 export type StageStatus =
   | 'draft'
+  | 'brief_generating'
   | 'brief_generated'
   | 'brief_approved'
+  | 'prompt_generating'
   | 'prompt_generated'
   | 'prompt_approved'
   | 'image_generating'

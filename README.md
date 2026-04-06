@@ -4,6 +4,7 @@
 
 详细设计见 [PRD.md](./PRD.md)。README 只保留项目概览和执行方向。
 M5 的正式前端迁移基线见 [M5_WEB_FOUNDATION.md](./M5_WEB_FOUNDATION.md)。
+M6 的产品化收口计划见 [M6_PRODUCTIZATION_PLAN.md](./M6_PRODUCTIZATION_PLAN.md)。
 
 如果后续要把本项目作为外部 AI Agent 的正式工具接口，见 [CLI_INTERFACE.md](./CLI_INTERFACE.md)。
 当前 CLI 同时支持：
@@ -19,7 +20,8 @@ M5 的正式前端迁移基线见 [M5_WEB_FOUNDATION.md](./M5_WEB_FOUNDATION.md)
 ## 当前技术路线
 
 - **编排层**：Python 本地编排代码
-- **界面层**：Streamlit（当前阶段的本地验证工作台）
+- **界面层**：React + TypeScript + Vite（当前正式工作台）
+- **验证台**：Streamlit（保留为内部验证入口）
 - **文本 Agent**：需求整理 Agent、出图指令生成 Agent
 - **聊天意图路由**：Claude Code CLI（可选，用于自然语言转结构化 action）
 - **图像生成**：Gemini Image API
@@ -27,7 +29,7 @@ M5 的正式前端迁移基线见 [M5_WEB_FOUNDATION.md](./M5_WEB_FOUNDATION.md)
 
 当前统一以 **Gemini Image API** 为图像生成后端，不再以 Stable Diffusion 作为主线方案。
 
-当前的 Streamlit UI 主要承担 **内部验证与流程打通** 的职责，而不是最终产品前端。若后续继续追求产品级交互（左侧导航、弹窗、复杂表格、富文本、强联动），计划采用“保留现有 Python 核心层 + 增加 API 层 + 替换成真正 Web 前端”的路线，而不是继续把核心逻辑写死在 Streamlit 中。
+当前正式主线已经切到 **Python core + FastAPI + React Web 工作台**。Streamlit 继续保留为内部验证台，而不是最终产品前端。
 
 ## 快速开始
 
