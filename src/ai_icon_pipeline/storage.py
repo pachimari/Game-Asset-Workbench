@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 import json
 import re
@@ -10,7 +11,12 @@ import zipfile
 from .config import (
     DEFAULT_RUNTIME_CONFIG,
     DEFAULT_STYLE_SPEC,
+    GENERATING_STALE_SECONDS,
+    STATUS_FAILED,
     STATUS_DRAFT,
+    STATUS_BRIEF_GENERATING,
+    STATUS_PROMPT_GENERATING,
+    STATUS_IMAGE_GENERATING,
     STEP_BRIEF_GENERATION,
     STEP_IMAGE_GENERATION,
     STEP_IMAGE_PROMPT,
@@ -21,6 +27,7 @@ from .utils import ensure_dir, utc_now
 
 TASK_ID_PATTERN = re.compile(r"^task_(\d+)$")
 ITEM_ID_PATTERN = re.compile(r"^item_(\d+)$")
+PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
 
 
 def default_model_overrides() -> dict:
@@ -97,6 +104,15 @@ def _safe_path_fragment(value: str) -> str:
     return cleaned[:80] or "untitled"
 
 
+def _parse_utc_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def next_task_id() -> str:
     ensure_tasks_root()
     max_id = 0
@@ -159,6 +175,52 @@ def _ensure_item_schema(item: dict) -> dict:
         item["runtime_overrides"].setdefault(key, value)
     item.setdefault("starred_image_versions", list(default_starred_image_versions()))
     return item
+
+
+def _mark_item_failed(task_id: str, item_id: str, item: dict, *, reason: str) -> dict:
+    item["status"] = STATUS_FAILED
+    save_item(task_id, item)
+    metrics = load_metrics(task_id, item_id)
+    metrics["status"] = STATUS_FAILED
+    metrics["end_time"] = None
+    save_metrics(task_id, item_id, metrics)
+    event = {
+        "timestamp": utc_now(),
+        "source": "system",
+        "action": "recover_stale_generation",
+        "item_id": item_id,
+        "reason": reason,
+        "to": STATUS_FAILED,
+    }
+    append_item_event(task_id, item_id, event)
+    append_event(task_id, event)
+    refresh_task_summary(task_id)
+    return item
+
+
+def reconcile_item_generating_state(task_id: str, item_id: str, item: dict) -> dict:
+    status = item.get("status")
+    if status not in {STATUS_BRIEF_GENERATING, STATUS_PROMPT_GENERATING, STATUS_IMAGE_GENERATING}:
+        return item
+
+    updated_at = _parse_utc_timestamp(item.get("updated_at"))
+    if not updated_at:
+        return item
+    age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
+    if age_seconds < GENERATING_STALE_SECONDS:
+        return item
+
+    if status == STATUS_IMAGE_GENERATING:
+        pending_versions = 0
+        for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+            artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+            async_status = str((artifact.get("async_job") or {}).get("status", "")).lower()
+            if async_status in PENDING_ASYNC_STATUSES:
+                pending_versions += 1
+        if pending_versions > 0:
+            return item
+
+    return _mark_item_failed(task_id, item_id, item, reason=f"stale_{status}")
 
 
 def create_task(
@@ -617,7 +679,9 @@ def load_item(task_id: str, item_id: str) -> dict:
     path = item_dir(task_id, item_id) / "item.json"
     if not path.exists():
         raise ValueError(f"Item not found: {task_id} {item_id}")
-    return _ensure_item_schema(read_json(path))  # type: ignore[return-value]
+    item = _ensure_item_schema(read_json(path))  # type: ignore[assignment]
+    item = reconcile_item_generating_state(task_id, item_id, item)
+    return item  # type: ignore[return-value]
 
 
 def save_item(task_id: str, item: dict) -> None:
@@ -751,6 +815,58 @@ def list_artifacts(task_id: str, item_id: str, step: str) -> list[dict]:
 
     artifacts.sort(key=lambda artifact: (artifact["version"], artifact["manual"]))
     return artifacts
+
+
+def summarize_item_images(task_id: str, item_id: str) -> dict:
+    item = load_item(task_id, item_id)
+    approved_image_path = None
+    for suffix in (".png", ".jpg", ".jpeg", ".webp"):
+        candidate = item_dir(task_id, item_id) / "images" / f"approved{suffix}"
+        if candidate.exists():
+            approved_image_path = candidate
+            break
+
+    current_version = item.get("current_versions", {}).get("image_generation")
+    preview_image_path = approved_image_path
+    pending_image_jobs = 0
+
+    if not preview_image_path and current_version:
+        try:
+            current_artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, current_version)
+            candidates = (current_artifact.get("output") or {}).get("candidates", [])
+            for candidate in candidates:
+                image_path = candidate.get("image_path")
+                if image_path:
+                    resolved = item_dir(task_id, item_id) / "images" / image_path
+                    if resolved.exists():
+                        preview_image_path = resolved
+                        break
+        except ValueError:
+            pass
+
+    for artifact_meta in reversed(list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION)):
+        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        async_status = str((artifact.get("async_job") or {}).get("status", "")).lower()
+        if async_status in PENDING_ASYNC_STATUSES:
+            pending_image_jobs += 1
+
+        if preview_image_path:
+            continue
+
+        candidates = (artifact.get("output") or {}).get("candidates", [])
+        for candidate in candidates:
+            image_path = candidate.get("image_path")
+            if not image_path:
+                continue
+            resolved = item_dir(task_id, item_id) / "images" / image_path
+            if resolved.exists():
+                preview_image_path = resolved
+                break
+
+    return {
+        "preview_image_path": preview_image_path,
+        "pending_image_jobs": pending_image_jobs,
+    }
 
 
 def export_starred_images_zip(task_id: str) -> Path:

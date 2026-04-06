@@ -54,6 +54,7 @@ from .storage import (
     load_item_events,
     load_runtime_config,
     load_task,
+    summarize_item_images,
     update_item,
     update_item_model_override,
     update_item_starred_versions,
@@ -392,14 +393,10 @@ def _item_preview_url(task_id: str, item_id: str) -> str | None:
 
 def _item_summary_payload(task_id: str, item: dict) -> dict:
     payload = dict(item)
-    candidate_rows = _candidate_rows(task_id, item["item_id"])
-    payload["preview_image_url"] = _item_preview_url(task_id, item["item_id"])
-    payload["pending_image_jobs"] = sum(
-        1
-        for version in candidate_rows.get("versions", [])
-        if str((version.get("async_job") or {}).get("status", "")).lower()
-        in {"queued", "processing", "pending", "running", "in_progress"}
-    )
+    image_summary = summarize_item_images(task_id, item["item_id"])
+    preview_path = image_summary.get("preview_image_path")
+    payload["preview_image_url"] = _file_url(preview_path) if isinstance(preview_path, Path) else None
+    payload["pending_image_jobs"] = int(image_summary.get("pending_image_jobs", 0))
     return payload
 
 

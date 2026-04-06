@@ -23,6 +23,7 @@ API_ALLOWED_ORIGINS = [
     for origin in os.getenv("AI_ICON_PIPELINE_API_ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+GENERATING_STALE_SECONDS = int(os.getenv("AI_ICON_PIPELINE_GENERATING_STALE_SECONDS", "900"))
 
 STEP_BRIEF_GENERATION = "brief_generation"
 STEP_IMAGE_PROMPT = "image_prompt"
