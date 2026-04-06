@@ -85,7 +85,9 @@ def _mark_completed(task_id: str, item_id: str) -> None:
 def _set_metrics_status(task_id: str, item_id: str, status: str) -> None:
     metrics = load_metrics(task_id, item_id)
     metrics["status"] = status
-    if status != STATUS_COMPLETED:
+    if status == STATUS_FAILED:
+        metrics["end_time"] = utc_now()
+    elif status != STATUS_COMPLETED:
         metrics["end_time"] = None
     save_metrics(task_id, item_id, metrics)
 

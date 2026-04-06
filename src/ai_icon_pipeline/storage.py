@@ -182,7 +182,7 @@ def _mark_item_failed(task_id: str, item_id: str, item: dict, *, reason: str) ->
     save_item(task_id, item)
     metrics = load_metrics(task_id, item_id)
     metrics["status"] = STATUS_FAILED
-    metrics["end_time"] = None
+    metrics["end_time"] = utc_now()
     save_metrics(task_id, item_id, metrics)
     event = {
         "timestamp": utc_now(),

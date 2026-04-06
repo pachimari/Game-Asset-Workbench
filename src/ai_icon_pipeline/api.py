@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
+import hmac
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -279,6 +279,27 @@ def _file_url(path: Path) -> str:
     return f"/files/{relative.as_posix()}"
 
 
+def _safe_file_response_path(file_path: str) -> Path:
+    target = (TASKS_DIR / file_path).resolve()
+    tasks_root = TASKS_DIR.resolve()
+    try:
+        target.relative_to(tasks_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="Unsafe file path") from exc
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    relative = target.relative_to(tasks_root)
+    parts = relative.parts
+    allowed = (
+        "images" in parts
+        or (len(parts) >= 2 and parts[1] == "exports")
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="File access is restricted")
+    return target
+
+
 def _download_filename_fragment(value: str) -> str:
     cleaned = value.strip().replace("/", "_").replace("\\", "_")
     cleaned = " ".join(cleaned.split())
@@ -305,6 +326,8 @@ def _is_local_request(request: Request) -> bool:
 
 
 def _check_request_access(request: Request) -> None:
+    if request.url.path == "/health":
+        return
     if not API_ALLOW_REMOTE and not _is_local_request(request):
         raise HTTPException(status_code=403, detail="Remote access is disabled")
 
@@ -313,7 +336,7 @@ def _check_request_access(request: Request) -> None:
         token = request.headers.get("x-api-key", "")
         if bearer.startswith("Bearer "):
             token = bearer.removeprefix("Bearer ").strip()
-        if token != API_TOKEN:
+        if not hmac.compare_digest(token, API_TOKEN):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -480,11 +503,14 @@ def create_app() -> FastAPI:
         _check_request_access(request)
         return await call_next(request)
 
-    app.mount("/files", StaticFiles(directory=str(TASKS_DIR)), name="files")
-
     @app.get("/health")
     def health() -> dict:
         return {"ok": True, "service": "ai-icon-pipeline-api"}
+
+    @app.get("/files/{file_path:path}")
+    def get_file(file_path: str) -> FileResponse:
+        path = _safe_file_response_path(file_path)
+        return FileResponse(path)
 
     @app.get("/tasks")
     def get_tasks() -> dict:
@@ -882,6 +908,3 @@ def create_app() -> FastAPI:
             raise _to_http_error(exc) from exc
 
     return app
-
-
-app = create_app()

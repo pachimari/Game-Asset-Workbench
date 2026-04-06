@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ai_icon_pipeline import storage
+from ai_icon_pipeline import api
 
 
 class StorageSafetyTests(unittest.TestCase):
@@ -40,6 +41,35 @@ class StorageSafetyTests(unittest.TestCase):
 
                     recovered = storage.load_item(task["task_id"], item["item_id"])
                     self.assertEqual(recovered["status"], "failed")
+                    metrics = storage.load_metrics(task["task_id"], item["item_id"])
+                    self.assertEqual(metrics["status"], "failed")
+                    self.assertIsNotNone(metrics["end_time"])
+
+    def test_file_access_is_limited_to_images_and_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(api, "TASKS_DIR", Path(tmpdir)):
+                image_path = Path(tmpdir) / "task_001" / "items" / "item_001" / "images" / "ok.png"
+                image_path.parent.mkdir(parents=True, exist_ok=True)
+                image_path.write_bytes(b"png")
+
+                export_path = Path(tmpdir) / "task_001" / "exports" / "ok.zip"
+                export_path.parent.mkdir(parents=True, exist_ok=True)
+                export_path.write_bytes(b"zip")
+
+                blocked_path = Path(tmpdir) / "task_001" / "items" / "item_001" / "item.json"
+                blocked_path.parent.mkdir(parents=True, exist_ok=True)
+                blocked_path.write_text("{}", encoding="utf-8")
+
+                self.assertEqual(
+                    api._safe_file_response_path("task_001/items/item_001/images/ok.png"),
+                    image_path.resolve(),
+                )
+                self.assertEqual(
+                    api._safe_file_response_path("task_001/exports/ok.zip"),
+                    export_path.resolve(),
+                )
+                with self.assertRaises(Exception):
+                    api._safe_file_response_path("task_001/items/item_001/item.json")
 
 
 if __name__ == "__main__":

@@ -16,10 +16,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     uvicorn.run(
-        "ai_icon_pipeline.api:app",
+        "ai_icon_pipeline.api:create_app",
         host=args.host,
         port=args.port,
         reload=args.reload,
+        factory=True,
     )
     return 0
 
