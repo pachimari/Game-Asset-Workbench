@@ -227,7 +227,11 @@ def create_task(
 
 
 def delete_task(task_id: str) -> None:
+    if not TASK_ID_PATTERN.match(task_id):
+        raise ValueError(f"Invalid task id: {task_id}")
     root = task_dir(task_id)
+    if root.parent != TASKS_DIR or root == TASKS_DIR:
+        raise ValueError(f"Refusing to delete unsafe task path: {root}")
     if not root.exists():
         raise ValueError(f"Task not found: {task_id}")
     shutil.rmtree(root)

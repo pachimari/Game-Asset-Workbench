@@ -69,6 +69,15 @@ python3 -m pip install "fastapi>=0.115" "uvicorn>=0.30"
 PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
 ```
 
+默认 API 只允许本机访问。如果你后续要部署到内网服务器，可通过环境变量打开远程访问与鉴权：
+
+```bash
+export AI_ICON_PIPELINE_API_ALLOW_REMOTE=1
+export AI_ICON_PIPELINE_API_TOKEN="replace-with-a-shared-token"
+export AI_ICON_PIPELINE_API_ALLOWED_ORIGINS="https://your-internal-ui.example.com"
+PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --host 0.0.0.0 --port 8000
+```
+
 启动 M5 正式前端：
 
 ```bash

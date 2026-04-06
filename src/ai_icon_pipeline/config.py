@@ -1,10 +1,28 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TASKS_DIR = PROJECT_ROOT / "tasks"
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+API_ALLOW_REMOTE = _env_flag("AI_ICON_PIPELINE_API_ALLOW_REMOTE", default=False)
+API_TOKEN = os.getenv("AI_ICON_PIPELINE_API_TOKEN", "").strip()
+API_PUBLIC_ERROR_DETAILS = _env_flag("AI_ICON_PIPELINE_API_PUBLIC_ERROR_DETAILS", default=False)
+API_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("AI_ICON_PIPELINE_API_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 STEP_BRIEF_GENERATION = "brief_generation"
 STEP_IMAGE_PROMPT = "image_prompt"

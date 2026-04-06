@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
+from .config import (
+    API_ALLOWED_ORIGINS,
+    API_ALLOW_REMOTE,
+    API_PUBLIC_ERROR_DETAILS,
+    API_TOKEN,
+)
 from .pipeline import (
     approve_step,
     cancel_pending_image_generations,
@@ -54,6 +62,8 @@ from .storage import (
     update_task_settings,
 )
 from .utils import utc_now
+
+logger = logging.getLogger(__name__)
 
 
 class TaskCreatePayload(BaseModel):
@@ -172,11 +182,17 @@ class TaskPipelinePayload(BaseModel):
 
 
 def _to_http_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, HTTPException):
+        return exc
     message = str(exc)
-    status_code = 400
     if "not found" in message.lower():
-        status_code = 404
-    return HTTPException(status_code=status_code, detail=message)
+        return HTTPException(status_code=404, detail=message)
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=400, detail=message)
+
+    logger.exception("Unhandled API error")
+    detail = message if API_PUBLIC_ERROR_DETAILS else "Internal server error"
+    return HTTPException(status_code=500, detail=detail)
 
 
 def _apply_task_model_overrides(task_id: str, payload: TaskUpdatePayload) -> None:
@@ -266,6 +282,38 @@ def _download_filename_fragment(value: str) -> str:
     cleaned = value.strip().replace("/", "_").replace("\\", "_")
     cleaned = " ".join(cleaned.split())
     return cleaned[:80] or "batch"
+
+
+def _download_headers(filename_utf8: str, fallback_ascii: str) -> dict[str, str]:
+    quoted = fallback_ascii.replace('"', "")
+    return {
+        "Content-Disposition": (
+            f'attachment; filename="{quoted}"; '
+            f"filename*=UTF-8''{filename_utf8}"
+        )
+    }
+
+
+def _client_host(request: Request) -> str:
+    return request.client.host if request.client else ""
+
+
+def _is_local_request(request: Request) -> bool:
+    host = _client_host(request)
+    return host in {"127.0.0.1", "::1", "localhost"}
+
+
+def _check_request_access(request: Request) -> None:
+    if not API_ALLOW_REMOTE and not _is_local_request(request):
+        raise HTTPException(status_code=403, detail="Remote access is disabled")
+
+    if API_TOKEN:
+        bearer = request.headers.get("authorization", "")
+        token = request.headers.get("x-api-key", "")
+        if bearer.startswith("Bearer "):
+            token = bearer.removeprefix("Bearer ").strip()
+        if token != API_TOKEN:
+            raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def _candidate_rows(task_id: str, item_id: str) -> dict:
@@ -420,6 +468,21 @@ def create_app() -> FastAPI:
         version="0.5.0",
         description="Thin local API layer for the M5 formal web UI.",
     )
+
+    if API_ALLOWED_ORIGINS:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=API_ALLOWED_ORIGINS,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    @app.middleware("http")
+    async def local_only_and_auth(request: Request, call_next):
+        _check_request_access(request)
+        return await call_next(request)
+
     app.mount("/files", StaticFiles(directory=str(TASKS_DIR)), name="files")
 
     @app.get("/health")
@@ -516,11 +579,15 @@ def create_app() -> FastAPI:
         try:
             archive_path = await run_in_threadpool(export_starred_images_zip, task_id)
             task = load_task(task_id)
-            filename = f"{_download_filename_fragment(task.get('task_name', task_id))}_星标图.zip"
+            filename = f"{_download_filename_fragment(task.get('task_name', task_id))}_starred-images.zip"
             return FileResponse(
                 archive_path,
                 media_type="application/zip",
                 filename=filename,
+                headers=_download_headers(
+                    f"{_download_filename_fragment(task.get('task_name', task_id))}_星标图.zip",
+                    filename,
+                ),
             )
         except Exception as exc:
             raise _to_http_error(exc) from exc
