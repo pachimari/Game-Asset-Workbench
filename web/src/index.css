@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: #060e20;
+  --color-surface: #060e20;
+  --color-surface-dim: #060e20;
+  --color-surface-container-lowest: #000000;
+  --color-surface-container-low: #091328;
+  --color-surface-container: #0f1930;
+  --color-surface-container-high: #141f38;
+  --color-surface-container-highest: #192540;
+  --color-surface-bright: #1f2b49;
+  --color-surface-variant: #192540;
+
+  --color-on-surface: #dee5ff;
+  --color-on-surface-variant: #a3aac4;
+  --color-on-background: #dee5ff;
+
+  --color-primary: #a3a6ff;
+  --color-primary-dim: #6063ee;
+  --color-primary-fixed: #9396ff;
+  --color-primary-container: #9396ff;
+  --color-on-primary: #0f00a4;
+  --color-on-primary-fixed: #000000;
+  --color-on-primary-container: #0a0081;
+
+  --color-secondary: #a28efc;
+  --color-secondary-dim: #a28efc;
+  --color-secondary-fixed: #d6cbff;
+  --color-secondary-container: #49339d;
+  --color-on-secondary: #21006d;
+  --color-on-secondary-container: #d4c9ff;
+
+  --color-tertiary: #ffa5d9;
+  --color-tertiary-dim: #ef81c4;
+  --color-tertiary-fixed: #ff8ed2;
+  --color-tertiary-container: #ff8ed2;
+  --color-on-tertiary: #701455;
+  --color-on-tertiary-fixed: #3b002b;
+  --color-on-tertiary-container: #63054a;
+
+  --color-outline: #6d758c;
+  --color-outline-variant: #40485d;
+
+  --color-error: #ff6e84;
+  --color-error-container: #a70138;
+  --color-on-error: #490013;
+  --color-on-error-container: #ffb2b9;
+
+  --color-inverse-surface: #faf8ff;
+  --color-inverse-on-surface: #4d556b;
+  --color-inverse-primary: #494bd7;
+
+  --radius-default: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-full: 0.75rem;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(163, 166, 255, 0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(162, 142, 252, 0.06), transparent 30%),
+    linear-gradient(180deg, #060e20 0%, #091328 100%);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(64, 72, 93, 0.8);
+  border-radius: 10px;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-block;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.glass-panel {
+  background: rgba(163, 166, 255, 0.08);
+  backdrop-filter: blur(12px);
+}

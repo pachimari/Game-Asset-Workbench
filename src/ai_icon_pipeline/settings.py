@@ -23,6 +23,7 @@ from .storage import read_json, write_json
 
 SETTINGS_DIR = PROJECT_ROOT / ".local"
 APP_SETTINGS_PATH = SETTINGS_DIR / "app_settings.json"
+UNSET = object()
 
 DEFAULT_STAGE_SELECTIONS = {
     STEP_BRIEF_GENERATION: {"provider": "mock", "model": "mock-text-v1"},
@@ -186,6 +187,8 @@ def _infer_custom_stages(provider_type: str, model_id: str, model: dict) -> list
         return explicit
     if provider_type == "async_image":
         return [STEP_IMAGE_GENERATION]
+    if provider_type == "gemini_native":
+        return infer_stages("gemini", model_id)
     if provider_type == "openai_compatible":
         return infer_stages("deepseek", model_id)
     return []
@@ -305,8 +308,8 @@ def update_provider_settings(
     base_url: str | None = None,
     api_key: str | None = None,
     models: list[dict] | None = None,
-    last_synced_at: str | None = None,
-    last_error: str | None = None,
+    last_synced_at: str | None | object = UNSET,
+    last_error: str | None | object = UNSET,
 ) -> dict:
     settings = load_global_settings()
     provider_settings = None
@@ -326,13 +329,13 @@ def update_provider_settings(
         provider_settings["label"] = label
     if base_url is not None:
         provider_settings["base_url"] = base_url
-    if api_key is not None:
+    if api_key is not None and api_key != "":
         provider_settings["api_key"] = api_key
     if models is not None:
         provider_settings["models"] = models
-    if last_synced_at is not None:
+    if last_synced_at is not UNSET:
         provider_settings["last_synced_at"] = last_synced_at
-    if last_error is not None:
+    if last_error is not UNSET:
         provider_settings["last_error"] = last_error
     save_global_settings(settings)
     return settings
@@ -343,7 +346,7 @@ def create_custom_provider(
     label: str,
     provider_type: str,
     base_url: str,
-    api_key: str = "",
+    api_key: str | None = None,
     models: list[dict] | None = None,
 ) -> dict:
     settings = load_global_settings()
@@ -351,7 +354,7 @@ def create_custom_provider(
         label=label,
         provider_type=provider_type,
         base_url=base_url,
-        api_key=api_key,
+        api_key=api_key or "",
         models=models,
     )
     settings.setdefault("custom_providers", []).append(provider)

@@ -3,6 +3,8 @@
 本项目的目标是做一个**本地可跑通、可演示、可迭代**的 Demo：输入一批游戏内图标资产需求，经过多阶段 AI 处理和人工审核，最终产出可用的图标，并保留全过程记录。
 
 详细设计见 [PRD.md](./PRD.md)。README 只保留项目概览和执行方向。
+M5 的正式前端迁移基线见 [M5_WEB_FOUNDATION.md](./M5_WEB_FOUNDATION.md)。
+M6 的产品化收口计划见 [M6_PRODUCTIZATION_PLAN.md](./M6_PRODUCTIZATION_PLAN.md)。
 
 如果后续要把本项目作为外部 AI Agent 的正式工具接口，见 [CLI_INTERFACE.md](./CLI_INTERFACE.md)。
 当前 CLI 同时支持：
@@ -18,7 +20,8 @@
 ## 当前技术路线
 
 - **编排层**：Python 本地编排代码
-- **界面层**：Streamlit（当前阶段的本地验证工作台）
+- **界面层**：React + TypeScript + Vite（当前正式工作台）
+- **验证台**：Streamlit（保留为内部验证入口）
 - **文本 Agent**：需求整理 Agent、出图指令生成 Agent
 - **聊天意图路由**：Claude Code CLI（可选，用于自然语言转结构化 action）
 - **图像生成**：Gemini Image API
@@ -26,7 +29,7 @@
 
 当前统一以 **Gemini Image API** 为图像生成后端，不再以 Stable Diffusion 作为主线方案。
 
-当前的 Streamlit UI 主要承担 **内部验证与流程打通** 的职责，而不是最终产品前端。若后续继续追求产品级交互（左侧导航、弹窗、复杂表格、富文本、强联动），计划采用“保留现有 Python 核心层 + 增加 API 层 + 替换成真正 Web 前端”的路线，而不是继续把核心逻辑写死在 Streamlit 中。
+当前正式主线已经切到 **Python core + FastAPI + React Web 工作台**。Streamlit 继续保留为内部验证台，而不是最终产品前端。
 
 ## 快速开始
 
@@ -53,6 +56,40 @@ python3 -m pip install "streamlit>=1.36"
 ```bash
 python3 -m streamlit run src/ai_icon_pipeline/ui.py
 ```
+
+如果你要启动 M5 的本地 API 骨架，安装 API 依赖：
+
+```bash
+python3 -m pip install "fastapi>=0.115" "uvicorn>=0.30"
+```
+
+启动本地 API：
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
+```
+
+默认 API 只允许本机访问。如果你后续要部署到内网服务器，可通过环境变量打开远程访问与鉴权：
+
+```bash
+export AI_ICON_PIPELINE_API_ALLOW_REMOTE=1
+export AI_ICON_PIPELINE_API_TOKEN="replace-with-a-shared-token"
+export AI_ICON_PIPELINE_API_ALLOWED_ORIGINS="https://your-internal-ui.example.com"
+PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --host 0.0.0.0 --port 8000
+```
+
+启动 M5 正式前端：
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+默认开发地址：
+
+- 前端：`http://127.0.0.1:4173`
+- 本地 API：`http://127.0.0.1:8000`
 
 先创建一个空批次：
 
@@ -291,8 +328,8 @@ M3 提供了一个基于 Streamlit 的本地工作台，核心能力包括：
 - **M4A**：Provider / 模型 / 设置系统
 - **M4B**：真实生成链路接入
 - **M4C**：受控聊天 Agent
-- **M5**：Demo 打磨与展示
-- **M6**：前后端分离与正式前端迁移
+- **M5**：前后端衔接与正式前端基础盘
+- **M6**：正式前端产品化与交付形态
 
 每个里程碑都应保持可演示、可回退。
 
@@ -314,11 +351,26 @@ M4 不再被视为“只做聊天 Agent”的阶段，而是拆成三块连续�
   - 解析失败可回退按钮
   - 先做有限 action 集，不做自由开放式代理
 
-### M6 说明
+### M5 说明
 
-当 M4 的核心能力稳定后，再进入 M6：
+当 M4 的核心能力稳定后，M5 不再继续重投入 Streamlit，而是开始正式前后端分层：
 
 - 保留现有 Python 核心层
 - 新增轻量 API 层（例如 FastAPI）
-- 将 Streamlit 逐步替换为真正的前端
+- 将 Streamlit 逐步替换为真正的 Web 前端
 - 避免把业务逻辑继续堆在 UI 壳里，控制技术债
+
+M5 的目标不是一次性做完最终产品，而是先把这几层打稳：
+
+- `core`：继续复用现有 `pipeline / storage / settings / providers`
+- `api`：补一个给正式 UI 调用的薄接口层
+- `web`：开始搭正式工作台骨架，替代 Streamlit 的核心工作流
+
+### M6 说明
+
+当 M5 的 API 与正式前端基础盘稳定后，再进入 M6：
+
+- 打磨产品级交互与视觉设计
+- 完善批次/条目工作台
+- 优化异步生成、候选池、设置与弹窗体验
+- 评估本地桌面壳或本地 Web App 的交付方式

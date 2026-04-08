@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 import json
 import re
+import shutil
+import zipfile
 
 from .config import (
     DEFAULT_RUNTIME_CONFIG,
     DEFAULT_STYLE_SPEC,
+    GENERATING_STALE_SECONDS,
+    STATUS_FAILED,
     STATUS_DRAFT,
+    STATUS_BRIEF_GENERATING,
+    STATUS_PROMPT_GENERATING,
+    STATUS_IMAGE_GENERATING,
     STEP_BRIEF_GENERATION,
     STEP_IMAGE_GENERATION,
     STEP_IMAGE_PROMPT,
@@ -19,6 +27,7 @@ from .utils import ensure_dir, utc_now
 
 TASK_ID_PATTERN = re.compile(r"^task_(\d+)$")
 ITEM_ID_PATTERN = re.compile(r"^item_(\d+)$")
+PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
 
 
 def default_model_overrides() -> dict:
@@ -34,6 +43,10 @@ def default_item_runtime_overrides() -> dict:
         "image_aspect_ratio": None,
         "image_resolution": None,
     }
+
+
+def default_starred_image_versions() -> list[str]:
+    return []
 
 
 def normalize_runtime_config(runtime_config: dict | None) -> dict:
@@ -85,6 +98,21 @@ def read_jsonl(path: Path) -> list[dict]:
     return rows
 
 
+def _safe_path_fragment(value: str) -> str:
+    cleaned = re.sub(r"[\\/:*?\"<>|]+", "_", value).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned[:80] or "untitled"
+
+
+def _parse_utc_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def next_task_id() -> str:
     ensure_tasks_root()
     max_id = 0
@@ -116,6 +144,7 @@ def _normalize_item(raw_item: dict, item_id: str, timestamp: str) -> dict:
         "status": STATUS_DRAFT,
         "created_at": timestamp,
         "updated_at": timestamp,
+        "starred_image_versions": list(raw_item.get("starred_image_versions", default_starred_image_versions())),
         "current_versions": {
             "brief_generation": None,
             "image_prompt": None,
@@ -144,7 +173,56 @@ def _ensure_item_schema(item: dict) -> dict:
     item.setdefault("runtime_overrides", deepcopy(default_item_runtime_overrides()))
     for key, value in default_item_runtime_overrides().items():
         item["runtime_overrides"].setdefault(key, value)
+    item.setdefault("starred_image_versions", list(default_starred_image_versions()))
     return item
+
+
+def _mark_item_failed(task_id: str, item_id: str, item: dict, *, reason: str) -> dict:
+    item["status"] = STATUS_FAILED
+    save_item(task_id, item)
+    metrics = load_metrics(task_id, item_id)
+    metrics["status"] = STATUS_FAILED
+    metrics["end_time"] = utc_now()
+    save_metrics(task_id, item_id, metrics)
+    event = {
+        "timestamp": utc_now(),
+        "source": "system",
+        "action": "recover_stale_generation",
+        "item_id": item_id,
+        "reason": reason,
+        "to": STATUS_FAILED,
+    }
+    append_item_event(task_id, item_id, event)
+    append_event(task_id, event)
+    refresh_task_summary(task_id)
+    return item
+
+
+def reconcile_item_generating_state(task_id: str, item_id: str, item: dict) -> dict:
+    status = item.get("status")
+    if status not in {STATUS_BRIEF_GENERATING, STATUS_PROMPT_GENERATING, STATUS_IMAGE_GENERATING}:
+        return item
+
+    updated_at = _parse_utc_timestamp(item.get("updated_at"))
+    if not updated_at:
+        return item
+    age_seconds = (datetime.now(timezone.utc) - updated_at).total_seconds()
+    if age_seconds < GENERATING_STALE_SECONDS:
+        return item
+
+    if status == STATUS_IMAGE_GENERATING:
+        pending_versions = 0
+        for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+            artifact = artifact_meta.get("_payload")
+            if not isinstance(artifact, dict):
+                artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+            async_status = str((artifact.get("async_job") or {}).get("status", "")).lower()
+            if async_status in PENDING_ASYNC_STATUSES:
+                pending_versions += 1
+        if pending_versions > 0:
+            return item
+
+    return _mark_item_failed(task_id, item_id, item, reason=f"stale_{status}")
 
 
 def create_task(
@@ -210,6 +288,17 @@ def create_task(
     )
     refresh_task_summary(resolved_task_id)
     return load_task(resolved_task_id)
+
+
+def delete_task(task_id: str) -> None:
+    if not TASK_ID_PATTERN.match(task_id):
+        raise ValueError(f"Invalid task id: {task_id}")
+    root = task_dir(task_id)
+    if root.parent != TASKS_DIR or root == TASKS_DIR:
+        raise ValueError(f"Refusing to delete unsafe task path: {root}")
+    if not root.exists():
+        raise ValueError(f"Task not found: {task_id}")
+    shutil.rmtree(root)
 
 
 def update_runtime_config(
@@ -366,6 +455,7 @@ def update_item(
     item["runtime_overrides"] = updated_runtime_overrides
     if source_changed:
         item["status"] = STATUS_DRAFT
+        item["starred_image_versions"] = []
         item["current_versions"] = {
             "brief_generation": None,
             "image_prompt": None,
@@ -396,6 +486,43 @@ def update_item(
             "item_id": item_id,
             "to": item["status"],
             "source_changed": source_changed,
+        },
+    )
+    refresh_task_summary(task_id)
+    return load_item(task_id, item_id)
+
+
+def update_item_starred_versions(
+    task_id: str,
+    item_id: str,
+    versions: list[str],
+    *,
+    source: str = "user",
+) -> dict:
+    item = load_item(task_id, item_id)
+    deduped_versions = list(dict.fromkeys(version for version in versions if version))
+    item["starred_image_versions"] = deduped_versions
+    save_item(task_id, item)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "update_starred_image_versions",
+            "starred_versions": deduped_versions,
+            "count": len(deduped_versions),
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "update_starred_image_versions",
+            "item_id": item_id,
+            "starred_versions": deduped_versions,
+            "count": len(deduped_versions),
         },
     )
     refresh_task_summary(task_id)
@@ -554,7 +681,9 @@ def load_item(task_id: str, item_id: str) -> dict:
     path = item_dir(task_id, item_id) / "item.json"
     if not path.exists():
         raise ValueError(f"Item not found: {task_id} {item_id}")
-    return _ensure_item_schema(read_json(path))  # type: ignore[return-value]
+    item = _ensure_item_schema(read_json(path))  # type: ignore[assignment]
+    item = reconcile_item_generating_state(task_id, item_id, item)
+    return item  # type: ignore[return-value]
 
 
 def save_item(task_id: str, item: dict) -> None:
@@ -683,8 +812,141 @@ def list_artifacts(task_id: str, item_id: str, step: str) -> list[dict]:
                 "manual": path.stem.endswith("_manual"),
                 "path": str(path),
                 "created_at": payload.get("created_at"),
+                "_payload": payload,
             }
         )
 
     artifacts.sort(key=lambda artifact: (artifact["version"], artifact["manual"]))
     return artifacts
+
+
+def summarize_item_images(task_id: str, item_id: str) -> dict:
+    item = load_item(task_id, item_id)
+    approved_image_path = None
+    for suffix in (".png", ".jpg", ".jpeg", ".webp"):
+        candidate = item_dir(task_id, item_id) / "images" / f"approved{suffix}"
+        if candidate.exists():
+            approved_image_path = candidate
+            break
+
+    current_version = item.get("current_versions", {}).get("image_generation")
+    preview_image_path = approved_image_path
+    pending_image_jobs = 0
+
+    if not preview_image_path and current_version:
+        try:
+            current_artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, current_version)
+            candidates = (current_artifact.get("output") or {}).get("candidates", [])
+            for candidate in candidates:
+                image_path = candidate.get("image_path")
+                if image_path:
+                    resolved = item_dir(task_id, item_id) / "images" / image_path
+                    if resolved.exists():
+                        preview_image_path = resolved
+                        break
+        except ValueError:
+            pass
+
+    for artifact_meta in reversed(list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION)):
+        artifact = artifact_meta.get("_payload")
+        if not isinstance(artifact, dict):
+            artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        async_status = str((artifact.get("async_job") or {}).get("status", "")).lower()
+        if async_status in PENDING_ASYNC_STATUSES:
+            pending_image_jobs += 1
+
+        if preview_image_path:
+            continue
+
+        candidates = (artifact.get("output") or {}).get("candidates", [])
+        for candidate in candidates:
+            image_path = candidate.get("image_path")
+            if not image_path:
+                continue
+            resolved = item_dir(task_id, item_id) / "images" / image_path
+            if resolved.exists():
+                preview_image_path = resolved
+                break
+
+    return {
+        "preview_image_path": preview_image_path,
+        "pending_image_jobs": pending_image_jobs,
+    }
+
+
+def export_starred_images_zip(task_id: str) -> Path:
+    task = load_task(task_id)
+    items = list_items(task_id)
+    export_root = task_dir(task_id) / "exports"
+    ensure_dir(export_root)
+    archive_path = export_root / "starred-images.zip"
+
+    manifest: dict[str, object] = {
+        "task_id": task_id,
+        "task_name": task.get("task_name", task_id),
+        "exported_at": utc_now(),
+        "items": [],
+    }
+    exported_count = 0
+
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for item in items:
+            starred_versions = list(item.get("starred_image_versions", []))
+            if not starred_versions:
+                continue
+
+            item_name = _safe_path_fragment(item.get("title") or item["item_id"])
+            item_folder = f"{item['item_id']}_{item_name}"
+            item_manifest: dict[str, object] = {
+                "item_id": item["item_id"],
+                "title": item.get("title", ""),
+                "starred_versions": [],
+            }
+
+            for version in starred_versions:
+                try:
+                    artifact = load_artifact(task_id, item["item_id"], STEP_IMAGE_GENERATION, version)
+                except ValueError:
+                    continue
+
+                candidates = (artifact.get("output") or {}).get("candidates", [])
+                exported_files: list[str] = []
+                for index, candidate in enumerate(candidates, start=1):
+                    image_path = candidate.get("image_path")
+                    if not image_path:
+                        continue
+                    source_path = item_dir(task_id, item["item_id"]) / "images" / image_path
+                    if not source_path.exists():
+                        continue
+                    suffix = source_path.suffix or Path(str(image_path)).suffix or ".png"
+                    candidate_id = candidate.get("candidate_id") or f"candidate_{index:02d}"
+                    safe_candidate_id = _safe_path_fragment(str(candidate_id))
+                    file_name = f"{version}_{safe_candidate_id}{suffix}"
+                    archive_name = f"{item_folder}/{file_name}"
+                    archive.write(source_path, arcname=archive_name)
+                    exported_files.append(archive_name)
+                    exported_count += 1
+
+                if exported_files:
+                    item_manifest["starred_versions"].append(
+                        {
+                            "version": version,
+                            "provider": artifact.get("provider"),
+                            "model": artifact.get("model"),
+                            "created_at": artifact.get("created_at"),
+                            "files": exported_files,
+                        }
+                    )
+
+            if item_manifest["starred_versions"]:
+                manifest["items"].append(item_manifest)
+
+        if exported_count == 0:
+            raise ValueError("当前批次还没有星标图可导出")
+
+        archive.writestr(
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        )
+
+    return archive_path

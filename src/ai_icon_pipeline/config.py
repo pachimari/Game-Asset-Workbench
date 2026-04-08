@@ -1,18 +1,47 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TASKS_DIR = PROJECT_ROOT / "tasks"
 
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+API_ALLOW_REMOTE = _env_flag("AI_ICON_PIPELINE_API_ALLOW_REMOTE", default=False)
+API_TOKEN = os.getenv("AI_ICON_PIPELINE_API_TOKEN", "").strip()
+API_PUBLIC_ERROR_DETAILS = _env_flag("AI_ICON_PIPELINE_API_PUBLIC_ERROR_DETAILS", default=False)
+API_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("AI_ICON_PIPELINE_API_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+GENERATING_STALE_SECONDS = int(os.getenv("AI_ICON_PIPELINE_GENERATING_STALE_SECONDS", "1800"))
+TOAPIS_SUPPLEMENTAL_IMAGE_MODELS = tuple(
+    model_id.strip()
+    for model_id in os.getenv(
+        "AI_ICON_PIPELINE_TOAPIS_SUPPLEMENTAL_IMAGE_MODELS",
+        "gemini-3.1-flash-image-preview",
+    ).split(",")
+    if model_id.strip()
+)
+
 STEP_BRIEF_GENERATION = "brief_generation"
 STEP_IMAGE_PROMPT = "image_prompt"
 STEP_IMAGE_GENERATION = "image_generation"
 
 STATUS_DRAFT = "draft"
+STATUS_BRIEF_GENERATING = "brief_generating"
 STATUS_BRIEF_GENERATED = "brief_generated"
 STATUS_BRIEF_APPROVED = "brief_approved"
+STATUS_PROMPT_GENERATING = "prompt_generating"
 STATUS_PROMPT_GENERATED = "prompt_generated"
 STATUS_PROMPT_APPROVED = "prompt_approved"
 STATUS_IMAGE_GENERATING = "image_generating"

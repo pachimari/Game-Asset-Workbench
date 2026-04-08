@@ -3,7 +3,12 @@ from __future__ import annotations
 from .gemini_native import GeminiNativeProvider
 from .openai_compatible import OpenAICompatibleProvider, ProviderRequestError
 from .toapis_async import ToApisAsyncImageProvider
-from ..config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
+from ..config import (
+    STEP_BRIEF_GENERATION,
+    STEP_IMAGE_GENERATION,
+    STEP_IMAGE_PROMPT,
+    TOAPIS_SUPPLEMENTAL_IMAGE_MODELS,
+)
 
 
 PROVIDER_LABELS = {
@@ -61,9 +66,14 @@ def get_provider(provider_id: str, provider_config: dict | None = None) -> OpenA
     raise ValueError(f"Unsupported provider: {provider_id}")
 
 
-def get_native_image_provider(provider_id: str):
+def get_native_image_provider(provider_id: str, provider_config: dict | None = None):
     if provider_id == "gemini":
         return GEMINI_NATIVE_PROVIDER
+    if provider_config and provider_config.get("provider_type") == "gemini_native":
+        return GeminiNativeProvider(
+            base_url=provider_config.get("base_url", "https://generativelanguage.googleapis.com"),
+            label=provider_config.get("label", provider_id),
+        )
     raise ValueError(f"Unsupported native image provider: {provider_id}")
 
 
@@ -106,13 +116,80 @@ def compatibility_for_model(provider_id: str, model_id: str) -> str:
     return "unknown"
 
 
+def _is_async_image_model(row: dict) -> bool:
+    model_id = str(row.get("id", "")).lower()
+    if "supported_endpoint_types" in row:
+        supported_endpoint_types = [str(value).lower() for value in row.get("supported_endpoint_types", [])]
+        if not supported_endpoint_types:
+            return False
+        return any("image" in endpoint for endpoint in supported_endpoint_types)
+    return any(
+        token in model_id
+        for token in (
+            "image",
+            "imagen",
+            "banana",
+            "flux",
+            "midjourney",
+            "mj",
+            "seedream",
+            "recraft",
+            "ideogram",
+            "gpt-image",
+        )
+    )
+
+
+def _supplement_async_image_models(provider_config: dict | None, discovered_ids: set[str]) -> list[dict]:
+    base_url = str((provider_config or {}).get("base_url", "")).lower()
+    supplemental_models: list[dict] = []
+    if "toapis.com" in base_url:
+        for model_id in TOAPIS_SUPPLEMENTAL_IMAGE_MODELS:
+            if model_id in discovered_ids:
+                continue
+            supplemental_models.append(
+                {
+                    "id": model_id,
+                    "label": model_id,
+                    "stages": [STEP_IMAGE_GENERATION],
+                    "compatibility": "unknown",
+                }
+            )
+    return supplemental_models
+
+
 def sync_provider_models(provider_id: str, api_key: str, provider_config: dict | None = None) -> list[dict]:
     if provider_id == "mock":
         return []
     if provider_config and provider_config.get("provider_type") == "async_image":
-        return provider_config.get("models", [])
-    provider = GEMINI_NATIVE_PROVIDER if provider_id == "gemini" else get_provider(provider_id, provider_config)
+        async_provider = get_async_image_provider(provider_id, provider_config)
+        models = []
+        for row in async_provider.list_models(api_key=api_key):
+            model_id = row.get("id")
+            if not model_id or not _is_async_image_model(row):
+                continue
+            models.append(
+                {
+                    "id": model_id,
+                    "label": row.get("display_name") or display_label_for_model(provider_id, model_id),
+                    "stages": [STEP_IMAGE_GENERATION],
+                    "compatibility": compatibility_for_model(provider_id, model_id),
+                }
+            )
+        discovered_ids = {model["id"] for model in models}
+        models.extend(_supplement_async_image_models(provider_config, discovered_ids))
+        models.sort(
+            key=lambda model: (
+                MODEL_COMPATIBILITY_ORDER.get(model.get("compatibility", "unknown"), 99),
+                model["label"],
+            )
+        )
+        return models
     provider_type = (provider_config or {}).get("provider_type")
+    if provider_id == "gemini" or provider_type == "gemini_native":
+        provider = get_native_image_provider(provider_id, provider_config)
+    else:
+        provider = get_provider(provider_id, provider_config)
     models = []
     for row in provider.list_models(api_key=api_key):
         model_id = row.get("id")
@@ -120,6 +197,8 @@ def sync_provider_models(provider_id: str, api_key: str, provider_config: dict |
             continue
         if provider_id not in PROVIDER_LABELS and provider_type == "openai_compatible":
             stages = infer_stages("deepseek", model_id)
+        elif provider_id not in PROVIDER_LABELS and provider_type == "gemini_native":
+            stages = infer_stages("gemini", model_id)
         else:
             stages = infer_stages(provider_id, model_id)
         if not stages:
@@ -127,9 +206,13 @@ def sync_provider_models(provider_id: str, api_key: str, provider_config: dict |
         models.append(
             {
                 "id": model_id,
-                "label": row.get("display_name") or display_label_for_model(provider_id, model_id),
+                "label": row.get("display_name")
+                or display_label_for_model("gemini" if provider_type == "gemini_native" else provider_id, model_id),
                 "stages": stages,
-                "compatibility": compatibility_for_model(provider_id, model_id),
+                "compatibility": compatibility_for_model(
+                    "gemini" if provider_type == "gemini_native" else provider_id,
+                    model_id,
+                ),
             }
         )
     models.sort(
