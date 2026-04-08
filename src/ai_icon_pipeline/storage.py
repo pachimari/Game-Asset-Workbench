@@ -213,7 +213,9 @@ def reconcile_item_generating_state(task_id: str, item_id: str, item: dict) -> d
     if status == STATUS_IMAGE_GENERATING:
         pending_versions = 0
         for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
-            artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+            artifact = artifact_meta.get("_payload")
+            if not isinstance(artifact, dict):
+                artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
             async_status = str((artifact.get("async_job") or {}).get("status", "")).lower()
             if async_status in PENDING_ASYNC_STATUSES:
                 pending_versions += 1
@@ -810,6 +812,7 @@ def list_artifacts(task_id: str, item_id: str, step: str) -> list[dict]:
                 "manual": path.stem.endswith("_manual"),
                 "path": str(path),
                 "created_at": payload.get("created_at"),
+                "_payload": payload,
             }
         )
 
@@ -845,7 +848,9 @@ def summarize_item_images(task_id: str, item_id: str) -> dict:
             pass
 
     for artifact_meta in reversed(list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION)):
-        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        artifact = artifact_meta.get("_payload")
+        if not isinstance(artifact, dict):
+            artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
         async_status = str((artifact.get("async_job") or {}).get("status", "")).lower()
         if async_status in PENDING_ASYNC_STATUSES:
             pending_image_jobs += 1
@@ -923,9 +928,7 @@ def export_starred_images_zip(task_id: str) -> Path:
                     exported_count += 1
 
                 if exported_files:
-                    casted_versions = item_manifest["starred_versions"]
-                    assert isinstance(casted_versions, list)
-                    casted_versions.append(
+                    item_manifest["starred_versions"].append(
                         {
                             "version": version,
                             "provider": artifact.get("provider"),
@@ -936,9 +939,7 @@ def export_starred_images_zip(task_id: str) -> Path:
                     )
 
             if item_manifest["starred_versions"]:
-                casted_items = manifest["items"]
-                assert isinstance(casted_items, list)
-                casted_items.append(item_manifest)
+                manifest["items"].append(item_manifest)
 
         if exported_count == 0:
             raise ValueError("当前批次还没有星标图可导出")

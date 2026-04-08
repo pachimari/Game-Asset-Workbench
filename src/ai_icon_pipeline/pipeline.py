@@ -130,7 +130,9 @@ def _reset_downstream(item: dict, step: str) -> None:
 def _latest_successful_image_version(task_id: str, item_id: str) -> str | None:
     latest = None
     for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
-        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        artifact = artifact_meta.get("_payload")
+        if not isinstance(artifact, dict):
+            artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
         if artifact.get("output", {}).get("candidates"):
             latest = artifact_meta["version"]
     return latest
@@ -139,7 +141,9 @@ def _latest_successful_image_version(task_id: str, item_id: str) -> str | None:
 def _pending_image_generation_versions(task_id: str, item_id: str) -> list[str]:
     versions: list[str] = []
     for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
-        artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+        artifact = artifact_meta.get("_payload")
+        if not isinstance(artifact, dict):
+            artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
         status = str(artifact.get("async_job", {}).get("status", "")).lower()
         if status in PENDING_ASYNC_STATUSES:
             versions.append(artifact_meta["version"])

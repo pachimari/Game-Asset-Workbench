@@ -153,7 +153,7 @@ class ProviderCreatePayload(BaseModel):
     label: str
     provider_type: str
     base_url: str = ""
-    api_key: str = ""
+    api_key: Optional[str] = None
 
 
 class ProviderUpdatePayload(BaseModel):
@@ -352,7 +352,9 @@ def _candidate_rows(task_id: str, item_id: str) -> dict:
             break
 
     for meta in reversed(list_artifacts(task_id, item_id, "image_generation")):
-        artifact = load_artifact(task_id, item_id, "image_generation", meta["version"])
+        artifact = meta.get("_payload")
+        if not isinstance(artifact, dict):
+            artifact = load_artifact(task_id, item_id, "image_generation", meta["version"])
         async_job = artifact.get("async_job") or {}
         output = artifact.get("output") or {}
         candidates = []

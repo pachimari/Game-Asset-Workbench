@@ -23,7 +23,15 @@ API_ALLOWED_ORIGINS = [
     for origin in os.getenv("AI_ICON_PIPELINE_API_ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
 ]
-GENERATING_STALE_SECONDS = int(os.getenv("AI_ICON_PIPELINE_GENERATING_STALE_SECONDS", "900"))
+GENERATING_STALE_SECONDS = int(os.getenv("AI_ICON_PIPELINE_GENERATING_STALE_SECONDS", "1800"))
+TOAPIS_SUPPLEMENTAL_IMAGE_MODELS = tuple(
+    model_id.strip()
+    for model_id in os.getenv(
+        "AI_ICON_PIPELINE_TOAPIS_SUPPLEMENTAL_IMAGE_MODELS",
+        "gemini-3.1-flash-image-preview",
+    ).split(",")
+    if model_id.strip()
+)
 
 STEP_BRIEF_GENERATION = "brief_generation"
 STEP_IMAGE_PROMPT = "image_prompt"

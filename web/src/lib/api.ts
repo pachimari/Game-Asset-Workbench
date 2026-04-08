@@ -8,10 +8,24 @@ import type {
 
 const API_BASE = '/api'
 
+function authHeaders(): HeadersInit {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+  const token = window.localStorage.getItem('ai-icon-pipeline-api-token')?.trim()
+  if (!token) {
+    return {}
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
       ...(init?.headers ?? {}),
     },
     ...init,
@@ -94,7 +108,11 @@ export async function deleteTask(taskId: string): Promise<{ ok: boolean; task_id
 }
 
 export async function downloadTaskStarredImages(taskId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/tasks/${taskId}/exports/starred-images.zip`)
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/exports/starred-images.zip`, {
+    headers: {
+      ...authHeaders(),
+    },
+  })
   if (!response.ok) {
     const text = await response.text()
     throw new Error(text || `API request failed: ${response.status}`)

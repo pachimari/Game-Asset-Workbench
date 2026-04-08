@@ -345,7 +345,7 @@ def create_custom_provider(
     label: str,
     provider_type: str,
     base_url: str,
-    api_key: str = "",
+    api_key: str | None = None,
     models: list[dict] | None = None,
 ) -> dict:
     settings = load_global_settings()
@@ -353,7 +353,7 @@ def create_custom_provider(
         label=label,
         provider_type=provider_type,
         base_url=base_url,
-        api_key=api_key,
+        api_key=api_key or "",
         models=models,
     )
     settings.setdefault("custom_providers", []).append(provider)

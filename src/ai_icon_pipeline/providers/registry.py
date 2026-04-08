@@ -3,7 +3,12 @@ from __future__ import annotations
 from .gemini_native import GeminiNativeProvider
 from .openai_compatible import OpenAICompatibleProvider, ProviderRequestError
 from .toapis_async import ToApisAsyncImageProvider
-from ..config import STEP_BRIEF_GENERATION, STEP_IMAGE_GENERATION, STEP_IMAGE_PROMPT
+from ..config import (
+    STEP_BRIEF_GENERATION,
+    STEP_IMAGE_GENERATION,
+    STEP_IMAGE_PROMPT,
+    TOAPIS_SUPPLEMENTAL_IMAGE_MODELS,
+)
 
 
 PROVIDER_LABELS = {
@@ -139,7 +144,7 @@ def _supplement_async_image_models(provider_config: dict | None, discovered_ids:
     base_url = str((provider_config or {}).get("base_url", "")).lower()
     supplemental_models: list[dict] = []
     if "toapis.com" in base_url:
-        for model_id in ("gemini-3.1-flash-image-preview",):
+        for model_id in TOAPIS_SUPPLEMENTAL_IMAGE_MODELS:
             if model_id in discovered_ids:
                 continue
             supplemental_models.append(
