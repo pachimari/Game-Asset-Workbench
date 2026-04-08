@@ -164,13 +164,6 @@ function actionMeta(label: string | null) {
   return label ? mapping[label] ?? { short: label, icon: 'bolt', tone: 'primary' } : null
 }
 
-const clampTwoLinesStyle = {
-  display: '-webkit-box',
-  WebkitBoxOrient: 'vertical' as const,
-  WebkitLineClamp: 2,
-  overflow: 'hidden',
-}
-
 function CandidateCard({
   version,
   isSelected,
@@ -202,7 +195,7 @@ function CandidateCard({
           <p className="truncate text-xs font-bold text-on-surface">
             第 {Number(version.version.replace(/^v/, '')) || version.version} 次生成
           </p>
-          <p className="mt-1 text-[11px] leading-5 text-on-surface-variant" style={clampTwoLinesStyle}>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-on-surface-variant">
             {modelLabel(version.model)} · {formatRelativeDate(version.created_at)}
           </p>
         </div>
@@ -262,7 +255,7 @@ function CandidateCard({
         </div>
       )}
       <div className="flex min-h-[66px] items-center justify-between gap-3 px-3 py-2">
-        <div className="min-w-0 text-[11px] leading-5 text-on-surface-variant" style={clampTwoLinesStyle}>
+        <div className="min-w-0 line-clamp-2 text-[11px] leading-5 text-on-surface-variant">
           {version.is_current ? '当前审批会使用这张图' : version.is_starred ? '已加入星标收藏' : '可星标，也可切成当前采用'}
         </div>
         <button

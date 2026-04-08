@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ai_icon_pipeline import storage
 from ai_icon_pipeline import api
+from ai_icon_pipeline import settings
 
 
 class StorageSafetyTests(unittest.TestCase):
@@ -70,6 +71,21 @@ class StorageSafetyTests(unittest.TestCase):
                 )
                 with self.assertRaises(Exception):
                     api._safe_file_response_path("task_001/items/item_001/item.json")
+
+    def test_create_custom_provider_accepts_none_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    created = settings.create_custom_provider(
+                        label="No Key Provider",
+                        provider_type="mock",
+                        base_url="",
+                        api_key=None,
+                    )
+                    custom = created["custom_providers"][0]
+                    self.assertEqual(custom["label"], "No Key Provider")
+                    self.assertEqual(custom["api_key"], "")
 
 
 if __name__ == "__main__":

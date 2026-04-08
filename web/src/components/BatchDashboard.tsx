@@ -41,13 +41,6 @@ function statusBadge(status: string) {
   return 'border-outline-variant/20 bg-surface-container-highest text-on-surface-variant'
 }
 
-const clampTwoLinesStyle = {
-  display: '-webkit-box',
-  WebkitBoxOrient: 'vertical' as const,
-  WebkitLineClamp: 2,
-  overflow: 'hidden',
-}
-
 function descriptionFallback(task: TaskSummary) {
   if (task.project_background) return task.project_background
   if (task.style_requirements) return `风格要求：${task.style_requirements}`
@@ -244,10 +237,7 @@ export default function BatchDashboard({
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
                   项目背景
                 </div>
-                <p
-                  className="mt-1 text-xs leading-5 text-on-surface-variant"
-                  style={clampTwoLinesStyle}
-                >
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-on-surface-variant">
                   {task.project_background || '未填写'}
                 </p>
               </div>
@@ -255,10 +245,7 @@ export default function BatchDashboard({
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
                   统一风格要求
                 </div>
-                <p
-                  className="mt-1 text-xs leading-5 text-on-surface-variant"
-                  style={clampTwoLinesStyle}
-                >
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-on-surface-variant">
                   {task.style_requirements || '未填写'}
                 </p>
               </div>
@@ -533,10 +520,9 @@ export default function BatchDashboard({
                         <div className="flex items-center gap-2">
                           <div
                             className={clsx(
-                              'text-[0.98rem] font-black leading-5 transition-colors group-hover:text-primary',
+                              'line-clamp-2 text-[0.98rem] font-black leading-5 transition-colors group-hover:text-primary',
                               isActive ? 'text-primary' : 'text-on-surface',
                             )}
-                            style={clampTwoLinesStyle}
                           >
                             {item.title}
                           </div>
@@ -552,10 +538,7 @@ export default function BatchDashboard({
                             <Icon name="arrow_forward" className="text-[16px]" />
                           </span>
                         </div>
-                        <div
-                          className="mt-2 text-[0.82rem] leading-5 text-on-surface-variant"
-                          style={clampTwoLinesStyle}
-                        >
+                        <div className="mt-2 line-clamp-2 text-[0.82rem] leading-5 text-on-surface-variant">
                           {item.description || item.item_id}
                         </div>
                       </div>

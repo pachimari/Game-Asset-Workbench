@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import shutil
 
 from .config import (
@@ -441,7 +443,17 @@ def poll_image_generation(task_id: str, item_id: str, *, source: str = "cli") ->
             raise ValueError("当前没有候选图任务")
         return poll_image_generation_version(task_id, item_id, version, source=source)
 
-    results = [poll_image_generation_version(task_id, item_id, version, source=source) for version in pending_versions]
+    max_workers = min(4, len(pending_versions))
+    if max_workers <= 1:
+        results = [poll_image_generation_version(task_id, item_id, version, source=source) for version in pending_versions]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(
+                executor.map(
+                    lambda version: poll_image_generation_version(task_id, item_id, version, source=source),
+                    pending_versions,
+                )
+            )
     item = load_item(task_id, item_id)
     return {
         "task_id": task_id,
