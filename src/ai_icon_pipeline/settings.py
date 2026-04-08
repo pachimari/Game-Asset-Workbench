@@ -23,6 +23,7 @@ from .storage import read_json, write_json
 
 SETTINGS_DIR = PROJECT_ROOT / ".local"
 APP_SETTINGS_PATH = SETTINGS_DIR / "app_settings.json"
+UNSET = object()
 
 DEFAULT_STAGE_SELECTIONS = {
     STEP_BRIEF_GENERATION: {"provider": "mock", "model": "mock-text-v1"},
@@ -307,8 +308,8 @@ def update_provider_settings(
     base_url: str | None = None,
     api_key: str | None = None,
     models: list[dict] | None = None,
-    last_synced_at: str | None = None,
-    last_error: str | None = None,
+    last_synced_at: str | None | object = UNSET,
+    last_error: str | None | object = UNSET,
 ) -> dict:
     settings = load_global_settings()
     provider_settings = None
@@ -332,9 +333,9 @@ def update_provider_settings(
         provider_settings["api_key"] = api_key
     if models is not None:
         provider_settings["models"] = models
-    if last_synced_at is not None:
+    if last_synced_at is not UNSET:
         provider_settings["last_synced_at"] = last_synced_at
-    if last_error is not None:
+    if last_error is not UNSET:
         provider_settings["last_error"] = last_error
     save_global_settings(settings)
     return settings

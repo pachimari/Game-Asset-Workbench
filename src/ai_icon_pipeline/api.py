@@ -320,9 +320,41 @@ def _client_host(request: Request) -> str:
     return request.client.host if request.client else ""
 
 
-def _is_local_request(request: Request) -> bool:
-    host = _client_host(request)
+def _normalized_host(value: str) -> str:
+    candidate = value.strip()
+    if candidate.startswith("[") and "]" in candidate:
+        candidate = candidate[1 : candidate.index("]")]
+    elif candidate.count(":") == 1:
+        host, port = candidate.rsplit(":", 1)
+        if port.isdigit():
+            candidate = host
+    return candidate
+
+
+def _forwarded_client_host(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        first = forwarded_for.split(",")[0].strip()
+        if first:
+            return _normalized_host(first)
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    if real_ip:
+        return _normalized_host(real_ip)
+    return ""
+
+
+def _is_local_host(host: str) -> bool:
     return host in {"127.0.0.1", "::1", "localhost"}
+
+
+def _is_local_request(request: Request) -> bool:
+    host = _normalized_host(_client_host(request))
+    if not _is_local_host(host):
+        return False
+    forwarded_host = _forwarded_client_host(request)
+    if forwarded_host:
+        return _is_local_host(forwarded_host)
+    return True
 
 
 def _check_request_access(request: Request) -> None:

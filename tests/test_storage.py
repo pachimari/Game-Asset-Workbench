@@ -87,6 +87,34 @@ class StorageSafetyTests(unittest.TestCase):
                     self.assertEqual(custom["label"], "No Key Provider")
                     self.assertEqual(custom["api_key"], "")
 
+    def test_update_provider_settings_can_clear_last_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    settings.save_global_settings(settings.default_global_settings())
+                    settings.create_custom_provider(
+                        label="ToAPIs Smoke",
+                        provider_type="async_image",
+                        base_url="https://toapis.com/v1",
+                        api_key="secret",
+                    )
+                    provider_id = settings.load_global_settings()["custom_providers"][0]["id"]
+                    settings.update_provider_settings(provider_id, last_error="boom")
+                    settings.update_provider_settings(provider_id, last_error=None)
+                    provider = settings.load_global_settings()["custom_providers"][0]
+                    self.assertIsNone(provider["last_error"])
+
+    def test_local_request_rejects_external_forwarded_client(self) -> None:
+        class DummyClient:
+            host = "127.0.0.1"
+
+        class DummyRequest:
+            client = DummyClient()
+            headers = {"x-forwarded-for": "203.0.113.10"}
+
+        self.assertFalse(api._is_local_request(DummyRequest()))
+
 
 if __name__ == "__main__":
     unittest.main()

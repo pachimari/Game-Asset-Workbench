@@ -158,6 +158,7 @@ function actionMeta(label: string | null) {
     回到出图指令: { short: '回退', icon: 'undo', tone: 'secondary' },
     检查生成状态: { short: '检查', icon: 'sync', tone: 'primary' },
     停止等待这些任务: { short: '停止', icon: 'stop_circle', tone: 'secondary' },
+    停止后台任务: { short: '停止', icon: 'stop_circle', tone: 'secondary' },
     通过当前候选图: { short: '确认', icon: 'check_circle', tone: 'primary' },
     再生成一张候选图: { short: '重做', icon: 'add_photo_alternate', tone: 'secondary' },
   }
@@ -583,22 +584,25 @@ export default function ItemWorkspace({
         return {
           primaryLabel: '通过当前候选图',
           primaryAction: () => onApproveStep('image_generation'),
-          secondaryLabel: '再生成一张候选图',
-          secondaryAction: () => onRunStep('image_generation'),
+          secondaryLabel: pendingVersions.length > 0 ? '停止后台任务' : '再生成一张候选图',
+          secondaryAction:
+            pendingVersions.length > 0 ? () => onCancelImage() : () => onRunStep('image_generation'),
         }
       case 'failed':
         return {
           primaryLabel: '再生成一张候选图',
           primaryAction: () => onRunStep('image_generation'),
-          secondaryLabel: '回到出图指令',
-          secondaryAction: () => onRollbackStep('image_prompt'),
+          secondaryLabel: pendingVersions.length > 0 ? '停止后台任务' : '回到出图指令',
+          secondaryAction:
+            pendingVersions.length > 0 ? () => onCancelImage() : () => onRollbackStep('image_prompt'),
         }
       case 'completed':
         return {
           primaryLabel: '再生成一张候选图',
           primaryAction: () => onRunStep('image_generation'),
-          secondaryLabel: '回到出图指令',
-          secondaryAction: () => onRollbackStep('image_prompt'),
+          secondaryLabel: pendingVersions.length > 0 ? '停止后台任务' : '回到出图指令',
+          secondaryAction:
+            pendingVersions.length > 0 ? () => onCancelImage() : () => onRollbackStep('image_prompt'),
         }
       default:
         return {
