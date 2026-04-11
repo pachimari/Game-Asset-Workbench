@@ -15,6 +15,8 @@ from .config import (
     STATUS_FAILED,
     STATUS_DRAFT,
     STATUS_BRIEF_GENERATING,
+    STATUS_COMPLETED,
+    STATUS_IMAGE_GENERATED,
     STATUS_PROMPT_GENERATING,
     STATUS_IMAGE_GENERATING,
     STEP_BRIEF_GENERATION,
@@ -111,6 +113,16 @@ def _parse_utc_timestamp(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _elapsed_seconds(start: str | None, end: str | None = None) -> float | None:
+    start_at = _parse_utc_timestamp(start)
+    if not start_at:
+        return None
+    end_at = _parse_utc_timestamp(end) if end else datetime.now(timezone.utc)
+    if not end_at:
+        end_at = datetime.now(timezone.utc)
+    return max(0.0, (end_at - start_at).total_seconds())
 
 
 def next_task_id() -> str:
@@ -871,6 +883,106 @@ def summarize_item_images(task_id: str, item_id: str) -> dict:
     return {
         "preview_image_path": preview_image_path,
         "pending_image_jobs": pending_image_jobs,
+    }
+
+
+def compute_batch_metrics(task_id: str) -> dict:
+    task = load_task(task_id)
+    item_ids = list(task.get("items", []))
+    total_elapsed_seconds = _elapsed_seconds(task.get("created_at"), task.get("updated_at")) or 0.0
+    item_elapsed_seconds: list[float] = []
+    redo_counts = {
+        STEP_BRIEF_GENERATION: 0,
+        STEP_IMAGE_PROMPT: 0,
+        STEP_IMAGE_GENERATION: 0,
+    }
+    failure_counts = {
+        STEP_BRIEF_GENERATION: 0,
+        STEP_IMAGE_PROMPT: 0,
+        STEP_IMAGE_GENERATION: 0,
+        "stale": 0,
+    }
+    starred_images = 0
+    items_with_starred = 0
+    adopted_from_starred = 0
+    active_background_jobs = 0
+    generated_items = 0
+    first_image_started_seconds: float | None = None
+    image_model_counts: dict[str, int] = {}
+
+    for item_id in item_ids:
+        item = load_item(task_id, item_id)
+        metrics = load_metrics(task_id, item_id)
+        events = load_item_events(task_id, item_id)
+
+        elapsed = _elapsed_seconds(metrics.get("start_time"), metrics.get("end_time"))
+        if elapsed is not None:
+            item_elapsed_seconds.append(elapsed)
+
+        iterations = metrics.get("iterations", {})
+        for step in (STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION):
+            count = int(iterations.get(step, 0) or 0)
+            redo_counts[step] += max(0, count - 1)
+
+        for event in events:
+            action = str(event.get("action", ""))
+            step = str(event.get("step", ""))
+            if action.startswith("fail_") and step in failure_counts:
+                failure_counts[step] += 1
+            elif action == "recover_stale_generation":
+                failure_counts["stale"] += 1
+
+        starred_versions = list(item.get("starred_image_versions", []))
+        starred_images += len(starred_versions)
+        if starred_versions:
+            items_with_starred += 1
+        current_image_version = item.get("current_versions", {}).get(STEP_IMAGE_GENERATION)
+        if current_image_version and current_image_version in starred_versions:
+            adopted_from_starred += 1
+
+        image_summary = summarize_item_images(task_id, item_id)
+        active_background_jobs += int(image_summary.get("pending_image_jobs", 0))
+        if item.get("status") in {STATUS_IMAGE_GENERATED, STATUS_COMPLETED}:
+            generated_items += 1
+
+        for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
+            artifact = artifact_meta.get("_payload")
+            if not isinstance(artifact, dict):
+                artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, artifact_meta["version"])
+
+            created_at = artifact.get("created_at")
+            if created_at:
+                started_seconds = _elapsed_seconds(task.get("created_at"), created_at)
+                if started_seconds is not None and (
+                    first_image_started_seconds is None or started_seconds < first_image_started_seconds
+                ):
+                    first_image_started_seconds = started_seconds
+
+            model_id = str(artifact.get("model") or "").strip()
+            if model_id:
+                image_model_counts[model_id] = image_model_counts.get(model_id, 0) + 1
+
+    avg_item_elapsed_seconds = (
+        sum(item_elapsed_seconds) / len(item_elapsed_seconds) if item_elapsed_seconds else None
+    )
+    top_image_models = [
+        {"model": model, "count": count}
+        for model, count in sorted(image_model_counts.items(), key=lambda row: (-row[1], row[0]))[:3]
+    ]
+
+    return {
+        "total_elapsed_seconds": total_elapsed_seconds,
+        "avg_item_elapsed_seconds": avg_item_elapsed_seconds,
+        "generated_items": generated_items,
+        "active_background_jobs": active_background_jobs,
+        "first_image_started_seconds": first_image_started_seconds,
+        "redo_counts": redo_counts,
+        "total_redos": sum(redo_counts.values()),
+        "starred_images": starred_images,
+        "items_with_starred": items_with_starred,
+        "adopted_from_starred": adopted_from_starred,
+        "failure_counts": failure_counts,
+        "top_image_models": top_image_models,
     }
 
 

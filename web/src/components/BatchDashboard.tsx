@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useState } from 'react'
 import type { ItemSummary, TaskSummary } from '../types'
-import { parseImportedItems } from '../lib/itemImport'
+import { buildImportTemplate, parseImportedItems } from '../lib/itemImport'
 import { statusLabel } from '../lib/display'
 import { Icon } from './Sidebar'
 
@@ -45,6 +45,20 @@ function descriptionFallback(task: TaskSummary) {
   if (task.project_background) return task.project_background
   if (task.style_requirements) return `风格要求：${task.style_requirements}`
   return '这个批次还没有填写项目背景和统一风格要求。'
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (!seconds || seconds <= 0) return '刚开始'
+  const totalMinutes = Math.round(seconds / 60)
+  if (totalMinutes < 60) return `${totalMinutes}m`
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
+}
+
+function formatPercent(numerator: number, denominator: number) {
+  if (denominator <= 0) return '0%'
+  return `${Math.round((numerator / denominator) * 100)}%`
 }
 
 const IMAGE_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9']
@@ -137,6 +151,46 @@ export default function BatchDashboard({
   const inProgress = task.items_summary?.in_progress ?? 0
   const draft = task.items_summary?.draft ?? 0
   const totalPendingJobs = items.reduce((sum, item) => sum + (item.pending_image_jobs ?? 0), 0)
+  const metrics = task.batch_metrics
+  const topModelSummary =
+    metrics?.top_image_models.map((row) => `${row.model} ×${row.count}`).join(' · ') || '还没有候选图模型数据'
+  const generatedItems = metrics?.generated_items ?? 0
+  const completionRate = formatPercent(generatedItems, task.item_count || 0)
+  const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
+  const adoptedFromStarRate = formatPercent(
+    metrics?.adopted_from_starred ?? 0,
+    metrics?.items_with_starred ?? 0,
+  )
+  const redoHeadline =
+    metrics?.total_redos && task.item_count > 0
+      ? `${(metrics.total_redos / task.item_count).toFixed(1)} 次/条`
+      : '很稳'
+  const redoDetail = metrics
+    ? [
+        metrics.redo_counts.brief_generation > 0 ? `设计说明 ${metrics.redo_counts.brief_generation}` : null,
+        metrics.redo_counts.image_prompt > 0 ? `出图指令 ${metrics.redo_counts.image_prompt}` : null,
+        metrics.redo_counts.image_generation > 0 ? `候选图 ${metrics.redo_counts.image_generation}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || '这一轮几乎没返工'
+    : '这一轮几乎没返工'
+  const failureDetail = metrics
+    ? [
+        metrics.failure_counts.image_generation > 0 ? `候选图 ${metrics.failure_counts.image_generation}` : null,
+        metrics.failure_counts.image_prompt > 0 ? `出图指令 ${metrics.failure_counts.image_prompt}` : null,
+        metrics.failure_counts.brief_generation > 0 ? `设计说明 ${metrics.failure_counts.brief_generation}` : null,
+        metrics.failure_counts.stale > 0 ? `超时恢复 ${metrics.failure_counts.stale}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || '这一轮没有失败'
+    : '这一轮没有失败'
+  const rhythmSummary = metrics
+    ? [
+        `首轮候选 ${formatDuration(metrics.first_image_started_seconds)}`,
+        `已出候选 ${generatedItems}/${task.item_count}`,
+        `后台任务 ${metrics.active_background_jobs}`,
+      ].join(' · ')
+    : '这批次还在积累流程数据'
 
   function resetTaskSettingsDraft() {
     setTaskName(task.task_name)
@@ -165,6 +219,19 @@ export default function BatchDashboard({
     setBulkText('')
     setBulkSummary(null)
     setModal(null)
+  }
+
+  function downloadImportTemplate() {
+    const content = buildImportTemplate(',')
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'ai-icon-pipeline-items-template.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   function resetSingleDraft() {
@@ -210,6 +277,66 @@ export default function BatchDashboard({
               <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">已完成</div>
               <div className="mt-1 text-2xl font-black text-primary">{completed}</div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-4 rounded-xl border border-outline-variant/12 bg-surface-container-low p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="text-sm font-bold text-on-surface">流程指标</div>
+          <div className="text-[11px] text-on-surface-variant">
+            只看最关键的四件事：速度、完成度、返工、稳定性。
+          </div>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-4">
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">出首图速度</div>
+            <div className="mt-1 text-2xl font-black text-on-surface">
+              {formatDuration(metrics?.first_image_started_seconds)}
+            </div>
+            <div className="mt-1 text-xs text-on-surface-variant">
+              整批已运行 {formatDuration(metrics?.total_elapsed_seconds)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">完成进度</div>
+            <div className="mt-1 text-2xl font-black text-on-surface">
+              {completionRate}
+            </div>
+            <div className="mt-1 text-xs text-on-surface-variant">
+              已出候选 {generatedItems} / {task.item_count} · 平均流转时长{' '}
+              {formatDuration(metrics?.avg_item_elapsed_seconds)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">返工压力</div>
+            <div className="mt-1 text-2xl font-black text-secondary">{redoHeadline}</div>
+            <div className="mt-1 text-xs text-on-surface-variant">{redoDetail}</div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">星标筛选</div>
+            <div className="mt-1 text-2xl font-black text-primary">{starredCoverage}</div>
+            <div className="mt-1 text-xs text-on-surface-variant">
+              {metrics?.starred_images ?? 0} 张星标 · 最终采用来自星标 {adoptedFromStarRate}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 xl:grid-cols-[1.2fr_1fr_1fr]">
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">批次节奏</div>
+            <div className="mt-1 text-sm text-on-surface-variant">{rhythmSummary}</div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">后台与失败</div>
+            <div className="mt-1 text-sm text-on-surface-variant">
+              后台 {metrics?.active_background_jobs ?? totalPendingJobs} 个任务 · {failureDetail}
+            </div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">主要出图模型</div>
+            <div className="mt-1 text-sm text-on-surface-variant">{topModelSummary}</div>
           </div>
         </div>
       </section>
@@ -837,8 +964,19 @@ export default function BatchDashboard({
                   />
                   选择 CSV / TSV 文件
                 </label>
+                <button
+                  type="button"
+                  onClick={downloadImportTemplate}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/20 px-3 py-3 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high"
+                >
+                  <Icon name="download" className="text-[16px]" />
+                  下载 CSV 模板
+                </button>
                 <div className="mt-3 text-xs leading-5 text-on-surface-variant">
-                  也可以直接把 Excel / 飞书表格内容复制后粘贴到右侧文本框。
+                  CSV 是逗号分隔；TSV 是 Tab 分隔，更适合直接从 Excel / 飞书表格复制粘贴。
+                </div>
+                <div className="mt-2 text-xs leading-5 text-outline">
+                  推荐先下载模板填充，再导入；也可以直接把 Excel / 飞书表格内容复制后粘贴到右侧文本框。
                 </div>
               </div>
 

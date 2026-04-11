@@ -198,9 +198,18 @@ export function useWorkbenchController() {
     setView('workspace')
   }
 
-  function handleBackToDashboard() {
+  async function handleBackToDashboard() {
     clearWorkspaceActionState()
-    setView('dashboard')
+    try {
+      if (activeTaskIdRef.current) {
+        await reloadTaskContext(activeTaskIdRef.current, activeItemIdRef.current)
+        await reloadTaskList(activeTaskIdRef.current)
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '刷新批次状态失败')
+    } finally {
+      setView('dashboard')
+    }
   }
 
   async function handleCreateTask(payload: {

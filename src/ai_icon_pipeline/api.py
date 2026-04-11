@@ -44,6 +44,7 @@ from .storage import (
     create_task,
     delete_task,
     export_starred_images_zip,
+    compute_batch_metrics,
     item_dir,
     list_artifacts,
     list_items,
@@ -480,6 +481,7 @@ def _workspace_payload(task_id: str, item_id: str) -> dict:
 def _task_payload(task_id: str) -> dict:
     task = load_task(task_id)
     task["runtime_config"] = load_runtime_config(task_id)
+    task["batch_metrics"] = compute_batch_metrics(task_id)
     return task
 
 

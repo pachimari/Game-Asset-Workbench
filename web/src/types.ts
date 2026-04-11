@@ -40,6 +40,20 @@ export type TaskSummary = {
     image_resolution: string | null
     image_size?: string | null
   }
+  batch_metrics?: {
+    total_elapsed_seconds: number
+    avg_item_elapsed_seconds: number | null
+    generated_items: number
+    active_background_jobs: number
+    first_image_started_seconds: number | null
+    redo_counts: Record<StageName, number>
+    total_redos: number
+    starred_images: number
+    items_with_starred: number
+    adopted_from_starred: number
+    failure_counts: Record<'brief_generation' | 'image_prompt' | 'image_generation' | 'stale', number>
+    top_image_models: Array<{ model: string; count: number }>
+  }
   model_overrides: Record<StageName, ModelOverride>
 }
 
