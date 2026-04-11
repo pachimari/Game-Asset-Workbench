@@ -660,6 +660,11 @@ def _starred_image_versions(task_id: str) -> list[dict]:
 
 def _set_starred_image_version(task_id: str, item_id: str, version: str, *, starred: bool) -> dict:
     item = load_item(task_id, item_id)
+    available_versions = {
+        artifact_meta["version"] for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION)
+    }
+    if version not in available_versions:
+        raise ValueError(f"Image version not found: {version}")
     versions = list(dict.fromkeys(item.get("starred_image_versions", [])))
     if starred and version not in versions:
         versions.append(version)

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from ai_icon_pipeline import storage
 from ai_icon_pipeline import api
+from ai_icon_pipeline import cli
 from ai_icon_pipeline import settings
 
 
@@ -163,6 +164,20 @@ class StorageSafetyTests(unittest.TestCase):
                 self.assertEqual(summary["redo_counts"]["image_generation"], 2)
                 self.assertEqual(summary["starred_images"], 1)
                 self.assertEqual(summary["adopted_from_starred"], 1)
+
+    def test_cli_star_rejects_nonexistent_image_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="CLI Star Test")
+                item = storage.create_item(
+                    task["task_id"],
+                    title="Test Item",
+                    description="desc",
+                    category="combat",
+                )
+
+                with self.assertRaises(ValueError):
+                    cli._set_starred_image_version(task["task_id"], item["item_id"], "ghost_version", starred=True)
 
 
 if __name__ == "__main__":
