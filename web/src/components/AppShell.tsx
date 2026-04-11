@@ -34,7 +34,7 @@ type Props = {
   setSettingsOpen: (open: boolean) => void
   onSelectTask: (taskId: string) => void
   onSelectItem: (itemId: string) => void
-  onBackToDashboard: () => void
+  onBackToDashboard: () => Promise<void>
   onCreateTask: (payload: {
     task_name: string
     project_background: string

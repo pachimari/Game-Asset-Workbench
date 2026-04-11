@@ -198,8 +198,12 @@ export function useWorkbenchController() {
     setView('workspace')
   }
 
-  function handleBackToDashboard() {
+  async function handleBackToDashboard() {
     clearWorkspaceActionState()
+    if (activeTaskIdRef.current) {
+      await reloadTaskContext(activeTaskIdRef.current, activeItemIdRef.current)
+      await reloadTaskList(activeTaskIdRef.current)
+    }
     setView('dashboard')
   }
 

@@ -32,8 +32,10 @@ from .pipeline import (
     set_current_version,
 )
 from .storage import (
+    compute_batch_metrics,
     create_item,
     create_task,
+    export_starred_images_zip,
     list_artifacts,
     list_items,
     load_artifact,
@@ -41,6 +43,9 @@ from .storage import (
     load_task,
     task_dir,
     update_item,
+    update_item_starred_versions,
+    update_runtime_config,
+    update_task_settings,
 )
 from .providers.registry import ProviderRequestError
 from .providers.registry import sync_provider_models
@@ -50,6 +55,7 @@ from .settings import (
     delete_custom_provider,
     load_global_settings,
     provider_settings_for,
+    resolve_stage_selection,
     update_provider_settings,
 )
 
@@ -123,6 +129,30 @@ COMMAND_SPECS = {
         "args": ["task_id"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["task_id", "task_name", "status", "items", "items_summary"]},
+        "errors": ["TASK_NOT_FOUND"],
+    },
+    "update-task": {
+        "group": "task",
+        "description": "Update task-level settings and image defaults",
+        "args": [
+            "task_id",
+            "--task-name",
+            "--project-background",
+            "--style-requirements",
+            "--asset-domain",
+            "--image-aspect-ratio",
+            "--image-resolution",
+        ],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["task_id", "task_name", "project_background", "style_requirements", "asset_domain"]},
+        "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
+    },
+    "task-metrics": {
+        "group": "task",
+        "description": "Show batch workflow metrics",
+        "args": ["task_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["generated_items", "total_redos", "starred_images", "failure_counts"]},
         "errors": ["TASK_NOT_FOUND"],
     },
     "list-items": {
@@ -293,10 +323,52 @@ COMMAND_SPECS = {
         "output": {"type": "object", "keys": ["task_id", "item_id", "cancelled_versions", "status", "current_version"]},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "VALIDATION_ERROR"],
     },
+    "image-star": {
+        "group": "image",
+        "description": "Add one image generation version to the starred set",
+        "args": ["task_id", "item_id", "version"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["item_id", "starred_image_versions"]},
+        "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND"],
+    },
+    "image-unstar": {
+        "group": "image",
+        "description": "Remove one image generation version from the starred set",
+        "args": ["task_id", "item_id", "version"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["item_id", "starred_image_versions"]},
+        "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND"],
+    },
+    "image-starred": {
+        "group": "image",
+        "description": "List starred image versions in one task",
+        "args": ["task_id"],
+        "supports_json": True,
+        "output": {"type": "array"},
+        "errors": ["TASK_NOT_FOUND"],
+    },
+    "export-starred": {
+        "group": "export",
+        "description": "Export all starred images in a task as a ZIP file",
+        "args": ["task_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["task_id", "archive_path"]},
+        "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
+    },
+    "runtime-resolve": {
+        "group": "runtime",
+        "description": "Resolve effective provider/model for one item step",
+        "args": ["task_id", "item_id", "--step"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["task_id", "item_id", "step", "provider", "model", "source"]},
+        "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "VALIDATION_ERROR"],
+    },
 }
 COMMAND_ALIASES = {
     "task.create": "create-task",
     "task.show": "show-task",
+    "task.update": "update-task",
+    "task.metrics": "task-metrics",
     "item.create": "create-item",
     "item.update": "update-item",
     "item.list": "list-items",
@@ -322,6 +394,11 @@ COMMAND_ALIASES = {
     "image.pending": "image-pending",
     "image.poll": "image-poll",
     "image.cancel": "image-cancel",
+    "image.star": "image-star",
+    "image.unstar": "image-unstar",
+    "image.starred": "image-starred",
+    "export.starred": "export-starred",
+    "runtime.resolve": "runtime-resolve",
 }
 
 
@@ -565,6 +642,45 @@ def _pending_image_jobs(task_id: str, item_id: str) -> list[dict]:
     return rows
 
 
+def _starred_image_versions(task_id: str) -> list[dict]:
+    rows = []
+    for item in list_items(task_id):
+        for version in item.get("starred_image_versions", []):
+            rows.append(
+                {
+                    "task_id": task_id,
+                    "item_id": item["item_id"],
+                    "title": item.get("title", ""),
+                    "version": version,
+                    "is_current": item.get("current_versions", {}).get(STEP_IMAGE_GENERATION) == version,
+                }
+            )
+    return rows
+
+
+def _set_starred_image_version(task_id: str, item_id: str, version: str, *, starred: bool) -> dict:
+    item = load_item(task_id, item_id)
+    versions = list(dict.fromkeys(item.get("starred_image_versions", [])))
+    if starred and version not in versions:
+        versions.append(version)
+    if not starred:
+        versions = [current for current in versions if current != version]
+    return update_item_starred_versions(task_id, item_id, versions, source="cli")
+
+
+def _runtime_resolution(task_id: str, item_id: str, step: str) -> dict:
+    task = load_task(task_id)
+    item = load_item(task_id, item_id)
+    settings = load_global_settings()
+    selection = resolve_stage_selection(task, item, settings, step)
+    return {
+        "task_id": task_id,
+        "item_id": item_id,
+        "step": step,
+        **selection,
+    }
+
+
 def _list_artifacts_any(task_id: str, item_id: str, step: str | None) -> list[dict]:
     if step:
         return list_artifacts(task_id, item_id, step)
@@ -677,6 +793,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     show = subparsers.add_parser("show-task", help="Show current task snapshot", parents=[common_parser])
     show.add_argument("task_id")
+    update_task_parser = subparsers.add_parser("update-task", help="Update task-level settings", parents=[common_parser])
+    update_task_parser.add_argument("task_id")
+    update_task_parser.add_argument("--task-name")
+    update_task_parser.add_argument("--project-background")
+    update_task_parser.add_argument("--style-requirements")
+    update_task_parser.add_argument("--asset-domain")
+    update_task_parser.add_argument("--image-aspect-ratio")
+    update_task_parser.add_argument("--image-resolution")
+    task_metrics_parser = subparsers.add_parser("task-metrics", help="Show batch workflow metrics", parents=[common_parser])
+    task_metrics_parser.add_argument("task_id")
 
     list_items_parser = subparsers.add_parser("list-items", help="List items in a task", parents=[common_parser])
     list_items_parser.add_argument("task_id")
@@ -752,7 +878,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_show.add_argument("provider_id")
     provider_add = subparsers.add_parser("provider-add", help="Add one custom provider", parents=[common_parser])
     provider_add.add_argument("--label", required=True)
-    provider_add.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image"])
+    provider_add.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native", "mock"])
     provider_add.add_argument("--base-url", required=True)
     provider_add.add_argument("--api-key", default="")
     provider_update = subparsers.add_parser("provider-update", help="Update one provider config", parents=[common_parser])
@@ -776,6 +902,22 @@ def build_parser() -> argparse.ArgumentParser:
     image_cancel = subparsers.add_parser("image-cancel", help="Cancel local waiting for pending image jobs", parents=[common_parser])
     image_cancel.add_argument("task_id")
     image_cancel.add_argument("item_id")
+    image_star = subparsers.add_parser("image-star", help="Add one image version to the starred set", parents=[common_parser])
+    image_star.add_argument("task_id")
+    image_star.add_argument("item_id")
+    image_star.add_argument("version")
+    image_unstar = subparsers.add_parser("image-unstar", help="Remove one image version from the starred set", parents=[common_parser])
+    image_unstar.add_argument("task_id")
+    image_unstar.add_argument("item_id")
+    image_unstar.add_argument("version")
+    image_starred = subparsers.add_parser("image-starred", help="List starred image versions in one task", parents=[common_parser])
+    image_starred.add_argument("task_id")
+    export_starred = subparsers.add_parser("export-starred", help="Export all starred images in a task", parents=[common_parser])
+    export_starred.add_argument("task_id")
+    runtime_resolve = subparsers.add_parser("runtime-resolve", help="Resolve effective runtime for one item step", parents=[common_parser])
+    runtime_resolve.add_argument("task_id")
+    runtime_resolve.add_argument("item_id")
+    runtime_resolve.add_argument("--step", required=True, choices=STEP_CHOICES)
 
     task_group = subparsers.add_parser("task", help="Task-scoped commands", parents=[common_parser])
     task_subparsers = task_group.add_subparsers(dest="task_command", required=True)
@@ -790,6 +932,18 @@ def build_parser() -> argparse.ArgumentParser:
     task_show = task_subparsers.add_parser("show", help="Show current task snapshot", parents=[common_parser])
     task_show.set_defaults(command="show-task")
     task_show.add_argument("task_id")
+    task_update = task_subparsers.add_parser("update", help="Update task-level settings", parents=[common_parser])
+    task_update.set_defaults(command="update-task")
+    task_update.add_argument("task_id")
+    task_update.add_argument("--task-name")
+    task_update.add_argument("--project-background")
+    task_update.add_argument("--style-requirements")
+    task_update.add_argument("--asset-domain")
+    task_update.add_argument("--image-aspect-ratio")
+    task_update.add_argument("--image-resolution")
+    task_metrics = task_subparsers.add_parser("metrics", help="Show batch workflow metrics", parents=[common_parser])
+    task_metrics.set_defaults(command="task-metrics")
+    task_metrics.add_argument("task_id")
 
     item_group = subparsers.add_parser("item", help="Item-scoped commands", parents=[common_parser])
     item_subparsers = item_group.add_subparsers(dest="item_command", required=True)
@@ -876,6 +1030,19 @@ def build_parser() -> argparse.ArgumentParser:
     image_cancel_group.set_defaults(command="image-cancel")
     image_cancel_group.add_argument("task_id")
     image_cancel_group.add_argument("item_id")
+    image_star_group = image_subparsers.add_parser("star", help="Add one image version to the starred set", parents=[common_parser])
+    image_star_group.set_defaults(command="image-star")
+    image_star_group.add_argument("task_id")
+    image_star_group.add_argument("item_id")
+    image_star_group.add_argument("version")
+    image_unstar_group = image_subparsers.add_parser("unstar", help="Remove one image version from the starred set", parents=[common_parser])
+    image_unstar_group.set_defaults(command="image-unstar")
+    image_unstar_group.add_argument("task_id")
+    image_unstar_group.add_argument("item_id")
+    image_unstar_group.add_argument("version")
+    image_starred_group = image_subparsers.add_parser("starred", help="List starred image versions in one task", parents=[common_parser])
+    image_starred_group.set_defaults(command="image-starred")
+    image_starred_group.add_argument("task_id")
 
     provider_group = subparsers.add_parser("provider", help="Provider configuration commands", parents=[common_parser])
     provider_subparsers = provider_group.add_subparsers(dest="provider_command", required=True)
@@ -887,7 +1054,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_add_group = provider_subparsers.add_parser("add", help="Add one custom provider", parents=[common_parser])
     provider_add_group.set_defaults(command="provider-add")
     provider_add_group.add_argument("--label", required=True)
-    provider_add_group.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image"])
+    provider_add_group.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native", "mock"])
     provider_add_group.add_argument("--base-url", required=True)
     provider_add_group.add_argument("--api-key", default="")
     provider_update_group = provider_subparsers.add_parser("update", help="Update one provider config", parents=[common_parser])
@@ -903,6 +1070,20 @@ def build_parser() -> argparse.ArgumentParser:
     provider_sync_group = provider_subparsers.add_parser("sync-models", help="Sync models for one provider", parents=[common_parser])
     provider_sync_group.set_defaults(command="provider-sync-models")
     provider_sync_group.add_argument("provider_id")
+
+    export_group = subparsers.add_parser("export", help="Export commands", parents=[common_parser])
+    export_subparsers = export_group.add_subparsers(dest="export_command", required=True)
+    export_starred_group = export_subparsers.add_parser("starred", help="Export all starred images in a task", parents=[common_parser])
+    export_starred_group.set_defaults(command="export-starred")
+    export_starred_group.add_argument("task_id")
+
+    runtime_group = subparsers.add_parser("runtime", help="Runtime resolution commands", parents=[common_parser])
+    runtime_subparsers = runtime_group.add_subparsers(dest="runtime_command", required=True)
+    runtime_resolve_group = runtime_subparsers.add_parser("resolve", help="Resolve effective runtime for one item step", parents=[common_parser])
+    runtime_resolve_group.set_defaults(command="runtime-resolve")
+    runtime_resolve_group.add_argument("task_id")
+    runtime_resolve_group.add_argument("item_id")
+    runtime_resolve_group.add_argument("--step", required=True, choices=STEP_CHOICES)
 
     pipeline_group = subparsers.add_parser("pipeline", help="Pipeline orchestration commands", parents=[common_parser])
     pipeline_subparsers = pipeline_group.add_subparsers(dest="pipeline_command", required=True)
@@ -1007,6 +1188,28 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "show-task":
             _emit(load_task(args.task_id), as_json=args.json)
+            return 0
+
+        if args.command == "update-task":
+            task = update_task_settings(
+                args.task_id,
+                task_name=args.task_name,
+                project_background=args.project_background,
+                style_requirements=args.style_requirements,
+                asset_domain=args.asset_domain,
+            )
+            if args.image_aspect_ratio is not None or args.image_resolution is not None:
+                runtime_config = update_runtime_config(
+                    args.task_id,
+                    image_aspect_ratio=args.image_aspect_ratio,
+                    image_resolution=args.image_resolution,
+                )
+                task["runtime_config"] = runtime_config
+            _emit(task, as_json=args.json)
+            return 0
+
+        if args.command == "task-metrics":
+            _emit(compute_batch_metrics(args.task_id), as_json=args.json)
             return 0
 
         if args.command == "list-items":
@@ -1154,7 +1357,7 @@ def main(argv: list[str] | None = None) -> int:
             update_provider_settings(
                 args.provider_id,
                 models=models,
-                last_error="",
+                last_error=None,
             )
             _emit(
                 {
@@ -1183,8 +1386,42 @@ def main(argv: list[str] | None = None) -> int:
             result = cancel_pending_image_generations(args.task_id, args.item_id)
             _emit(result, as_json=True)
             return 0
+
+        if args.command == "image-star":
+            result = _set_starred_image_version(args.task_id, args.item_id, args.version, starred=True)
+            _emit(result, as_json=args.json)
+            return 0
+
+        if args.command == "image-unstar":
+            result = _set_starred_image_version(args.task_id, args.item_id, args.version, starred=False)
+            _emit(result, as_json=args.json)
+            return 0
+
+        if args.command == "image-starred":
+            _emit(_starred_image_versions(args.task_id), as_json=args.json)
+            return 0
+
+        if args.command == "export-starred":
+            archive_path = export_starred_images_zip(args.task_id)
+            _emit(
+                {
+                    "ok": True,
+                    "task_id": args.task_id,
+                    "archive_path": str(archive_path),
+                },
+                as_json=args.json,
+            )
+            return 0
+
+        if args.command == "runtime-resolve":
+            _emit(_runtime_resolution(args.task_id, args.item_id, args.step), as_json=args.json)
+            return 0
     except Exception as exc:
         return _emit_error(exc, as_json=getattr(args, "json", False))
 
     parser.error(f"Unknown command: {args.command}")
     return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

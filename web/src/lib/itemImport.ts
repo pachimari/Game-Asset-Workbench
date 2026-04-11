@@ -8,6 +8,21 @@ export type ImportedItemDraft = {
   image_resolution?: string | null
 }
 
+const TEMPLATE_HEADERS = [
+  '名称',
+  '需求描述',
+  '资产类型',
+  '分类',
+  '额外上下文',
+  '宽高比',
+  '分辨率',
+] as const
+
+const TEMPLATE_EXAMPLES = [
+  ['赵云原画', '一个赵云，武将，持枪站立，写实三国风格', 'skill_icon', 'combat', '人物位于画面左侧，古早三国志风格', '4:3', '1K'],
+  ['雷暴', '对敌人造成雷电伤害，蓝白主色，高对比技能图标', 'skill_icon', 'combat', '强调闪电、雨云、能量冲击', '1:1', '1K'],
+] as const
+
 const headerAliases: Record<string, keyof ImportedItemDraft | ''> = {
   '名称': 'title',
   title: 'title',
@@ -57,6 +72,21 @@ function splitCsvLine(line: string, delimiter: string) {
 
   cells.push(current)
   return cells.map((cell) => cell.trim())
+}
+
+function escapeDelimitedCell(value: string, delimiter: string) {
+  const escaped = value.replaceAll('"', '""')
+  if (escaped.includes('"') || escaped.includes('\n') || escaped.includes('\r') || escaped.includes(delimiter)) {
+    return `"${escaped}"`
+  }
+  return escaped
+}
+
+export function buildImportTemplate(delimiter = ',') {
+  const rows = [TEMPLATE_HEADERS, ...TEMPLATE_EXAMPLES]
+  return rows
+    .map((row) => row.map((cell) => escapeDelimitedCell(cell, delimiter)).join(delimiter))
+    .join('\n')
 }
 
 export function parseImportedItems(rawText: string): ImportedItemDraft[] {

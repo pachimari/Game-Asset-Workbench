@@ -167,12 +167,14 @@ function actionMeta(label: string | null) {
 
 function CandidateCard({
   version,
+  hasApprovedResult,
   isSelected,
   actionBusy,
   onSelect,
   onToggleStar,
 }: {
   version: CandidateVersion
+  hasApprovedResult: boolean
   isSelected: boolean
   actionBusy: boolean
   onSelect: () => void
@@ -203,7 +205,7 @@ function CandidateCard({
         <div className="flex shrink-0 items-start gap-2">
           {version.is_current ? (
             <span className="whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
-              当前采用
+              {hasApprovedResult ? '当前采用' : '当前候选'}
             </span>
           ) : null}
           <button
@@ -257,7 +259,13 @@ function CandidateCard({
       )}
       <div className="flex min-h-[66px] items-center justify-between gap-3 px-3 py-2">
         <div className="min-w-0 line-clamp-2 text-[11px] leading-5 text-on-surface-variant">
-          {version.is_current ? '当前审批会使用这张图' : version.is_starred ? '已加入星标收藏' : '可星标，也可切成当前采用'}
+          {version.is_current
+            ? hasApprovedResult
+              ? '当前审批会使用这张图'
+              : '这张图已被选为当前候选'
+            : version.is_starred
+              ? '已加入星标收藏'
+              : '可星标，也可切成当前候选'}
         </div>
         <button
           type="button"
@@ -265,7 +273,7 @@ function CandidateCard({
           onClick={onSelect}
           className="shrink-0 rounded-lg border border-outline-variant/18 px-2.5 py-1 text-[11px] font-bold text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {version.is_current ? '当前采用' : '设为当前'}
+          {version.is_current ? (hasApprovedResult ? '当前采用' : '当前候选') : '设为当前'}
         </button>
       </div>
     </div>
@@ -353,7 +361,7 @@ export default function ItemWorkspace({
   pendingRunStep: StageKey | null
   actionError: string | null
   taskName: string
-  onBackToDashboard: () => void
+  onBackToDashboard: () => Promise<void>
   onUpdateItemInput: (payload: {
     title?: string | null
     category?: string | null
@@ -383,6 +391,7 @@ export default function ItemWorkspace({
   onCancelImage: () => void
 }) {
   const [outputTab, setOutputTab] = useState<OutputTab>('overview')
+  const [controlsCollapsed, setControlsCollapsed] = useState(false)
   const [inputEditing, setInputEditing] = useState(false)
   const [briefEditing, setBriefEditing] = useState(false)
   const [promptEditing, setPromptEditing] = useState(false)
@@ -670,7 +679,7 @@ export default function ItemWorkspace({
       <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container-low/92 px-4 py-3 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-3">
           <button
-            onClick={onBackToDashboard}
+            onClick={() => void onBackToDashboard()}
             className="inline-flex items-center gap-2 rounded-lg border border-outline-variant/14 bg-surface-container px-3 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:border-primary/25 hover:text-primary"
           >
             <Icon name="arrow_back" className="text-[16px]" />
@@ -1168,7 +1177,7 @@ export default function ItemWorkspace({
                     <BatchContextPanel
                       projectBackground={resolvedBriefProjectBackground}
                       styleRequirements={resolvedBriefStyleRequirements}
-                      onNavigate={onBackToDashboard}
+                      onNavigate={() => void onBackToDashboard()}
                     />
                     <div className="flex justify-end gap-2">
                       <button
@@ -1219,7 +1228,7 @@ export default function ItemWorkspace({
                       <BatchContextPanel
                         projectBackground={resolvedBriefProjectBackground}
                         styleRequirements={resolvedBriefStyleRequirements}
-                        onNavigate={onBackToDashboard}
+                        onNavigate={() => void onBackToDashboard()}
                       />
                     </div>
                   </>
@@ -1348,7 +1357,7 @@ export default function ItemWorkspace({
                     <BatchContextPanel
                       projectBackground={resolvedPromptProjectBackground}
                       styleRequirements={resolvedPromptStyleRequirements}
-                      onNavigate={onBackToDashboard}
+                      onNavigate={() => void onBackToDashboard()}
                     />
                   </div>
                 )}
@@ -1360,7 +1369,9 @@ export default function ItemWorkspace({
                 <div className="relative overflow-hidden rounded-xl bg-surface-container-low ring-1 ring-outline-variant/8">
                   <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
                     <div>
-                      <h4 className="text-base font-bold text-on-surface">当前采用</h4>
+                      <h4 className="text-base font-bold text-on-surface">
+                        {approvedUrl ? '当前采用' : '当前候选'}
+                      </h4>
                       <p className="mt-1 text-xs text-on-surface-variant">
                         星标可以多选收藏，真正推进流程的仍然只有一张当前采用图。
                       </p>
@@ -1475,6 +1486,7 @@ export default function ItemWorkspace({
                       <CandidateCard
                         key={version.version}
                         version={version}
+                        hasApprovedResult={Boolean(approvedUrl)}
                         isSelected={version.version === selectedVersion?.version}
                         actionBusy={actionBusy}
                         onSelect={() => void onSelectVersion('image_generation', version.version)}
@@ -1487,40 +1499,54 @@ export default function ItemWorkspace({
             )}
           </div>
 
-          <div className="rounded-xl bg-surface-container-low px-4 py-2.5 ring-1 ring-outline-variant/8">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="min-w-0 flex items-start gap-3">
-                <span
-                  className={clsx(
-                    'inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold',
-                    stageInfo.tone,
-                  )}
-                >
-                  {stageTitle}
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[11px] leading-5 text-on-surface-variant">{stageDetail}</div>
-                </div>
-                {actionError ? (
-                  <span className="rounded-lg bg-error-container px-2 py-1 text-xs text-on-error-container">
-                    {actionError}
+        </section>
+
+        <section className="flex min-h-0 w-[18.5rem] flex-col gap-3 overflow-y-auto pl-1">
+          <div className="rounded-xl bg-surface-container-low p-4 ring-1 ring-outline-variant/8">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={clsx(
+                      'inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                      stageInfo.tone,
+                    )}
+                  >
+                    {stageTitle}
                   </span>
-                ) : null}
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-on-surface-variant">{stageDetail}</p>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <div className="min-w-[16rem] rounded-lg border border-outline-variant/12 bg-surface-container px-2.5 py-2">
+              <button
+                type="button"
+                onClick={() => setControlsCollapsed((current) => !current)}
+                className="rounded-lg border border-outline-variant/16 px-2 py-1 text-[11px] font-bold text-on-surface transition-colors hover:bg-surface-container"
+              >
+                {controlsCollapsed ? '展开' : '收起'}
+              </button>
+            </div>
+
+            {actionError ? (
+              <div className="mb-3 rounded-lg bg-error-container px-2.5 py-2 text-xs text-on-error-container">
+                {actionError}
+              </div>
+            ) : null}
+
+            {!controlsCollapsed ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-outline-variant/12 bg-surface-container px-2.5 py-2">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <span className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant">
                       本步模型
                     </span>
                     <span className="text-[10px] text-outline">{stageLabel(editableStage)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="space-y-2">
                     <select
                       value={currentStageModelToken}
                       disabled={actionBusy || stageModelOptions.length === 0}
                       onChange={(event) => void onUpdateItemModel(editableStage, event.target.value)}
-                      className="min-w-0 flex-1 rounded-md border border-outline-variant/12 bg-surface-container-highest px-2 py-1.5 text-xs text-on-surface outline-none transition-colors focus:border-primary/35"
+                      className="w-full rounded-md border border-outline-variant/12 bg-surface-container-highest px-2 py-1.5 text-xs text-on-surface outline-none transition-colors focus:border-primary/35"
                     >
                       <option value="__inherit__">
                         跟随当前默认 · {effectiveStageModel.model}
@@ -1531,42 +1557,43 @@ export default function ItemWorkspace({
                         </option>
                       ))}
                     </select>
-                    <span className="shrink-0 rounded-full bg-surface-container-highest px-2 py-0.5 text-[10px] text-outline">
+                    <span className="inline-flex rounded-full bg-surface-container-highest px-2 py-0.5 text-[10px] text-outline">
                       {effectiveStageModel.source}
                     </span>
                   </div>
                 </div>
-                {actionBar.secondaryLabel && secondaryActionMeta ? (
-                  <button
-                    disabled={actionBusy}
-                    onClick={actionBar.secondaryAction ?? undefined}
-                    title={actionBar.secondaryLabel}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-surface-container-highest px-2.5 py-1.5 text-[11px] font-semibold text-on-surface transition-colors hover:bg-surface-bright disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Icon name={secondaryActionMeta.icon} className="text-[15px]" />
-                    {secondaryActionMeta.short}
-                  </button>
-                ) : null}
-                {actionBar.primaryLabel && primaryActionMeta ? (
-                  <button
-                    disabled={actionBusy}
-                    onClick={actionBar.primaryAction ?? undefined}
-                    title={actionBar.primaryLabel}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Icon
-                      name={actionBusy ? 'progress_activity' : primaryActionMeta.icon}
-                      className={clsx('text-[15px]', actionBusy && 'animate-spin')}
-                    />
-                    {actionBusy ? '处理中' : primaryActionMeta.short}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </section>
 
-        <section className="flex min-h-0 w-[18.5rem] flex-col gap-3 overflow-y-auto pl-1">
+                <div className={clsx('grid gap-2', actionBar.secondaryLabel ? 'grid-cols-2' : 'grid-cols-1')}>
+                  {actionBar.secondaryLabel && secondaryActionMeta ? (
+                    <button
+                      disabled={actionBusy}
+                      onClick={actionBar.secondaryAction ?? undefined}
+                      title={actionBar.secondaryLabel}
+                      className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-highest px-2.5 py-2 text-[11px] font-semibold text-on-surface transition-colors hover:bg-surface-bright disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Icon name={secondaryActionMeta.icon} className="text-[15px]" />
+                      {secondaryActionMeta.short}
+                    </button>
+                  ) : null}
+                  {actionBar.primaryLabel && primaryActionMeta ? (
+                    <button
+                      disabled={actionBusy}
+                      onClick={actionBar.primaryAction ?? undefined}
+                      title={actionBar.primaryLabel}
+                      className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 py-2 text-[11px] font-semibold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Icon
+                        name={actionBusy ? 'progress_activity' : primaryActionMeta.icon}
+                        className={clsx('text-[15px]', actionBusy && 'animate-spin')}
+                      />
+                      {actionBusy ? '处理中' : primaryActionMeta.short}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <div className="rounded-xl bg-surface-container-low p-4 ring-1 ring-outline-variant/8">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-bold text-on-surface">版本历史</h3>
@@ -1580,7 +1607,10 @@ export default function ItemWorkspace({
                   <button
                     key={version.version}
                     type="button"
-                    onClick={() => void onSelectVersion('image_generation', version.version)}
+                    onClick={() => {
+                      setOutputTab('candidate')
+                      void onSelectVersion('image_generation', version.version)
+                    }}
                     className={clsx(
                       'flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors',
                       version.version === selectedVersion?.version
@@ -1609,7 +1639,8 @@ export default function ItemWorkspace({
                             version.version === selectedVersion?.version ? 'text-on-surface' : 'text-on-surface-variant',
                           )}
                         >
-                          {version.version} {version.is_current ? '· 当前采用' : ''}
+                          {version.version}{' '}
+                          {version.is_current ? `· ${approvedUrl ? '当前采用' : '当前候选'}` : ''}
                         </p>
                         {version.is_starred ? <Icon name="star" className="text-[12px] text-amber-200" /> : null}
                       </div>
