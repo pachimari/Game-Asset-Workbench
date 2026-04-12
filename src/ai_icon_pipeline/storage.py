@@ -686,9 +686,9 @@ def list_tasks() -> list[dict]:
         if not task_path.exists():
             continue
         task = read_json(task_path)
-        if not isinstance(task, dict) or "items" not in task:
+        if not isinstance(task, dict):
             continue
-        tasks.append(task)
+        tasks.append(_ensure_task_schema(task))
     tasks.sort(key=lambda task: task.get("updated_at", ""), reverse=True)
     return tasks
 
@@ -981,7 +981,14 @@ def compute_batch_metrics(task_id: str) -> dict:
         active_background_jobs += int(image_summary.get("pending_image_jobs", 0))
         if item.get("status") in {STATUS_IMAGE_GENERATED, STATUS_COMPLETED}:
             generated_items += 1
-        if item.get("status") == STATUS_IMAGE_GENERATING:
+        updated_at = _parse_utc_timestamp(item.get("updated_at"))
+        is_stale_generating = (
+            item.get("status") == STATUS_IMAGE_GENERATING
+            and updated_at is not None
+            and (datetime.now(timezone.utc) - updated_at).total_seconds() >= GENERATING_STALE_SECONDS
+            and int(image_summary.get("pending_image_jobs", 0)) == 0
+        )
+        if is_stale_generating:
             stuck_items.append(
                 {
                     "item_id": item_id,

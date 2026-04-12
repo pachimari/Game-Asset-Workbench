@@ -277,6 +277,18 @@ class StorageSafetyTests(unittest.TestCase):
                         "models/gemini-3.1-flash-image-preview",
                     )
 
+    def test_provider_set_default_rejects_unsupported_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    with self.assertRaises(ValueError):
+                        settings.set_global_default(
+                            "image_generation",
+                            provider="typo",
+                            model="nope",
+                        )
+
     def test_load_task_backfills_missing_items_field(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
@@ -304,6 +316,59 @@ class StorageSafetyTests(unittest.TestCase):
                 task_ids = {task["task_id"] for task in tasks}
                 self.assertIn(first["task_id"], task_ids)
                 self.assertIn(second["task_id"], task_ids)
+
+    def test_list_tasks_includes_legacy_task_without_items_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task_root = Path(tmpdir) / "task_001"
+                task_root.mkdir(parents=True, exist_ok=True)
+                storage.write_json(
+                    task_root / "task.json",
+                    {
+                        "task_id": "task_001",
+                        "task_name": "Legacy Task",
+                        "created_at": "2026-04-01T00:00:00+00:00",
+                        "updated_at": "2026-04-01T00:00:00+00:00",
+                    },
+                )
+                tasks = storage.list_tasks()
+                self.assertEqual(len(tasks), 1)
+                self.assertEqual(tasks[0]["items"], [])
+
+    def test_compute_batch_metrics_does_not_mark_active_image_generation_as_stuck(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Async Pending Task")
+                item = storage.create_item(
+                    task["task_id"],
+                    title="Pending Item",
+                    description="desc",
+                    category="combat",
+                )
+                current = storage.load_item(task["task_id"], item["item_id"])
+                current["status"] = "image_generating"
+                storage.save_item(task["task_id"], current)
+                storage.write_artifact(
+                    task["task_id"],
+                    item["item_id"],
+                    "image_generation",
+                    {
+                        "step": "image_generation",
+                        "provider": "mock",
+                        "model": "mock-image-v1",
+                        "created_at": current["created_at"],
+                        "async_job": {
+                            "status": "processing",
+                            "task_id": "remote_123",
+                            "updated_at": current["created_at"],
+                        },
+                        "output": {"candidates": []},
+                    },
+                    version="v001",
+                )
+                summary = storage.compute_batch_metrics(task["task_id"])
+                self.assertEqual(summary["stuck_items"], [])
+                self.assertEqual(len(summary["active_provider_requests"]), 1)
 
 
 if __name__ == "__main__":
