@@ -66,7 +66,7 @@ const PROVIDER_TYPE_META: Record<
   },
   async_image: {
     label: '异步图片',
-    hint: '适合 ToAPIs 这类排队式图片服务。',
+    hint: '适合需要提交任务并轮询结果的图片服务。',
     badge: '图片',
   },
   gemini_native: {
@@ -90,11 +90,11 @@ const providerPresets: ProviderPreset[] = [
     description: 'OpenRouter、SiliconFlow、DeepInfra、火山方舟等大多都选这个。',
   },
   {
-    title: 'ToAPIs / 异步图片',
+    title: '异步图片服务',
     provider_type: 'async_image',
-    suggestedLabel: 'ToAPIs Async',
-    suggestedBaseUrl: 'https://toapis.com/v1',
-    description: '用于候选图阶段的异步图片生成。',
+    suggestedLabel: '新的异步图片 API',
+    suggestedBaseUrl: 'https://your-async-image-provider.com/v1',
+    description: '用于候选图阶段的排队式异步图片生成。',
   },
   {
     title: 'Gemini 官方',
@@ -436,7 +436,7 @@ export default function GlobalSettings({
                     providerDraft.provider_type === 'openai_compatible'
                       ? 'https://your-provider.com/v1'
                       : providerDraft.provider_type === 'async_image'
-                        ? 'https://toapis.com/v1'
+                        ? 'https://your-async-image-provider.com/v1'
                         : 'https://generativelanguage.googleapis.com'
                   }
                 />

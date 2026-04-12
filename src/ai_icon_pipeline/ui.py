@@ -683,13 +683,13 @@ def _render_global_settings(settings: dict) -> dict:
 
     with st.form("create-custom-provider"):
         st.markdown("##### 新增第三方 Provider")
-        new_label = st.text_input("名称", value="ToAPIs")
+        new_label = st.text_input("名称", value="异步图片 Provider")
         new_type = st.selectbox(
             "类型",
             options=["openai_compatible", "async_image"],
             format_func=lambda value: {"openai_compatible": "OpenAI 兼容", "async_image": "异步图片"}[value],
         )
-        default_url = "https://toapis.com/v1" if new_type == "async_image" else "https://api.example.com/v1"
+        default_url = "https://your-async-image-provider.com/v1" if new_type == "async_image" else "https://api.example.com/v1"
         new_base_url = st.text_input("Base URL", value=default_url)
         new_api_key = st.text_input("API Key", value="", type="password")
         new_models = st.text_area(

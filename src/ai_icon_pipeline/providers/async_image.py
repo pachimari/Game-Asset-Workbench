@@ -7,7 +7,7 @@ from urllib import error, parse, request
 from .openai_compatible import ProviderRequestError
 
 
-class ToApisAsyncImageProvider:
+class AsyncImageProvider:
     def __init__(self, *, label: str, base_url: str) -> None:
         self.label = label
         self.base_url = base_url.rstrip("/")

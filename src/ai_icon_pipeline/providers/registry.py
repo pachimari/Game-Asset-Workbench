@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from .gemini_native import GeminiNativeProvider
 from .openai_compatible import OpenAICompatibleProvider, ProviderRequestError
-from .toapis_async import ToApisAsyncImageProvider
+from .async_image import AsyncImageProvider
 from ..config import (
+    ASYNC_IMAGE_SUPPLEMENTAL_MODELS,
     STEP_BRIEF_GENERATION,
     STEP_IMAGE_GENERATION,
     STEP_IMAGE_PROMPT,
-    TOAPIS_SUPPLEMENTAL_IMAGE_MODELS,
 )
 
 
@@ -79,7 +79,7 @@ def get_native_image_provider(provider_id: str, provider_config: dict | None = N
 
 def get_async_image_provider(provider_id: str, provider_config: dict | None = None):
     if provider_config and provider_config.get("provider_type") == "async_image":
-        return ToApisAsyncImageProvider(
+        return AsyncImageProvider(
             label=provider_config.get("label", provider_id),
             base_url=provider_config.get("base_url", ""),
         )
@@ -141,20 +141,26 @@ def _is_async_image_model(row: dict) -> bool:
 
 
 def _supplement_async_image_models(provider_config: dict | None, discovered_ids: set[str]) -> list[dict]:
-    base_url = str((provider_config or {}).get("base_url", "")).lower()
     supplemental_models: list[dict] = []
-    if "toapis.com" in base_url:
-        for model_id in TOAPIS_SUPPLEMENTAL_IMAGE_MODELS:
-            if model_id in discovered_ids:
-                continue
-            supplemental_models.append(
-                {
-                    "id": model_id,
-                    "label": model_id,
-                    "stages": [STEP_IMAGE_GENERATION],
-                    "compatibility": "unknown",
-                }
-            )
+    configured_models = provider_config.get("supplemental_models") if provider_config else None
+    model_ids: tuple[str, ...] | list[str]
+    if isinstance(configured_models, list):
+        model_ids = [str(model_id).strip() for model_id in configured_models if str(model_id).strip()]
+    elif isinstance(configured_models, str) and configured_models.strip():
+        model_ids = [model_id.strip() for model_id in configured_models.split(",") if model_id.strip()]
+    else:
+        model_ids = ASYNC_IMAGE_SUPPLEMENTAL_MODELS
+    for model_id in model_ids:
+        if model_id in discovered_ids:
+            continue
+        supplemental_models.append(
+            {
+                "id": model_id,
+                "label": model_id,
+                "stages": [STEP_IMAGE_GENERATION],
+                "compatibility": "unknown",
+            }
+        )
     return supplemental_models
 
 

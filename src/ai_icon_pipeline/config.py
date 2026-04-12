@@ -24,11 +24,14 @@ API_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 GENERATING_STALE_SECONDS = int(os.getenv("AI_ICON_PIPELINE_GENERATING_STALE_SECONDS", "1800"))
-TOAPIS_SUPPLEMENTAL_IMAGE_MODELS = tuple(
+ASYNC_IMAGE_SUPPLEMENTAL_MODELS = tuple(
     model_id.strip()
     for model_id in os.getenv(
-        "AI_ICON_PIPELINE_TOAPIS_SUPPLEMENTAL_IMAGE_MODELS",
-        "gemini-3.1-flash-image-preview",
+        "AI_ICON_PIPELINE_ASYNC_IMAGE_SUPPLEMENTAL_MODELS",
+        os.getenv(
+            "AI_ICON_PIPELINE_TOAPIS_SUPPLEMENTAL_IMAGE_MODELS",
+            "gemini-3.1-flash-image-preview",
+        ),
     ).split(",")
     if model_id.strip()
 )
