@@ -118,14 +118,12 @@ Python 侧正式依赖定义在 [pyproject.toml](./pyproject.toml)。
 推荐先运行：
 
 ```bash
-cd /path/to/game-asset-workbench
 python3 -m pip install -r requirements.txt
 ```
 
 如果你更习惯 editable 安装，也可以：
 
 ```bash
-cd /path/to/game-asset-workbench
 python3 -m pip install -e .[api]
 ```
 
@@ -134,8 +132,7 @@ python3 -m pip install -e .[api]
 前端依赖在 `web/` 目录里，第一次运行前需要：
 
 ```bash
-cd /path/to/game-asset-workbench/web
-npm install
+(cd web && npm install)
 ```
 
 ### 最快方式
@@ -155,16 +152,13 @@ Windows：
 后端：
 
 ```bash
-cd /path/to/game-asset-workbench
 PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
 ```
 
 前端：
 
 ```bash
-cd /path/to/game-asset-workbench/web
-npm install
-npm run dev -- --host 127.0.0.1
+(cd web && npm install && npm run dev -- --host 127.0.0.1)
 ```
 
 打开：

@@ -105,14 +105,12 @@ For first-time users, this repo also ships a simpler install entry:
 Recommended install:
 
 ```bash
-cd /path/to/game-asset-workbench
 python3 -m pip install -r requirements.txt
 ```
 
 If you prefer an editable install instead:
 
 ```bash
-cd /path/to/game-asset-workbench
 python3 -m pip install -e .[api]
 ```
 
@@ -121,8 +119,7 @@ python3 -m pip install -e .[api]
 Install frontend dependencies once before running the web app:
 
 ```bash
-cd /path/to/game-asset-workbench/web
-npm install
+(cd web && npm install)
 ```
 
 ### Fastest Option
@@ -142,16 +139,13 @@ Windows:
 Backend:
 
 ```bash
-cd /path/to/game-asset-workbench
 PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
 ```
 
 Frontend:
 
 ```bash
-cd /path/to/game-asset-workbench/web
-npm install
-npm run dev -- --host 127.0.0.1
+(cd web && npm install && npm run dev -- --host 127.0.0.1)
 ```
 
 Open:
