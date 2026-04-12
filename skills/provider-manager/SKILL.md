@@ -1,6 +1,6 @@
 ---
 name: provider-manager
-description: Manage provider setup inside AI Icon Pipeline, including protocol selection, model sync, endpoint fit, and availability debugging. Use this skill whenever the user mentions providers, syncing models, third-party endpoints, base URLs, API keys, protocol types, default models, missing models, compatibility questions, or first-time setup.
+description: Manage provider setup inside Game Asset Workbench, including protocol selection, model sync, endpoint fit, and availability debugging. Use this skill whenever the user mentions providers, syncing models, third-party endpoints, base URLs, API keys, protocol types, default models, missing models, compatibility questions, or first-time setup.
 ---
 
 # Provider Manager

@@ -1,6 +1,6 @@
 ---
 name: batch-operator
-description: Handle batch-level operations inside AI Icon Pipeline, including creating batches, updating batch settings, importing CSV or TSV items, running the whole batch, reading batch metrics, and exporting batch results. Use this skill whenever the user talks about the whole batch, bulk import, one-click runs, batch metrics, or batch-level exports.
+description: Handle batch-level operations inside Game Asset Workbench, including creating batches, updating batch settings, importing CSV or TSV items, running the whole batch, reading batch metrics, and exporting batch results. Use this skill whenever the user talks about the whole batch, bulk import, one-click runs, batch metrics, or batch-level exports.
 ---
 
 # Batch Operator
@@ -15,6 +15,7 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 
 - 创建批次
 - 更新批次级背景设定、风格要求、全局限制
+- 更新批次级长宽比和分辨率
 - 从 CSV / TSV 导入条目
 - 推进整个批次
 - 查看批次流程指标
@@ -54,9 +55,16 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 - brief provider / model
 - prompt provider / model
 - image provider / model / `sync|async`
+- 默认长宽比
+- 默认分辨率
 - 是否直接使用 `pipeline run`
 
 如果用户没有明确指定 provider / model，不要默认当成“无所谓”。
+
+如果用户还没有明确这轮的基础出图规格，也不要默认跳过。至少要确认：
+
+- 是继续沿用当前批次默认值
+- 还是这轮要改成新的长宽比 / 分辨率
 
 如果是异步 provider，还要在确认卡里提前说清：
 
@@ -78,6 +86,7 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 
 - 创建 task
 - 更新 task 级设置
+- 更新默认长宽比和分辨率
 - 导入 batch 示例或 CSV/TSV
 - 查看 metrics
 - 导出星标 ZIP

@@ -1,8 +1,8 @@
-# AI Icon Pipeline
+# Game Asset Workbench
 
 [中文说明](./README.md)
 
-A local-first AI icon production workbench for batch generation, human review, candidate starring, and export.
+A local-first workbench for generating, reviewing, starring, and exporting game assets.
 
 This project combines:
 
@@ -10,14 +10,16 @@ This project combines:
 - a **Python API + core pipeline** for orchestration and state management
 - a **CLI** for batch operations, automation, and agent-friendly control
 
-It is designed for a mixed workflow:
+It is designed for a mixed workflow with both agent assistance and direct manual control:
 
-- **Agent / CLI** drives tasks, providers, and pipeline steps
-- **Human reviewers** use the web UI to compare images, star candidates, and confirm the final pick
+- **Agent / CLI and the Web UI can both drive the workflow**
+- **Agent / CLI** is the recommended path for orchestration, provider setup, batch control, and status-driven work
+- **Web UI** is the recommended path for visual review, candidate comparison, starring, and final confirmation
+- The two sides are meant to hand work back and forth, not live in strict isolation
 
 ## What It Does
 
-AI Icon Pipeline helps you run a batch of game icon requests through a staged workflow:
+Game Asset Workbench helps you run a batch of game asset requests through a staged workflow:
 
 1. Create a batch with shared project background and style rules
 2. Add items manually or import them from CSV / table data
@@ -38,7 +40,7 @@ Core ideas:
 
 ## Product Shape
 
-### Web UI
+### What the Web UI Is Best At
 
 The web workbench is the best place to:
 
@@ -49,9 +51,9 @@ The web workbench is the best place to:
 - choose the current candidate
 - export starred results
 
-The UI is where visual judgment happens.
+The UI is the best place for visual judgment and manual takeover.
 
-### CLI
+### What CLI / Agents Are Best At
 
 The CLI is best for:
 
@@ -60,10 +62,48 @@ The CLI is best for:
 - querying metrics and runtime resolution
 - managing providers
 - exporting assets
+- repetitive orchestration with an agent
 
-The CLI is where automation and agent orchestration happen.
+The CLI / agent path is best for automation, batch control, and workflow coordination.
 
-## Run Locally
+That is a recommendation, not a hard boundary:
+
+- you can let an agent drive the workflow and switch to the UI for review
+- you can also work mostly in the UI and use the CLI for inspection or export
+- both surfaces can move the same project forward
+
+## Install And Run Locally
+
+### Python Dependencies
+
+Python dependencies are defined in [pyproject.toml](./pyproject.toml).
+
+For first-time users, this repo also ships a simpler install entry:
+
+- [requirements.txt](./requirements.txt)
+
+Recommended install:
+
+```bash
+cd /path/to/game-asset-workbench
+python3 -m pip install -r requirements.txt
+```
+
+If you prefer an editable install instead:
+
+```bash
+cd /path/to/game-asset-workbench
+python3 -m pip install -e .[api]
+```
+
+### Frontend Dependencies
+
+Install frontend dependencies once before running the web app:
+
+```bash
+cd /path/to/game-asset-workbench/web
+npm install
+```
 
 ### Fastest Option
 
@@ -82,14 +122,14 @@ Windows:
 Backend:
 
 ```bash
-cd /path/to/ai-icon-pipeline
+cd /path/to/game-asset-workbench
 PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
 ```
 
 Frontend:
 
 ```bash
-cd /path/to/ai-icon-pipeline/web
+cd /path/to/game-asset-workbench/web
 npm install
 npm run dev -- --host 127.0.0.1
 ```
@@ -118,29 +158,26 @@ Current scope:
 - works for **small internal shared deployment**
 - **not** a full multi-user SaaS yet
 
-## Web Workflow
+## Recommended Workflow
 
-Typical workflow in the UI:
+A common and effective flow is:
 
 1. Create a batch
 2. Set batch-wide project background and style rules
 3. Add items one by one or import with CSV
-4. Run design brief, prompt, and image generation
+4. Use an agent or CLI to drive brief, prompt, and image generation
 5. Review candidates in the candidate pool
 6. Star the good ones
 7. Confirm the current candidate
 8. Export starred images as ZIP
 
+If you prefer manual control, you can also drive the stages directly from the UI instead of relying on the CLI.
+
 ## CLI Quick Start
 
-Install editable package if you want the `ai-icon-pipeline` command:
+If you already installed `requirements.txt`, you can start using the CLI right away.
 
-```bash
-cd /path/to/ai-icon-pipeline
-python3 -m pip install -e .
-```
-
-You can also run everything with:
+Inspect the available commands with:
 
 ```bash
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli --help
@@ -150,7 +187,7 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli --help
 
 ```bash
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli task create \
-  --task-name "三国奇幻首批图标" \
+  --task-name "三国奇幻首批资产" \
   --project-background "三国奇幻，强调武将与雷电元素" \
   --style-requirements "高对比、单主体、避免文字"
 ```
@@ -215,8 +252,8 @@ Why this matters:
 Examples already exercised in this repo's development flow include:
 
 - OpenAI-compatible providers
-- ToAPIs-style async image providers
-- Gemini-native third-party providers such as DMX-style endpoints
+- async image providers
+- Gemini-native providers
 
 ## CSV Import
 

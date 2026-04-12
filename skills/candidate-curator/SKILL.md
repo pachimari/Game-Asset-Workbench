@@ -1,6 +1,6 @@
 ---
 name: candidate-curator
-description: Curate candidate image state in AI Icon Pipeline, including listing candidates, starring or unstarring versions, setting the current candidate, checking adopted versions, exporting starred images, and routing visual review back to the Web UI. Use this skill whenever the user mentions candidate images, stars, current selection, exporting good images, visual picking, or version curation.
+description: Curate candidate image state in Game Asset Workbench, including listing candidates, starring or unstarring versions, setting the current candidate, checking adopted versions, exporting starred images, and routing visual review back to the Web UI. Use this skill whenever the user mentions candidate images, stars, current selection, exporting good images, visual picking, or version curation.
 ---
 
 # Candidate Curator

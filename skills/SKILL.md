@@ -1,11 +1,11 @@
 ---
-name: ai-icon-pipeline-router
-description: Use this skill as the default entry point for work inside AI Icon Pipeline. Trigger when the user asks to continue this project, operate a batch, work on an item, configure a provider, sync models, review candidates, export results, or generally "use the icon pipeline". On first use, always check whether at least one provider and model are configured before attempting any generation workflow.
+name: game-asset-workbench-router
+description: Use this skill as the default entry point for work inside Game Asset Workbench. Trigger when the user asks to continue this project, operate a batch, work on an item, configure a provider, sync models, review candidates, export results, or generally use the game asset workbench. On first use, always check whether at least one provider and model are configured before attempting any generation workflow.
 ---
 
-# AI Icon Pipeline 总入口
+# Game Asset Workbench 总入口
 
-这是 AI Icon Pipeline 仓库内的顶层路由 skill。
+这是 Game Asset Workbench 仓库内的顶层路由 skill。
 
 它的职责不是把所有事情都塞进一个大 prompt 里，而是先判断：**下一步应该进入哪个工作流。**
 
@@ -194,6 +194,8 @@ Web UI 才是视觉审阅的主场。
 - brief 用哪个 provider / model
 - prompt 用哪个 provider / model
 - image_generation 用哪个 provider / model / `sync|async`
+- 批次默认长宽比
+- 批次默认分辨率
 - 本次是否直接使用 `pipeline run`
 - 是否默认自动批准中间步骤
 
