@@ -72,6 +72,26 @@ That is a recommendation, not a hard boundary:
 - you can also work mostly in the UI and use the CLI for inspection or export
 - both surfaces can move the same project forward
 
+## Entry Point For Agents
+
+If an agent is picking up this repository for the first time, the recommended reading order is:
+
+1. [AGENTS.md](./AGENTS.md)
+2. [skills/SKILL.md](./skills/SKILL.md)
+3. then the relevant child skill:
+   - [skills/provider-manager/SKILL.md](./skills/provider-manager/SKILL.md)
+   - [skills/batch-operator/SKILL.md](./skills/batch-operator/SKILL.md)
+   - [skills/item-workflow/SKILL.md](./skills/item-workflow/SKILL.md)
+   - [skills/candidate-curator/SKILL.md](./skills/candidate-curator/SKILL.md)
+
+Recommended mental model:
+
+- `AGENTS.md` explains the repository structure, important files, and validation commands
+- `skills/SKILL.md` acts as the project-level router
+- child skills handle the concrete workflows
+
+When a task depends on visual judgment, agents should follow the skill boundary and route the user back to the Web UI instead of pretending the terminal is enough.
+
 ## Install And Run Locally
 
 ### Python Dependencies

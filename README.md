@@ -85,6 +85,26 @@ Agent / CLI 最适合做这些事：
 - 也可以主要用 Web UI 手动操作，再用 CLI 做查询或导出
 - 这个项目支持两端共同驱动同一条工作流
 
+## 给 Agent 的入口
+
+如果是 agent 第一次接手这个仓库，推荐按这个顺序读取：
+
+1. [AGENTS.md](./AGENTS.md)
+2. [skills/SKILL.md](./skills/SKILL.md)
+3. 再按任务类型进入具体子 skill：
+   - [skills/provider-manager/SKILL.md](./skills/provider-manager/SKILL.md)
+   - [skills/batch-operator/SKILL.md](./skills/batch-operator/SKILL.md)
+   - [skills/item-workflow/SKILL.md](./skills/item-workflow/SKILL.md)
+   - [skills/candidate-curator/SKILL.md](./skills/candidate-curator/SKILL.md)
+
+推荐心智是：
+
+- `AGENTS.md` 负责讲仓库结构、关键文件和验证方式
+- `skills/SKILL.md` 负责做项目级路由
+- 子 skill 负责具体工作流
+
+如果任务涉及视觉判断，agent 不应该假装终端足够，而应根据 skill 约定把用户导回 Web UI。
+
 ## 安装与本地运行
 
 ### Python 依赖
