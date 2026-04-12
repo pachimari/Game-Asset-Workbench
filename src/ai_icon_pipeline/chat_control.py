@@ -247,10 +247,10 @@ def parse_chat_plan(task: dict, item: dict, settings: dict, message: str) -> dic
     selected_runtime = resolve_stage_selection(task, item, settings, STEP_IMAGE_PROMPT)
     provider_id = selected_runtime["provider"]
     model_id = selected_runtime["model"]
-    if provider_id == "mock":
+    if not provider_id or not model_id:
         return {
             "summary": "当前未配置真实文本模型",
-            "reason": "当前未配置真实文本模型，且本地规则没有识别出指令",
+            "reason": "当前还没有为出图指令阶段配置可用的文本模型",
             "confidence": 0.0,
             "steps": [],
             "parser": "heuristic",

@@ -74,11 +74,6 @@ const PROVIDER_TYPE_META: Record<
     hint: '适合 Gemini 官方原生接口。',
     badge: '官方',
   },
-  mock: {
-    label: '本地 Mock',
-    hint: '开发联调用。',
-    badge: '本地',
-  },
 }
 
 const providerPresets: ProviderPreset[] = [
@@ -139,9 +134,6 @@ function providerStages(provider: ProviderDetail): StageName[] {
   const uniqueStages = Array.from(new Set(allStages)) as StageName[]
   if (uniqueStages.length > 0) return uniqueStages
   if (provider.provider_type === 'async_image') return ['image_generation']
-  if (provider.provider_type === 'mock') {
-    return ['brief_generation', 'image_prompt', 'image_generation']
-  }
   return ['brief_generation', 'image_prompt']
 }
 

@@ -26,15 +26,32 @@ APP_SETTINGS_PATH = SETTINGS_DIR / "app_settings.json"
 UNSET = object()
 
 DEFAULT_STAGE_SELECTIONS = {
-    STEP_BRIEF_GENERATION: {"provider": "mock", "model": "mock-text-v1"},
-    STEP_IMAGE_PROMPT: {"provider": "mock", "model": "mock-text-v1"},
-    STEP_IMAGE_GENERATION: {"provider": "mock", "model": "mock-image-v1"},
+    STEP_BRIEF_GENERATION: {"provider": None, "model": None},
+    STEP_IMAGE_PROMPT: {"provider": None, "model": None},
+    STEP_IMAGE_GENERATION: {"provider": None, "model": None},
 }
 
 DEFAULT_PROMPT_TEMPLATES = {
-    "brief_system_prompt": """你是游戏图标前期设计助手。请把用户输入整理成结构化 JSON。
-只返回 JSON 对象，不要输出解释文本。
-字段必须包含:
+    "brief_system_prompt": """# Role
+你是一个资深的游戏视觉设计助手，负责把项目组输入的原始资产需求整理成结构化、可继续用于图片生成的设计说明。
+
+# Objective
+把输入里的名称、描述、批次背景、统一风格要求和条目级补充信息整理成稳定的 JSON 输出。
+你的重点不是写设定文案，而是提炼出对后续视觉生成真正有用的信息。
+
+# Guidelines
+1. 优先把原始需求整理成“视觉可执行”的描述，而不是机械复述输入。
+2. 如果 title 为空，可以根据 description 或 extra_context 推导一个更适合作为资产名的标题，并在 name_source 中说明来源。
+3. description 应该是一段结构化、清晰、偏视觉表达的描述，重点交代主体外观、材质、姿态、特效、氛围、环境或用途。
+4. 不要保留无法转化成视觉线索的抽象信息；但如果某些设定、玩法或语义能够影响外观、氛围、材质、特效、构图，就应该保留下来并转写成视觉描述。
+5. keywords 只保留对后续生成有帮助的核心视觉词，不要凑数。
+6. icon_subject 代表“当前资产最核心的视觉主体”，字段名虽然叫 icon_subject，但不要把理解限制在 icon；角色、道具、场景部件、UI 资产都适用。
+7. visual_focus 代表最应该被突出、最抓眼、最值得在画面中优先强调的视觉重点。
+8. project_background 和 style_requirements 必须保留，并与当前资产描述保持一致，不能丢失或改写成无关内容。
+
+# Output Constraints
+1. 必须且只能返回一个合法 JSON 对象，不要输出 Markdown，不要输出解释，不要输出额外文本。
+2. JSON 必须包含以下字段：
 - title: string
 - name_source: string
 - description: string
@@ -44,56 +61,44 @@ DEFAULT_PROMPT_TEMPLATES = {
 - project_background: string
 - style_requirements: string
 """,
-    "prompt_system_prompt": """你是游戏图标出图指令助手。请基于设计说明输出结构化 JSON。
-只返回 JSON 对象，不要输出解释文本。
-字段必须包含:
+    "prompt_system_prompt": """# Role
+你是一个游戏资产出图指令助手，负责把结构化设计说明转换成更适合图像生成模型消费的视觉生成指令。
+
+# Objective
+基于设计说明、风格规则和运行参数，输出稳定、聚焦、可生成的 JSON 结果。
+这一步的职责不是重新写一段设计说明，而是把 brief 转成更接近出图使用的视觉提示词。
+
+# Guidelines
+1. prompt 应优先输出高密度、可生成的视觉描述，可以是逗号分隔短语，也可以是紧凑短句，但不要写成长篇说明文。
+2. prompt 里应明确包含这些层次：
+- 主体是谁
+- 视觉重点是什么
+- 关键外观与材质特征
+- 场景或氛围线索
+- 构图和视角倾向
+- 风格与媒介感
+3. brief_output 里的 description、keywords、icon_subject、visual_focus 都应被吸收，而不是只挑一部分。
+4. style_spec 里的 style_tags、forbidden_elements、composition_rules 应真正参与组织 prompt 和 negative_prompt，不要只是机械拼接。
+5. 需要兼顾“批次统一风格”和“当前条目的独特视觉特征”。
+6. 默认用中文输出，保证与项目当前中文工作流一致；如果用户后续有需要，可以再手动改成别的语言风格。
+7. negative_prompt 应尽量具体、可执行，优先排除违禁元素、质量问题、与当前资产目标明显冲突的内容。
+8. constraints 和 batch_context 需要保留足够结构化信息，方便后续系统展示、人工审阅和继续处理；不要过早把背景信息压缩得太狠。
+
+# Output Constraints
+1. 必须且只能返回一个合法 JSON 对象，不要输出 Markdown，不要输出解释，不要输出额外文本。
+2. JSON 必须包含以下字段：
 - prompt: string
 - negative_prompt: string
 - constraints: object
 - batch_context: object
+
+# Field Guidance
+1. constraints 应尽量包含当前生成所需的重要约束，例如 image_size、composition、key_elements_required、text_allowed 等。
+2. batch_context 至少应保留 project_background 和 style_requirements，并可补充 core_style_tags 等结构化字段。
 """,
 }
 
-DEFAULT_PROVIDER_SETTINGS = {
-    "gemini": {
-        "provider_type": "gemini_native",
-        "label": "Gemini",
-        "base_url": "https://generativelanguage.googleapis.com",
-        "api_key": "",
-        "models": [],
-        "last_synced_at": None,
-        "last_error": None,
-    },
-    "deepseek": {
-        "provider_type": "openai_compatible",
-        "label": "DeepSeek",
-        "base_url": "https://api.deepseek.com",
-        "api_key": "",
-        "models": [],
-        "last_synced_at": None,
-        "last_error": None,
-    },
-    "mock": {
-        "provider_type": "mock",
-        "label": "本地 Mock",
-        "base_url": "",
-        "api_key": "",
-        "models": [
-            {
-                "id": "mock-text-v1",
-                "label": "本地 Mock 文本",
-                "stages": [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT],
-            },
-            {
-                "id": "mock-image-v1",
-                "label": "本地 Mock 出图",
-                "stages": [STEP_IMAGE_GENERATION],
-            },
-        ],
-        "last_synced_at": None,
-        "last_error": None,
-    },
-}
+DEFAULT_PROVIDER_SETTINGS: dict[str, dict] = {}
 
 
 def default_global_settings() -> dict:

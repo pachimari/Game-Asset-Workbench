@@ -266,12 +266,25 @@ class StorageSafetyTests(unittest.TestCase):
             settings_path = Path(tmpdir) / "app_settings.json"
             with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
                 with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    settings.create_custom_provider(
+                        label="Gemini Native",
+                        provider_type="gemini_native",
+                        base_url="https://generativelanguage.googleapis.com",
+                        models=[
+                            {
+                                "id": "models/gemini-3.1-flash-image-preview",
+                                "label": "Gemini 3.1 Flash Image Preview",
+                            }
+                        ],
+                    )
+                    loaded = settings.load_global_settings()
+                    provider_id = loaded["custom_providers"][0]["id"]
                     updated = settings.set_global_default(
                         "image_generation",
-                        provider="gemini",
+                        provider=provider_id,
                         model="models/gemini-3.1-flash-image-preview",
                     )
-                    self.assertEqual(updated["defaults"]["image_generation"]["provider"], "gemini")
+                    self.assertEqual(updated["defaults"]["image_generation"]["provider"], provider_id)
                     self.assertEqual(
                         updated["defaults"]["image_generation"]["model"],
                         "models/gemini-3.1-flash-image-preview",

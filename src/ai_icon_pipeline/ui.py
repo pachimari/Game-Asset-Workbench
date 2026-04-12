@@ -721,17 +721,23 @@ def _render_global_settings(settings: dict) -> dict:
             option_tokens = [token for token, _label in options]
             option_labels = {token: label for token, label in options}
             current = settings["defaults"].get(step, {})
-            current_token = _model_token(current.get("provider", "mock"), current.get("model", ""))
+            current_provider = current.get("provider") or ""
+            current_model = current.get("model") or ""
+            current_token = _model_token(current_provider, current_model)
             if current_token not in option_tokens and option_tokens:
                 current_token = option_tokens[0]
-            selections[step] = st.selectbox(
-                step,
-                options=option_tokens,
-                index=option_tokens.index(current_token) if current_token in option_tokens else 0,
-                format_func=lambda token, labels=option_labels: labels[token],
-                key=f"global-default-{step}",
-                label_visibility="collapsed",
-            )
+            if not option_tokens:
+                st.caption("当前阶段还没有可选模型，请先配置 Provider 并同步模型。")
+                selections[step] = ""
+            else:
+                selections[step] = st.selectbox(
+                    step,
+                    options=option_tokens,
+                    index=option_tokens.index(current_token) if current_token in option_tokens else 0,
+                    format_func=lambda token, labels=option_labels: labels[token],
+                    key=f"global-default-{step}",
+                    label_visibility="collapsed",
+                )
             st.divider()
         submitted = st.form_submit_button("保存全局默认模型", use_container_width=True)
     if submitted:
