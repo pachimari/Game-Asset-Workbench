@@ -38,6 +38,7 @@ from .storage import (
     export_starred_images_zip,
     list_artifacts,
     list_items,
+    list_tasks,
     load_artifact,
     load_item,
     load_task,
@@ -56,6 +57,7 @@ from .settings import (
     load_global_settings,
     provider_settings_for,
     resolve_stage_selection,
+    set_global_default,
     update_provider_settings,
 )
 
@@ -130,6 +132,14 @@ COMMAND_SPECS = {
         "supports_json": True,
         "output": {"type": "object", "keys": ["task_id", "task_name", "status", "items", "items_summary"]},
         "errors": ["TASK_NOT_FOUND"],
+    },
+    "list-tasks": {
+        "group": "task",
+        "description": "List tasks",
+        "args": [],
+        "supports_json": True,
+        "output": {"type": "array"},
+        "errors": [],
     },
     "update-task": {
         "group": "task",
@@ -299,6 +309,14 @@ COMMAND_SPECS = {
         "output": {"type": "object", "keys": ["provider_id", "model_count", "models"]},
         "errors": ["PROVIDER_NOT_FOUND", "PROVIDER_REQUEST_FAILED", "VALIDATION_ERROR"],
     },
+    "provider-set-default": {
+        "group": "provider",
+        "description": "Set the global default provider/model for one step",
+        "args": ["--step", "--provider", "--model"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["step", "provider", "model", "source"]},
+        "errors": ["VALIDATION_ERROR"],
+    },
     "image-pending": {
         "group": "image",
         "description": "List pending async image jobs for one item",
@@ -366,6 +384,7 @@ COMMAND_SPECS = {
 }
 COMMAND_ALIASES = {
     "task.create": "create-task",
+    "task.list": "list-tasks",
     "task.show": "show-task",
     "task.update": "update-task",
     "task.metrics": "task-metrics",
@@ -391,6 +410,7 @@ COMMAND_ALIASES = {
     "provider.update": "provider-update",
     "provider.delete": "provider-delete",
     "provider.sync-models": "provider-sync-models",
+    "provider.set-default": "provider-set-default",
     "image.pending": "image-pending",
     "image.poll": "image-poll",
     "image.cancel": "image-cancel",
@@ -798,6 +818,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     show = subparsers.add_parser("show-task", help="Show current task snapshot", parents=[common_parser])
     show.add_argument("task_id")
+    list_tasks_parser = subparsers.add_parser("list-tasks", help="List tasks", parents=[common_parser])
     update_task_parser = subparsers.add_parser("update-task", help="Update task-level settings", parents=[common_parser])
     update_task_parser.add_argument("task_id")
     update_task_parser.add_argument("--task-name")
@@ -896,6 +917,14 @@ def build_parser() -> argparse.ArgumentParser:
     provider_delete.add_argument("provider_id")
     provider_sync = subparsers.add_parser("provider-sync-models", help="Sync models for one provider", parents=[common_parser])
     provider_sync.add_argument("provider_id")
+    provider_set_default = subparsers.add_parser(
+        "provider-set-default",
+        help="Set the global default provider/model for one step",
+        parents=[common_parser],
+    )
+    provider_set_default.add_argument("--step", required=True, choices=STEP_CHOICES)
+    provider_set_default.add_argument("--provider", required=True)
+    provider_set_default.add_argument("--model", required=True)
 
     image_pending = subparsers.add_parser("image-pending", help="List pending async image jobs", parents=[common_parser])
     image_pending.add_argument("task_id")
@@ -937,6 +966,8 @@ def build_parser() -> argparse.ArgumentParser:
     task_show = task_subparsers.add_parser("show", help="Show current task snapshot", parents=[common_parser])
     task_show.set_defaults(command="show-task")
     task_show.add_argument("task_id")
+    task_list = task_subparsers.add_parser("list", help="List tasks", parents=[common_parser])
+    task_list.set_defaults(command="list-tasks")
     task_update = task_subparsers.add_parser("update", help="Update task-level settings", parents=[common_parser])
     task_update.set_defaults(command="update-task")
     task_update.add_argument("task_id")
@@ -1075,6 +1106,15 @@ def build_parser() -> argparse.ArgumentParser:
     provider_sync_group = provider_subparsers.add_parser("sync-models", help="Sync models for one provider", parents=[common_parser])
     provider_sync_group.set_defaults(command="provider-sync-models")
     provider_sync_group.add_argument("provider_id")
+    provider_set_default_group = provider_subparsers.add_parser(
+        "set-default",
+        help="Set the global default provider/model for one step",
+        parents=[common_parser],
+    )
+    provider_set_default_group.set_defaults(command="provider-set-default")
+    provider_set_default_group.add_argument("--step", required=True, choices=STEP_CHOICES)
+    provider_set_default_group.add_argument("--provider", required=True)
+    provider_set_default_group.add_argument("--model", required=True)
 
     export_group = subparsers.add_parser("export", help="Export commands", parents=[common_parser])
     export_subparsers = export_group.add_subparsers(dest="export_command", required=True)
@@ -1191,8 +1231,14 @@ def main(argv: list[str] | None = None) -> int:
             _emit(result, as_json=args.json)
             return 0
 
+        if args.command == "list-tasks":
+            _emit(list_tasks(), as_json=args.json)
+            return 0
+
         if args.command == "show-task":
-            _emit(load_task(args.task_id), as_json=args.json)
+            task = load_task(args.task_id)
+            task["batch_metrics"] = compute_batch_metrics(args.task_id)
+            _emit(task, as_json=args.json)
             return 0
 
         if args.command == "update-task":
@@ -1375,6 +1421,24 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        if args.command == "provider-set-default":
+            settings = set_global_default(
+                args.step,
+                provider=args.provider,
+                model=args.model,
+            )
+            selection = settings["defaults"][args.step]
+            _emit(
+                {
+                    "step": args.step,
+                    "provider": selection["provider"],
+                    "model": selection["model"],
+                    "source": "global",
+                },
+                as_json=True,
+            )
+            return 0
+
         if args.command == "image-pending":
             _emit(_pending_image_jobs(args.task_id, args.item_id), as_json=True)
             return 0
@@ -1421,6 +1485,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "runtime-resolve":
             _emit(_runtime_resolution(args.task_id, args.item_id, args.step), as_json=args.json)
             return 0
+    except KeyboardInterrupt:
+        _emit(
+            {
+                "ok": False,
+                "error_code": "INTERRUPTED",
+                "message": "Interrupted by user",
+            },
+            as_json=getattr(args, "json", False),
+        )
+        return 130
     except Exception as exc:
         return _emit_error(exc, as_json=getattr(args, "json", False))
 

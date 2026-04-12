@@ -40,9 +40,10 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 4. 如果用户要调整批次级设定，优先改 task 配置。
 5. 如果用户要推进整批，先给出一张很短的生成前确认卡。
 6. 如果用户是想“直接跑一轮”，默认优先使用 `pipeline run`。
-7. 如果用户要推进整批，先看当前状态和失败项，再执行批次操作。
-8. 运行后重新汇总当前状态和指标。
-9. 如果用户要看效果，读取批次指标而不是只看零散状态。
+7. 如果 `image_generation` 使用的是异步 provider，要把“成功提交”视为一个单独交付节点。
+8. 如果用户要推进整批，先看当前状态和失败项，再执行批次操作。
+9. 运行后重新汇总当前状态和指标。
+10. 如果用户要看效果，读取批次指标而不是只看零散状态。
 
 ## 生成前确认卡
 
@@ -52,10 +53,15 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 - item 范围
 - brief provider / model
 - prompt provider / model
-- image provider / model
+- image provider / model / `sync|async`
 - 是否直接使用 `pipeline run`
 
 如果用户没有明确指定 provider / model，不要默认当成“无所谓”。
+
+如果是异步 provider，还要在确认卡里提前说清：
+
+- 这轮的完成标准先是“提交成功”
+- 不承诺 agent 会一直等到最终图片返回
 
 ## 创建后自检
 
@@ -80,6 +86,8 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 其中“先跑一轮主流程”默认优先考虑：
 
 - `pipeline run <task_id>`
+
+如果图片阶段是异步 provider，默认到“已提交成功并拿到远端任务 id”就可以先交付。
 
 ## 不适合在这里硬做的事
 
@@ -114,6 +122,12 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 - 关键指标或进度摘要
 - 下一步建议
 
+如果是异步 provider，还应明确写出：
+
+- 哪些 item 已成功提交
+- 哪些 item 仍在后台运行
+- 用户现在该去 CLI 继续查状态，还是去 Web UI 看对应 item
+
 如果下一步需要人工视觉判断，要明确指出应该去 Web UI。
 
 ## 反模式
@@ -122,6 +136,7 @@ description: Handle batch-level operations inside AI Icon Pipeline, including cr
 
 - provider 还没准备好就直接跑整批
 - 没确认 provider / model 就直接开跑
+- 明明已经成功提交异步任务，还继续无意义长轮询
 - 用单 item 视角回答批次问题
 - 只告诉用户“成功/失败”，不说整批节奏和下一步
 - 明明该下钻某个 item，却继续留在批次层空转

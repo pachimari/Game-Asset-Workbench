@@ -124,6 +124,35 @@ def _mark_step_failed(
     refresh_task_summary(task_id)
 
 
+def _mark_step_interrupted(
+    task_id: str,
+    item_id: str,
+    step: str,
+    *,
+    source: str,
+    provider_id: str,
+    model_id: str,
+) -> None:
+    item = load_item(task_id, item_id)
+    item["status"] = STATUS_FAILED
+    save_item(task_id, item)
+    _set_metrics_status(task_id, item_id, STATUS_FAILED)
+    event = {
+        "timestamp": utc_now(),
+        "source": source,
+        "action": f"interrupt_{step}",
+        "item_id": item_id,
+        "step": step,
+        "provider": provider_id,
+        "model": model_id,
+        "reason": "Interrupted by user",
+        "to": STATUS_FAILED,
+    }
+    append_item_event(task_id, item_id, event)
+    append_event(task_id, event)
+    refresh_task_summary(task_id)
+
+
 def _reset_downstream(item: dict, step: str) -> None:
     for downstream_step in DOWNSTREAM_STEPS[step]:
         item["current_versions"][downstream_step] = None
@@ -385,6 +414,16 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
                 }
         else:
             raise ValueError(f"Unsupported step: {step}")
+    except KeyboardInterrupt:
+        _mark_step_interrupted(
+            task_id,
+            item_id,
+            step,
+            source=source,
+            provider_id=provider_id,
+            model_id=model_id,
+        )
+        raise
     except Exception as exc:
         _mark_step_failed(
             task_id,
@@ -928,8 +967,17 @@ def run_pipeline(
             )
         )
     summary = refresh_task_summary(task_id)
+    blocked_items = [result for result in results if result.get("status") == STATUS_IMAGE_GENERATING]
+    terminal_items = [result for result in results if result.get("status") in TERMINAL_STATUSES]
     return {
         "task_id": task_id,
+        "mode": "until_blocked",
         "task_status": summary["status"],
         "results": results,
+        "blocked_items": blocked_items,
+        "terminal_items": terminal_items,
+        "message": (
+            "Pipeline advances each item sequentially until it reaches a terminal state "
+            "or blocks on async image generation."
+        ),
     }

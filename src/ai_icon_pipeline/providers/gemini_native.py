@@ -17,6 +17,7 @@ except Exception:  # pragma: no cover - optional dependency at runtime
 
 class GeminiNativeProvider:
     REQUEST_TIMEOUT_SECONDS = 300
+    AUTH_FAILURE_STATUS_CODES = {401, 403}
 
     def __init__(
         self,
@@ -74,31 +75,43 @@ class GeminiNativeProvider:
         api_key: str,
         payload: dict | None = None,
     ) -> dict:
-        last_error: Exception | None = None
-        request_attempts = (
-            self._request_json_with_api_key_query,
-            self._request_json_with_bearer,
-        )
-        for request_attempt in request_attempts:
+        try:
+            return self._request_json_with_api_key_query(
+                method=method,
+                path=path,
+                api_key=api_key,
+                payload=payload,
+            )
+        except error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="ignore")
+            if exc.code not in self.AUTH_FAILURE_STATUS_CODES:
+                raise ProviderRequestError(
+                    f"{self.label} request failed: {exc.code} {body or exc.reason}"
+                ) from exc
             try:
-                return request_attempt(
+                return self._request_json_with_bearer(
                     method=method,
                     path=path,
                     api_key=api_key,
                     payload=payload,
                 )
-            except error.HTTPError as exc:
-                body = exc.read().decode("utf-8", errors="ignore")
-                last_error = ProviderRequestError(
-                    f"{self.label} request failed: {exc.code} {body or exc.reason}"
-                )
-            except error.URLError as exc:
-                last_error = ProviderRequestError(f"{self.label} request failed: {exc.reason}")
-            except socket.timeout:
-                last_error = ProviderRequestError(
+            except error.HTTPError as bearer_exc:
+                bearer_body = bearer_exc.read().decode("utf-8", errors="ignore")
+                raise ProviderRequestError(
+                    f"{self.label} request failed: {bearer_exc.code} {bearer_body or bearer_exc.reason}"
+                ) from bearer_exc
+            except error.URLError as bearer_exc:
+                raise ProviderRequestError(f"{self.label} request failed: {bearer_exc.reason}") from bearer_exc
+            except socket.timeout as bearer_exc:
+                raise ProviderRequestError(
                     f"{self.label} request timed out after {self.REQUEST_TIMEOUT_SECONDS}s"
-                )
-        raise last_error or ProviderRequestError(f"{self.label} request failed")
+                ) from bearer_exc
+        except error.URLError as exc:
+            raise ProviderRequestError(f"{self.label} request failed: {exc.reason}") from exc
+        except socket.timeout as exc:
+            raise ProviderRequestError(
+                f"{self.label} request timed out after {self.REQUEST_TIMEOUT_SECONDS}s"
+            ) from exc
 
     def list_models(self, *, api_key: str) -> list[dict]:
         payload = self._request_json(method="GET", path="/models", api_key=api_key)

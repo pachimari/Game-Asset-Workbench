@@ -53,8 +53,9 @@ description: Drive the workflow for a single item in AI Icon Pipeline, including
 5. 在生成前先确认本轮 provider / model。
 6. 如有需要，解析 runtime model。
 7. 再决定是否应该 `run`、`approve`、`rollback`、`poll` 或 `cancel`。
-8. 执行动作后重新汇总当前状态。
-9. 如果已经进入候选图阶段且需要人做视觉判断，就导回 Web UI。
+8. 如果 `image_generation` 是异步 provider，要把“成功提交并拿到 task_id”视为一个单独交付节点。
+9. 执行动作后重新汇总当前状态。
+10. 如果已经进入候选图阶段且需要人做视觉判断，就导回 Web UI。
 
 ## 生成前确认卡
 
@@ -65,7 +66,7 @@ description: Drive the workflow for a single item in AI Icon Pipeline, including
 - 当前将处理哪一步，或是否直接 `pipeline run --item-id`
 - brief provider / model
 - prompt provider / model
-- image provider / model
+- image provider / model / `sync|async`
 - 是否自动批准中间步骤
 
 如果用户明显想走 CLI-first，不要频繁把他打断到 UI；但这些关键配置仍然要先拍板。
@@ -80,6 +81,32 @@ description: Drive the workflow for a single item in AI Icon Pipeline, including
 - 只有到真正看图、选图时才切回 Web UI
 
 这样可以把“前半段尽量不打断”的策略写清楚。
+
+## 异步出图的完成定义
+
+如果本轮 `image_generation` 走的是异步 provider，默认分成两个阶段：
+
+1. `submit success`
+2. `result ready`
+
+第一阶段达到后，只要已经：
+
+- 写入本地 `image_generation` artifact
+- 拿到远端 `task_id`
+- 状态进入 `queued / processing / image_generating`
+
+就应该把这一轮先交付给用户。
+
+这时默认不要继续长轮询。
+
+应该明确告诉用户：
+
+- 当前 task / item
+- 当前 provider / model
+- 当前远端任务已在跑
+- 去 CLI 继续查状态还是去 Web UI 看对应 item
+
+只有用户明确要求，或后续确实需要继续做批准/导出时，再回来轮询或继续下一步。
 
 ## 候选图阶段的边界
 
@@ -126,6 +153,14 @@ CLI/agent 不应该做：
 - 当前版本 / 候选 / 后台任务摘要
 - 下一步建议
 
+如果是失败或阻塞，尽量明确卡在：
+
+- 配置层
+- prompt 层
+- 提交层
+- 轮询层
+- 下载层
+
 ## 何时转交别的 Skill
 
 这些场景应该转交：
@@ -141,5 +176,6 @@ CLI/agent 不应该做：
 - 不看状态机就直接强推下一步
 - provider 明显没 ready 还继续跑 item
 - 没确认本轮 provider / model 就直接生成
+- 异步提交成功后还默认继续消耗 token 长轮询
 - 明明需要人眼看图，还继续在 CLI 里做“选择”
 - 把单 item 的问题扩大成整批问题
