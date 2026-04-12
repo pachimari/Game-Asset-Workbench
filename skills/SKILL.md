@@ -56,6 +56,33 @@ description: Use this skill as the default entry point for work inside AI Icon P
 - 星标筛选
 - 最终采用
 
+## 异步 Provider 交付边界
+
+对于 `async_image` provider，要把“链路成功”和“最终图片就绪”分开看。
+
+默认交付阈值是：
+
+1. `image_generation` artifact 已经写入
+2. 已拿到远端 `task_id`
+3. 当前状态已经进入 `queued`、`processing`、`pending` 或 `image_generating`
+
+只要满足这三条，就可以视为：
+
+- 提交成功
+- 链路已通
+- 可以把当前节点交付给用户
+
+这时不要默认继续长时间主动轮询。
+
+更合理的做法是：
+
+- 告诉用户当前 task / item / provider / model
+- 明确说明这是异步任务，正在后台跑
+- 告诉用户去哪里看状态
+- 需要时再回来做后续批准、筛图、导出
+
+不要让 agent 假装必须全程陪跑到最终图片落地。
+
 ## 路由规则
 
 根据用户目标，只选择一个最主要的工作流进入。
@@ -166,7 +193,7 @@ Web UI 才是视觉审阅的主场。
 - 本次处理的是整批还是某几个 item
 - brief 用哪个 provider / model
 - prompt 用哪个 provider / model
-- image_generation 用哪个 provider / model
+- image_generation 用哪个 provider / model / `sync|async`
 - 本次是否直接使用 `pipeline run`
 - 是否默认自动批准中间步骤
 
@@ -212,6 +239,10 @@ Web UI 才是视觉审阅的主场。
 - 已执行动作或下一步动作
 - 当前应继续留在 CLI，还是该切回 Web UI
 
+如果是生成相关问题，尽量再明确补一句：
+
+- 当前卡在哪一层：`配置层 / prompt 层 / 提交层 / 轮询层 / 下载层`
+
 保持具体、可执行，不要泛泛而谈。
 
 ## 仓库上下文
@@ -244,6 +275,7 @@ Web UI 才是视觉审阅的主场。
 
 - provider 还没配好就直接开始生成
 - 在 CLI 里替用户做主观审美判断
+- 对异步任务提交成功后，还默认长时间陪跑轮询
 - 把批次级问题当成单 item 问题处理
 - 在没有证据时，把单 item 故障直接归因成 provider 问题
 - 不做路由判断，直接把一堆命令全抛给用户

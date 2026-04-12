@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import os
 import re
 import shutil
+import time
 import zipfile
 
 from .config import (
@@ -30,6 +33,8 @@ from .utils import ensure_dir, utc_now
 TASK_ID_PATTERN = re.compile(r"^task_(\d+)$")
 ITEM_ID_PATTERN = re.compile(r"^item_(\d+)$")
 PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
+LOCK_RETRY_SECONDS = 0.05
+LOCK_TIMEOUT_SECONDS = 10.0
 
 
 def default_model_overrides() -> dict:
@@ -145,6 +150,30 @@ def _next_item_id(items: list[dict]) -> str:
     return f"item_{max_id + 1:03d}"
 
 
+@contextmanager
+def _task_operation_lock(task_id: str):
+    lock_path = task_dir(task_id) / ".task.lock"
+    ensure_dir(lock_path.parent)
+    deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for task lock: {task_id}")
+            time.sleep(LOCK_RETRY_SECONDS)
+    try:
+        os.write(fd, str(os.getpid()).encode("utf-8"))
+        yield
+    finally:
+        os.close(fd)
+        try:
+            os.unlink(lock_path)
+        except FileNotFoundError:
+            pass
+
+
 def _normalize_item(raw_item: dict, item_id: str, timestamp: str) -> dict:
     return {
         "item_id": item_id,
@@ -168,6 +197,9 @@ def _normalize_item(raw_item: dict, item_id: str, timestamp: str) -> dict:
 
 
 def _ensure_task_schema(task: dict) -> dict:
+    task.setdefault("items", [])
+    task.setdefault("item_count", len(task["items"]))
+    task.setdefault("status", STATUS_DRAFT)
     task.setdefault("model_overrides", deepcopy(default_model_overrides()))
     for step, selection in default_model_overrides().items():
         task["model_overrides"].setdefault(step, deepcopy(selection))
@@ -383,34 +415,35 @@ def create_item(
     image_resolution: str | None = None,
     item_id: str | None = None,
 ) -> dict:
-    task = load_task(task_id)
-    now = utc_now()
-    existing_ids = task["items"]
-    resolved_item_id = item_id or _next_item_id(
-        [{"item_id": current_item_id} for current_item_id in existing_ids]
-    )
-    if resolved_item_id in existing_ids:
-        raise ValueError(f"Item already exists: {task_id} {resolved_item_id}")
+    with _task_operation_lock(task_id):
+        task = load_task(task_id)
+        now = utc_now()
+        existing_ids = task["items"]
+        resolved_item_id = item_id or _next_item_id(
+            [{"item_id": current_item_id} for current_item_id in existing_ids]
+        )
+        if resolved_item_id in existing_ids:
+            raise ValueError(f"Item already exists: {task_id} {resolved_item_id}")
 
-    item = _normalize_item(
-        {
-            "asset_type": asset_type,
-            "title": title,
-            "description": description,
-            "category": category,
-            "extra_context": extra_context,
-            "runtime_overrides": {
-                "image_aspect_ratio": image_aspect_ratio,
-                "image_resolution": image_resolution,
+        item = _normalize_item(
+            {
+                "asset_type": asset_type,
+                "title": title,
+                "description": description,
+                "category": category,
+                "extra_context": extra_context,
+                "runtime_overrides": {
+                    "image_aspect_ratio": image_aspect_ratio,
+                    "image_resolution": image_resolution,
+                },
             },
-        },
-        resolved_item_id,
-        now,
-    )
-    _create_item_files(task_id, item)
-    task["items"].append(resolved_item_id)
-    task["item_count"] = len(task["items"])
-    save_task(task)
+            resolved_item_id,
+            now,
+        )
+        _create_item_files(task_id, item)
+        task["items"].append(resolved_item_id)
+        task["item_count"] = len(task["items"])
+        save_task(task)
     append_item_event(
         task_id,
         resolved_item_id,
@@ -653,9 +686,9 @@ def list_tasks() -> list[dict]:
         if not task_path.exists():
             continue
         task = read_json(task_path)
-        if not isinstance(task, dict) or "items" not in task:
+        if not isinstance(task, dict):
             continue
-        tasks.append(task)
+        tasks.append(_ensure_task_schema(task))
     tasks.sort(key=lambda task: task.get("updated_at", ""), reverse=True)
     return tasks
 
@@ -909,6 +942,10 @@ def compute_batch_metrics(task_id: str) -> dict:
     generated_items = 0
     first_image_started_seconds: float | None = None
     image_model_counts: dict[str, int] = {}
+    stuck_items: list[dict] = []
+    failed_items: list[dict] = []
+    last_error_by_item: dict[str, str] = {}
+    active_provider_requests: list[dict] = []
 
     for item_id in item_ids:
         item = load_item(task_id, item_id)
@@ -944,6 +981,37 @@ def compute_batch_metrics(task_id: str) -> dict:
         active_background_jobs += int(image_summary.get("pending_image_jobs", 0))
         if item.get("status") in {STATUS_IMAGE_GENERATED, STATUS_COMPLETED}:
             generated_items += 1
+        updated_at = _parse_utc_timestamp(item.get("updated_at"))
+        is_stale_generating = (
+            item.get("status") == STATUS_IMAGE_GENERATING
+            and updated_at is not None
+            and (datetime.now(timezone.utc) - updated_at).total_seconds() >= GENERATING_STALE_SECONDS
+            and int(image_summary.get("pending_image_jobs", 0)) == 0
+        )
+        if is_stale_generating:
+            stuck_items.append(
+                {
+                    "item_id": item_id,
+                    "title": item.get("title", ""),
+                    "status": item.get("status"),
+                    "updated_at": item.get("updated_at"),
+                }
+            )
+        if item.get("status") == STATUS_FAILED:
+            failed_items.append(
+                {
+                    "item_id": item_id,
+                    "title": item.get("title", ""),
+                    "status": item.get("status"),
+                    "updated_at": item.get("updated_at"),
+                }
+            )
+
+        for event in reversed(events):
+            action = str(event.get("action", ""))
+            if action.startswith("fail_") or action == "recover_stale_generation":
+                last_error_by_item[item_id] = str(event.get("error") or event.get("reason") or action)
+                break
 
         for artifact_meta in list_artifacts(task_id, item_id, STEP_IMAGE_GENERATION):
             artifact = artifact_meta.get("_payload")
@@ -961,6 +1029,22 @@ def compute_batch_metrics(task_id: str) -> dict:
             model_id = str(artifact.get("model") or "").strip()
             if model_id:
                 image_model_counts[model_id] = image_model_counts.get(model_id, 0) + 1
+
+            async_job = artifact.get("async_job") or {}
+            async_status = str(async_job.get("status", "")).lower()
+            if async_status in PENDING_ASYNC_STATUSES:
+                active_provider_requests.append(
+                    {
+                        "item_id": item_id,
+                        "title": item.get("title", ""),
+                        "version": artifact.get("version"),
+                        "provider": artifact.get("provider"),
+                        "model": artifact.get("model"),
+                        "task_id": async_job.get("task_id"),
+                        "status": async_job.get("status"),
+                        "updated_at": async_job.get("updated_at"),
+                    }
+                )
 
     avg_item_elapsed_seconds = (
         sum(item_elapsed_seconds) / len(item_elapsed_seconds) if item_elapsed_seconds else None
@@ -983,6 +1067,10 @@ def compute_batch_metrics(task_id: str) -> dict:
         "adopted_from_starred": adopted_from_starred,
         "failure_counts": failure_counts,
         "top_image_models": top_image_models,
+        "stuck_items": stuck_items,
+        "failed_items": failed_items,
+        "last_error_by_item": last_error_by_item,
+        "active_provider_requests": active_provider_requests,
     }
 
 

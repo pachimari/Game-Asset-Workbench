@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,7 +10,9 @@ from unittest.mock import patch
 from ai_icon_pipeline import storage
 from ai_icon_pipeline import api
 from ai_icon_pipeline import cli
+from ai_icon_pipeline import pipeline
 from ai_icon_pipeline import settings
+from ai_icon_pipeline.providers.gemini_native import GeminiNativeProvider
 
 
 class StorageSafetyTests(unittest.TestCase):
@@ -164,6 +167,10 @@ class StorageSafetyTests(unittest.TestCase):
                 self.assertEqual(summary["redo_counts"]["image_generation"], 2)
                 self.assertEqual(summary["starred_images"], 1)
                 self.assertEqual(summary["adopted_from_starred"], 1)
+                self.assertEqual(summary["stuck_items"], [])
+                self.assertEqual(summary["failed_items"], [])
+                self.assertEqual(summary["last_error_by_item"], {})
+                self.assertEqual(summary["active_provider_requests"], [])
 
     def test_cli_star_rejects_nonexistent_image_version(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -178,6 +185,190 @@ class StorageSafetyTests(unittest.TestCase):
 
                 with self.assertRaises(ValueError):
                     cli._set_starred_image_version(task["task_id"], item["item_id"], "ghost_version", starred=True)
+
+    def test_create_item_assigns_unique_ids_under_concurrency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Concurrent Item Test")
+                created_ids: list[str] = []
+                errors: list[Exception] = []
+                result_lock = threading.Lock()
+
+                def worker(index: int) -> None:
+                    try:
+                        item = storage.create_item(
+                            task["task_id"],
+                            title=f"Item {index}",
+                            description="desc",
+                            category="combat",
+                        )
+                        with result_lock:
+                            created_ids.append(item["item_id"])
+                    except Exception as exc:  # pragma: no cover - test helper
+                        with result_lock:
+                            errors.append(exc)
+
+                threads = [threading.Thread(target=worker, args=(index,)) for index in range(3)]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+
+                self.assertEqual(errors, [])
+                self.assertEqual(len(created_ids), 3)
+                self.assertEqual(sorted(created_ids), ["item_001", "item_002", "item_003"])
+                task_snapshot = storage.load_task(task["task_id"])
+                self.assertEqual(task_snapshot["items"], ["item_001", "item_002", "item_003"])
+
+    def test_gemini_native_only_falls_back_on_auth_failures(self) -> None:
+        provider = GeminiNativeProvider()
+        calls: list[str] = []
+
+        def fail_query(*, method: str, path: str, api_key: str, payload: dict | None = None) -> dict:
+            calls.append("query")
+            raise OSError("network down")
+
+        def fail_bearer(*, method: str, path: str, api_key: str, payload: dict | None = None) -> dict:
+            calls.append("bearer")
+            return {}
+
+        with patch.object(provider, "_request_json_with_api_key_query", side_effect=fail_query):
+            with patch.object(provider, "_request_json_with_bearer", side_effect=fail_bearer):
+                with self.assertRaises(Exception):
+                    provider._request_json(method="GET", path="/models", api_key="secret")
+
+        self.assertEqual(calls, ["query"])
+
+    def test_run_pipeline_returns_until_blocked_summary(self) -> None:
+        with patch.object(pipeline, "load_task", return_value={"task_id": "task_001", "items": ["item_001", "item_002"]}):
+            with patch.object(
+                pipeline,
+                "run_item_pipeline",
+                side_effect=[
+                    {"task_id": "task_001", "item_id": "item_001", "status": "image_generating"},
+                    {"task_id": "task_001", "item_id": "item_002", "status": "completed"},
+                ],
+            ):
+                with patch.object(
+                    pipeline,
+                    "refresh_task_summary",
+                    return_value={"task_id": "task_001", "status": "in_progress"},
+                ):
+                    result = pipeline.run_pipeline("task_001")
+
+        self.assertEqual(result["mode"], "until_blocked")
+        self.assertEqual([row["item_id"] for row in result["blocked_items"]], ["item_001"])
+        self.assertEqual([row["item_id"] for row in result["terminal_items"]], ["item_002"])
+        self.assertIn("async image generation", result["message"])
+
+    def test_provider_set_default_updates_global_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    updated = settings.set_global_default(
+                        "image_generation",
+                        provider="gemini",
+                        model="models/gemini-3.1-flash-image-preview",
+                    )
+                    self.assertEqual(updated["defaults"]["image_generation"]["provider"], "gemini")
+                    self.assertEqual(
+                        updated["defaults"]["image_generation"]["model"],
+                        "models/gemini-3.1-flash-image-preview",
+                    )
+
+    def test_provider_set_default_rejects_unsupported_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    with self.assertRaises(ValueError):
+                        settings.set_global_default(
+                            "image_generation",
+                            provider="typo",
+                            model="nope",
+                        )
+
+    def test_load_task_backfills_missing_items_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task_root = Path(tmpdir) / "task_001"
+                task_root.mkdir(parents=True, exist_ok=True)
+                storage.write_json(
+                    task_root / "task.json",
+                    {
+                        "task_id": "task_001",
+                        "task_name": "Legacy Task",
+                        "created_at": "2026-04-01T00:00:00+00:00",
+                        "updated_at": "2026-04-01T00:00:00+00:00",
+                    },
+                )
+                task = storage.load_task("task_001")
+                self.assertEqual(task["items"], [])
+                self.assertEqual(task["item_count"], 0)
+
+    def test_list_tasks_returns_created_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                first = storage.create_task(task_name="First Task")
+                second = storage.create_task(task_name="Second Task")
+                tasks = storage.list_tasks()
+                task_ids = {task["task_id"] for task in tasks}
+                self.assertIn(first["task_id"], task_ids)
+                self.assertIn(second["task_id"], task_ids)
+
+    def test_list_tasks_includes_legacy_task_without_items_field(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task_root = Path(tmpdir) / "task_001"
+                task_root.mkdir(parents=True, exist_ok=True)
+                storage.write_json(
+                    task_root / "task.json",
+                    {
+                        "task_id": "task_001",
+                        "task_name": "Legacy Task",
+                        "created_at": "2026-04-01T00:00:00+00:00",
+                        "updated_at": "2026-04-01T00:00:00+00:00",
+                    },
+                )
+                tasks = storage.list_tasks()
+                self.assertEqual(len(tasks), 1)
+                self.assertEqual(tasks[0]["items"], [])
+
+    def test_compute_batch_metrics_does_not_mark_active_image_generation_as_stuck(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Async Pending Task")
+                item = storage.create_item(
+                    task["task_id"],
+                    title="Pending Item",
+                    description="desc",
+                    category="combat",
+                )
+                current = storage.load_item(task["task_id"], item["item_id"])
+                current["status"] = "image_generating"
+                storage.save_item(task["task_id"], current)
+                storage.write_artifact(
+                    task["task_id"],
+                    item["item_id"],
+                    "image_generation",
+                    {
+                        "step": "image_generation",
+                        "provider": "mock",
+                        "model": "mock-image-v1",
+                        "created_at": current["created_at"],
+                        "async_job": {
+                            "status": "processing",
+                            "task_id": "remote_123",
+                            "updated_at": current["created_at"],
+                        },
+                        "output": {"candidates": []},
+                    },
+                    version="v001",
+                )
+                summary = storage.compute_batch_metrics(task["task_id"])
+                self.assertEqual(summary["stuck_items"], [])
+                self.assertEqual(len(summary["active_provider_requests"]), 1)
 
 
 if __name__ == "__main__":

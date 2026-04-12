@@ -77,6 +77,17 @@ description: Manage provider setup inside AI Icon Pipeline, including protocol s
 5. 确认默认模型是否覆盖用户当前要做的步骤。
 6. 如果失败，再判断是协议不匹配、模型不可用，还是 provider 自身不稳定。
 
+## 稳定性记忆
+
+如果同一个 provider / model 在同一批任务，或者最近的调试过程中，连续两次以上出现同步断连、远端提前断开、或类似的提交层网络异常，就不要机械地继续重试。
+
+这时应优先建议：
+
+- 切换到备用 provider
+- 或至少换一个更稳定的 model
+
+不要把这种问题误判成 prompt 质量问题。
+
 ## 判断标准
 
 如果用户只提供了一个第三方地址，不要立刻假设它是 OpenAI 兼容。
@@ -121,7 +132,14 @@ description: Manage provider setup inside AI Icon Pipeline, including protocol s
 - 协议判断
 - 鉴权
 - 模型发现
-- provider 返回错误
+- 提交层
+- 轮询层
+- 下载层
+
+如果这个 provider 是异步图片接口，还要明确告诉用户：
+
+- 交付阈值是“成功提交并拿到 task_id”
+- 不是“必须轮询到最终图片返回”
 
 ## 何时转交别的 Skill
 
@@ -138,4 +156,5 @@ description: Manage provider setup inside AI Icon Pipeline, including protocol s
 - 首次使用时跳过 provider 检查
 - 看到图片生成失败就直接归因成 prompt 问题
 - 只凭站点名决定协议，不看真实接口形态
+- 同一个 provider/model 连续断连还机械重试
 - provider 根本没 ready，就继续推进工作流

@@ -376,6 +376,10 @@ def delete_custom_provider(provider_id: str) -> dict:
 
 def set_global_default(step: str, *, provider: str, model: str) -> dict:
     settings = load_global_settings()
+    if step not in DEFAULT_STAGE_SELECTIONS:
+        raise ValueError(f"Unsupported step: {step}")
+    if not _selection_supported(settings, step, provider, model):
+        raise ValueError(f"Unsupported default selection for {step}: {provider} / {model}")
     settings["defaults"][step] = {"provider": provider, "model": model}
     save_global_settings(settings)
     return settings
