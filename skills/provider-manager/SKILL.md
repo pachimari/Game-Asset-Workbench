@@ -75,7 +75,8 @@ description: Manage provider setup inside Game Asset Workbench, including protoc
 3. 看 `base_url` 和 `api_key` 是否合理。
 4. 尝试同步模型，或检查已有模型列表。
 5. 确认默认模型是否覆盖用户当前要做的步骤。
-6. 如果失败，再判断是协议不匹配、模型不可用，还是 provider 自身不稳定。
+6. 如果用户要跑大量候选图，确认这个 provider 的 `image_max_concurrency` 是否需要调整。
+7. 如果失败，再判断是协议不匹配、模型不可用，还是 provider 自身不稳定。
 
 ## 稳定性记忆
 
@@ -140,6 +141,26 @@ description: Manage provider setup inside Game Asset Workbench, including protoc
 
 - 交付阈值是“成功提交并拿到 task_id”
 - 不是“必须轮询到最终图片返回”
+- 如果用户想提速，应优先先调 provider 自己的 `image_max_concurrency`
+- 不要直接把批次并发拉很高而忽略 provider 能力上限
+
+## 并发配置原则
+
+当用户想提高生图吞吐时，provider-manager 应优先处理 provider 自己的图片并发上限。
+
+默认原则：
+
+- 新 provider 默认按 1 处理最稳
+- 第三方服务如果明确稳定支持并发，再逐步调高到 2、3、5
+- 官方或高成本同步图片接口应更保守
+
+不要主动假设“第三方一定适合高并发”。
+
+如果用户只是说“想快一点”，优先建议：
+
+1. 先确认这个 provider 已稳定可用
+2. 再小幅提高 `image_max_concurrency`
+3. 然后再让 batch/operator 决定是否需要更高的批次级 `image_concurrency`
 
 ## 何时转交别的 Skill
 

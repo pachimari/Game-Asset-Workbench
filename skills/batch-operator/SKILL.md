@@ -55,6 +55,8 @@ description: Handle batch-level operations inside Game Asset Workbench, includin
 - brief provider / model
 - prompt provider / model
 - image provider / model / `sync|async`
+- image provider 的图片并发上限
+- 本次批次级 `image_concurrency`
 - 默认长宽比
 - 默认分辨率
 - 是否直接使用 `pipeline run`
@@ -70,6 +72,13 @@ description: Handle batch-level operations inside Game Asset Workbench, includin
 
 - 这轮的完成标准先是“提交成功”
 - 不承诺 agent 会一直等到最终图片返回
+
+如果用户提到了吞吐、批量出图、想加快整批候选生成，还要主动确认两层并发：
+
+- provider 当前 `image_max_concurrency` 是多少
+- 这次 `pipeline run` 是否需要显式带 `--image-concurrency`
+
+不要把这两层混成一个参数。
 
 ## 创建后自检
 
@@ -95,6 +104,15 @@ description: Handle batch-level operations inside Game Asset Workbench, includin
 其中“先跑一轮主流程”默认优先考虑：
 
 - `pipeline run <task_id>`
+
+如果用户明确要提高批次吞吐，可以进一步用：
+
+- `pipeline run <task_id> --image-concurrency <n>`
+
+但要同时说明：
+
+- 这只是批次调度并发
+- 单个 provider 的真实生图提交仍然受 `image_max_concurrency` 限制
 
 如果图片阶段是异步 provider，默认到“已提交成功并拿到远端任务 id”就可以先交付。
 
