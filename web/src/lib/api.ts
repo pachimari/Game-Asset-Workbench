@@ -292,11 +292,16 @@ export async function runTaskPipeline(
   taskId: string,
   payload: {
     auto_approve?: boolean
+    image_concurrency?: number | null
   } = {},
 ): Promise<{ result: Record<string, unknown>; task: TaskSummary; items: ItemSummary[] }> {
   return request(`/tasks/${taskId}/pipeline/run`, {
     method: 'POST',
-    body: JSON.stringify({ source: 'web', auto_approve: payload.auto_approve ?? true }),
+    body: JSON.stringify({
+      source: 'web',
+      auto_approve: payload.auto_approve ?? true,
+      image_concurrency: payload.image_concurrency ?? undefined,
+    }),
   })
 }
 
@@ -329,6 +334,7 @@ export async function createProvider(payload: {
   provider_type: string
   base_url: string
   api_key: string
+  image_max_concurrency?: string
 }): Promise<GlobalSettingsData> {
   return request<GlobalSettingsData>('/providers', {
     method: 'POST',
@@ -343,6 +349,7 @@ export async function updateProvider(
     provider_type?: string
     base_url?: string
     api_key?: string
+    image_max_concurrency?: string
   },
 ): Promise<GlobalSettingsData> {
   return request<GlobalSettingsData>(`/providers/${providerId}`, {

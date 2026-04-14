@@ -155,6 +155,7 @@ class ProviderCreatePayload(BaseModel):
     provider_type: str
     base_url: str = ""
     api_key: Optional[str] = None
+    image_max_concurrency: Optional[int] = None
 
 
 class ProviderUpdatePayload(BaseModel):
@@ -162,6 +163,7 @@ class ProviderUpdatePayload(BaseModel):
     provider_type: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
+    image_max_concurrency: Optional[int] = None
 
 
 class SettingsDefaultsPayload(BaseModel):
@@ -181,6 +183,7 @@ class PromptTemplatesPayload(BaseModel):
 class TaskPipelinePayload(BaseModel):
     auto_approve: bool = True
     source: str = "web"
+    image_concurrency: Optional[int] = None
 
 
 def _to_http_error(exc: Exception) -> HTTPException:
@@ -241,6 +244,7 @@ def _settings_payload() -> dict:
                 "builtin": True,
                 "api_key_masked": _mask_api_key(config.get("api_key", "")),
                 "models": config.get("models", []),
+                "image_max_concurrency": config.get("image_max_concurrency"),
                 "last_synced_at": config.get("last_synced_at"),
                 "last_error": config.get("last_error"),
             }
@@ -255,6 +259,7 @@ def _settings_payload() -> dict:
                 "builtin": False,
                 "api_key_masked": _mask_api_key(config.get("api_key", "")),
                 "models": config.get("models", []),
+                "image_max_concurrency": config.get("image_max_concurrency"),
                 "last_synced_at": config.get("last_synced_at"),
                 "last_error": config.get("last_error"),
             }
@@ -496,6 +501,7 @@ def _provider_rows() -> list[dict]:
                 "provider_type": config.get("provider_type"),
                 "base_url": config.get("base_url", ""),
                 "model_count": len(config.get("models", [])),
+                "image_max_concurrency": config.get("image_max_concurrency"),
                 "builtin": True,
                 "last_synced_at": config.get("last_synced_at"),
                 "last_error": config.get("last_error"),
@@ -510,6 +516,7 @@ def _provider_rows() -> list[dict]:
                 "provider_type": config.get("provider_type"),
                 "base_url": config.get("base_url", ""),
                 "model_count": len(config.get("models", [])),
+                "image_max_concurrency": config.get("image_max_concurrency"),
                 "builtin": False,
                 "last_synced_at": config.get("last_synced_at"),
                 "last_error": config.get("last_error"),
@@ -833,6 +840,7 @@ def create_app() -> FastAPI:
                 task_id,
                 auto_approve=payload.auto_approve,
                 source=payload.source,
+                image_concurrency=payload.image_concurrency or 1,
             )
             return {
                 "result": result,
@@ -879,6 +887,9 @@ def create_app() -> FastAPI:
                 provider_type=payload.provider_type,
                 base_url=payload.base_url,
                 api_key=payload.api_key,
+                image_max_concurrency=max(1, payload.image_max_concurrency)
+                if payload.image_max_concurrency is not None
+                else None,
             )
             return _settings_payload()
         except Exception as exc:
@@ -894,6 +905,9 @@ def create_app() -> FastAPI:
                 label=payload.label,
                 base_url=payload.base_url,
                 api_key=payload.api_key,
+                image_max_concurrency=max(1, payload.image_max_concurrency)
+                if payload.image_max_concurrency is not None
+                else None,
             )
             return _settings_payload()
         except Exception as exc:

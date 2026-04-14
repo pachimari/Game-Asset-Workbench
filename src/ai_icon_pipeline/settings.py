@@ -123,6 +123,7 @@ def _default_custom_provider(
     base_url: str = "",
     api_key: str = "",
     models: list[dict] | None = None,
+    image_max_concurrency: int | None = None,
 ) -> dict:
     return {
         "id": provider_id or f"custom_{_slugify_provider_name(label)}_{uuid4().hex[:8]}",
@@ -131,12 +132,20 @@ def _default_custom_provider(
         "base_url": base_url,
         "api_key": api_key,
         "models": models or [],
+        "image_max_concurrency": image_max_concurrency,
         "last_synced_at": None,
         "last_error": None,
     }
 
 
 def _sanitize_custom_provider(provider: dict) -> dict:
+    raw_concurrency = provider.get("image_max_concurrency")
+    try:
+        image_max_concurrency = int(raw_concurrency) if raw_concurrency not in (None, "") else None
+    except (TypeError, ValueError):
+        image_max_concurrency = None
+    if image_max_concurrency is not None and image_max_concurrency < 1:
+        image_max_concurrency = 1
     merged = _default_custom_provider(
         provider_id=provider.get("id"),
         label=provider.get("label", "自定义 Provider"),
@@ -144,6 +153,7 @@ def _sanitize_custom_provider(provider: dict) -> dict:
         base_url=provider.get("base_url", ""),
         api_key=provider.get("api_key", ""),
         models=provider.get("models", []),
+        image_max_concurrency=image_max_concurrency,
     )
     merged["last_synced_at"] = provider.get("last_synced_at")
     merged["last_error"] = provider.get("last_error")
@@ -313,6 +323,7 @@ def update_provider_settings(
     base_url: str | None = None,
     api_key: str | None = None,
     models: list[dict] | None = None,
+    image_max_concurrency: int | None | object = UNSET,
     last_synced_at: str | None | object = UNSET,
     last_error: str | None | object = UNSET,
 ) -> dict:
@@ -338,6 +349,8 @@ def update_provider_settings(
         provider_settings["api_key"] = api_key
     if models is not None:
         provider_settings["models"] = models
+    if image_max_concurrency is not UNSET:
+        provider_settings["image_max_concurrency"] = image_max_concurrency
     if last_synced_at is not UNSET:
         provider_settings["last_synced_at"] = last_synced_at
     if last_error is not UNSET:
@@ -353,6 +366,7 @@ def create_custom_provider(
     base_url: str,
     api_key: str | None = None,
     models: list[dict] | None = None,
+    image_max_concurrency: int | None = None,
 ) -> dict:
     settings = load_global_settings()
     provider = _default_custom_provider(
@@ -361,6 +375,7 @@ def create_custom_provider(
         base_url=base_url,
         api_key=api_key or "",
         models=models,
+        image_max_concurrency=image_max_concurrency,
     )
     settings.setdefault("custom_providers", []).append(provider)
     save_global_settings(settings)
