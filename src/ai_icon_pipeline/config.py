@@ -70,9 +70,9 @@ DEFAULT_STYLE_SPEC = {
 }
 
 DEFAULT_RUNTIME_CONFIG = {
-    "brief_provider": "mock",
-    "prompt_provider": "mock",
-    "image_provider": "mock",
+    "brief_provider": None,
+    "prompt_provider": None,
+    "image_provider": None,
     "candidate_count": 1,
     "image_size": "512x512",
     "image_aspect_ratio": "1:1",

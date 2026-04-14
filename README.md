@@ -1,8 +1,8 @@
-# AI Icon Pipeline
+# Game Asset Workbench
 
 [English README](./README_en.md)
 
-一个以 **local-first** 为核心的 AI 图标生产工作台，支持批次生成、人工审图、候选星标、最终确认与 ZIP 导出。
+一个以 **local-first** 为核心的游戏资产生产工作台，支持批次生成、人工审图、候选星标、最终确认与 ZIP 导出。
 
 这个项目把三件事放在了一起：
 
@@ -10,14 +10,16 @@
 - **Python API + Core Pipeline**：负责编排、状态流转、存储、Provider 适配
 - **CLI**：负责批量操作、自动化、Agent 驱动和查询
 
-它的定位不是“纯自动生成一切”，而是一个混合工作流：
+它的定位不是“纯自动生成一切”，而是一个支持 **Agent 协作** 和 **人工手动接管** 的混合工作流：
 
-- **Agent / CLI** 负责驱动任务、配置 Provider、推进流程
-- **人类** 在 Web 里做视觉判断、筛选候选图、确认最终采用
+- **Agent / CLI 和 Web UI 都可以驱动主要工作流**
+- 更推荐用 **Agent / CLI** 来推进流程、配置 Provider、批量操作和查询状态
+- 更推荐在 **Web UI** 里做视觉判断、候选对比、星标筛选和最终确认
+- 两端不是硬切开的，而是可以来回切换、互相接力
 
 ## 这是什么
 
-AI Icon Pipeline 用来把一批游戏图标需求，跑过一条完整的生产流程：
+Game Asset Workbench 用来把一批游戏资产需求，跑过一条完整的生产流程：
 
 1. 创建批次，设置统一背景和风格要求
 2. 手动新增条目，或从 CSV / 表格批量导入
@@ -40,7 +42,7 @@ AI Icon Pipeline 用来把一批游戏图标需求，跑过一条完整的生产
 
 ## 产品形态
 
-### Web UI 负责什么
+### Web UI 更适合什么
 
 Web 工作台最适合做这些事：
 
@@ -52,9 +54,9 @@ Web 工作台最适合做这些事：
 - 导出星标结果
 
 简单说：
-**Web UI 负责视觉判断。**
+**Web UI 最适合做需要看图和手动接管的部分。**
 
-### CLI 负责什么
+### CLI / Agent 更适合什么
 
 CLI 最适合做这些事：
 
@@ -66,10 +68,72 @@ CLI 最适合做这些事：
 - 管理 provider
 - 导出结果
 
-简单说：
-**CLI 负责自动化、批量控制和 Agent 编排。**
+Agent / CLI 最适合做这些事：
 
-## 本地运行
+- 配置 provider
+- 批量推进 task / item
+- 查询状态和指标
+- 导出结果
+- 自动化重复操作
+
+简单说：
+**CLI / Agent 更适合做自动化、批量控制和协作推进。**
+
+但这不是硬限制：
+
+- 你可以让 Agent 推进流程，再回 Web UI 审图
+- 也可以主要用 Web UI 手动操作，再用 CLI 做查询或导出
+- 这个项目支持两端共同驱动同一条工作流
+
+## 给 Agent 的入口
+
+如果是 agent 第一次接手这个仓库，推荐按这个顺序读取：
+
+1. [AGENTS.md](./AGENTS.md)
+2. [skills/SKILL.md](./skills/SKILL.md)
+3. 再按任务类型进入具体子 skill：
+   - [skills/provider-manager/SKILL.md](./skills/provider-manager/SKILL.md)
+   - [skills/batch-operator/SKILL.md](./skills/batch-operator/SKILL.md)
+   - [skills/item-workflow/SKILL.md](./skills/item-workflow/SKILL.md)
+   - [skills/candidate-curator/SKILL.md](./skills/candidate-curator/SKILL.md)
+
+推荐心智是：
+
+- `AGENTS.md` 负责讲仓库结构、关键文件和验证方式
+- `skills/SKILL.md` 负责做项目级路由
+- 子 skill 负责具体工作流
+
+如果任务涉及视觉判断，agent 不应该假装终端足够，而应根据 skill 约定把用户导回 Web UI。
+
+## 安装与本地运行
+
+### Python 依赖
+
+Python 侧正式依赖定义在 [pyproject.toml](./pyproject.toml)。
+
+为了让第一次上手更直接，这个仓库也提供了一个简洁入口：
+
+- [requirements.txt](./requirements.txt)
+
+推荐先运行：
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+如果你更习惯 editable 安装，也可以：
+
+```bash
+python3 -m pip install -e .[api]
+```
+
+### 前端依赖
+
+前端依赖在 `web/` 目录里，第一次运行前需要：
+
+```bash
+(cd web && npm install)
+```
 
 ### 最快方式
 
@@ -88,16 +152,13 @@ Windows：
 后端：
 
 ```bash
-cd /path/to/ai-icon-pipeline
 PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --reload
 ```
 
 前端：
 
 ```bash
-cd /path/to/ai-icon-pipeline/web
-npm install
-npm run dev -- --host 127.0.0.1
+(cd web && npm install && npm run dev -- --host 127.0.0.1)
 ```
 
 打开：
@@ -124,29 +185,26 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --host 0.0.0.0 --port 80
 - 也支持 **简单的内网共享部署**
 - **不是**完整的多用户 SaaS
 
-## Web 工作流
+## 推荐工作流
 
-典型使用方式：
+一条最顺手的用法通常是：
 
 1. 新建批次
 2. 设置批次级的项目背景和统一风格要求
 3. 新增条目，或导入 CSV / 表格
-4. 跑设计说明、出图指令、候选图生成
-5. 在候选池里筛图
+4. 用 Agent / CLI 推进设计说明、出图指令、候选图生成
+5. 在 Web UI 的候选池里筛图
 6. 星标你觉得好的图
 7. 确认当前候选
 8. 导出整批星标图
 
+如果你更喜欢手动操作，也可以直接在 Web UI 里逐步推进，而不是强制走 CLI。
+
 ## CLI 快速开始
 
-如果你想安装成命令：
+如果你已经按上面的方式安装过 `requirements.txt`，下面这些命令就可以直接用了。
 
-```bash
-cd /path/to/ai-icon-pipeline
-python3 -m pip install -e .
-```
-
-也可以直接运行：
+先看一眼命令入口：
 
 ```bash
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli --help
@@ -156,7 +214,7 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli --help
 
 ```bash
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli task create \
-  --task-name "三国奇幻首批图标" \
+  --task-name "三国奇幻首批资产" \
   --project-background "三国奇幻，强调武将与雷电元素" \
   --style-requirements "高对比、单主体、避免文字"
 ```
@@ -267,7 +325,7 @@ tasks/                 本地运行时任务数据（git 忽略）
 
 ## 当前边界
 
-这个项目现在的定位，是一个实用的图标生产工作台，而不是一个泛化 SaaS 平台。
+这个项目现在的定位，是一个实用的游戏资产生产工作台，而不是一个泛化 SaaS 平台。
 
 它现在比较强的地方是：
 

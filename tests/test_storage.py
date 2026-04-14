@@ -109,6 +109,21 @@ class StorageSafetyTests(unittest.TestCase):
                     provider = settings.load_global_settings()["custom_providers"][0]
                     self.assertIsNone(provider["last_error"])
 
+    def test_custom_provider_persists_image_max_concurrency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    settings.create_custom_provider(
+                        label="Async Provider",
+                        provider_type="async_image",
+                        base_url="https://example.com/v1",
+                        api_key="secret",
+                        image_max_concurrency=3,
+                    )
+                    provider = settings.load_global_settings()["custom_providers"][0]
+                    self.assertEqual(provider["image_max_concurrency"], 3)
+
     def test_local_request_rejects_external_forwarded_client(self) -> None:
         class DummyClient:
             host = "127.0.0.1"
@@ -257,8 +272,25 @@ class StorageSafetyTests(unittest.TestCase):
                     result = pipeline.run_pipeline("task_001")
 
         self.assertEqual(result["mode"], "until_blocked")
+        self.assertEqual(result["image_concurrency"], 1)
         self.assertEqual([row["item_id"] for row in result["blocked_items"]], ["item_001"])
-        self.assertEqual([row["item_id"] for row in result["terminal_items"]], ["item_002"])
+
+    def test_run_pipeline_reports_requested_image_concurrency(self) -> None:
+        with patch.object(pipeline, "load_task", return_value={"task_id": "task_001", "items": ["item_001"]}):
+            with patch.object(
+                pipeline,
+                "run_item_pipeline",
+                return_value={"task_id": "task_001", "item_id": "item_001", "status": "completed"},
+            ):
+                with patch.object(
+                    pipeline,
+                    "refresh_task_summary",
+                    return_value={"task_id": "task_001", "status": "completed"},
+                ):
+                    result = pipeline.run_pipeline("task_001", image_concurrency=4)
+
+        self.assertEqual(result["image_concurrency"], 4)
+        self.assertEqual([row["item_id"] for row in result["terminal_items"]], ["item_001"])
         self.assertIn("async image generation", result["message"])
 
     def test_provider_set_default_updates_global_defaults(self) -> None:
@@ -266,12 +298,25 @@ class StorageSafetyTests(unittest.TestCase):
             settings_path = Path(tmpdir) / "app_settings.json"
             with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
                 with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                    settings.create_custom_provider(
+                        label="Gemini Native",
+                        provider_type="gemini_native",
+                        base_url="https://generativelanguage.googleapis.com",
+                        models=[
+                            {
+                                "id": "models/gemini-3.1-flash-image-preview",
+                                "label": "Gemini 3.1 Flash Image Preview",
+                            }
+                        ],
+                    )
+                    loaded = settings.load_global_settings()
+                    provider_id = loaded["custom_providers"][0]["id"]
                     updated = settings.set_global_default(
                         "image_generation",
-                        provider="gemini",
+                        provider=provider_id,
                         model="models/gemini-3.1-flash-image-preview",
                     )
-                    self.assertEqual(updated["defaults"]["image_generation"]["provider"], "gemini")
+                    self.assertEqual(updated["defaults"]["image_generation"]["provider"], provider_id)
                     self.assertEqual(
                         updated["defaults"]["image_generation"]["model"],
                         "models/gemini-3.1-flash-image-preview",

@@ -83,6 +83,7 @@ export type ProviderSummary = {
   provider_type: string
   base_url: string
   model_count: number
+  image_max_concurrency: number | null
   builtin: boolean
   last_synced_at: string | null
   last_error: string | null
@@ -151,12 +152,13 @@ export type ProviderDetail = {
   builtin: boolean
   api_key_masked: string
   models: ModelEntry[]
+  image_max_concurrency: number | null
   last_synced_at: string | null
   last_error: string | null
 }
 
 export type GlobalSettingsData = {
-  defaults: Record<StageName, { provider: string; model: string }>
+  defaults: Record<StageName, { provider: string | null; model: string | null }>
   prompt_templates: {
     brief_system_prompt: string
     prompt_system_prompt: string

@@ -14,13 +14,11 @@ from ..config import (
 PROVIDER_LABELS = {
     "gemini": "Gemini",
     "deepseek": "DeepSeek",
-    "mock": "本地 Mock",
 }
 
 PROVIDER_ORDER = {
     "gemini": 0,
     "deepseek": 1,
-    "mock": 9,
 }
 
 MODEL_COMPATIBILITY_ORDER = {

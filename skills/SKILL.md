@@ -1,11 +1,11 @@
 ---
-name: ai-icon-pipeline-router
-description: Use this skill as the default entry point for work inside AI Icon Pipeline. Trigger when the user asks to continue this project, operate a batch, work on an item, configure a provider, sync models, review candidates, export results, or generally "use the icon pipeline". On first use, always check whether at least one provider and model are configured before attempting any generation workflow.
+name: game-asset-workbench-router
+description: Use this skill as the default entry point for work inside Game Asset Workbench. Trigger when the user asks to continue this project, operate a batch, work on an item, configure a provider, sync models, review candidates, export results, or generally use the game asset workbench. On first use, always check whether at least one provider and model are configured before attempting any generation workflow.
 ---
 
-# AI Icon Pipeline 总入口
+# Game Asset Workbench 总入口
 
-这是 AI Icon Pipeline 仓库内的顶层路由 skill。
+这是 Game Asset Workbench 仓库内的顶层路由 skill。
 
 它的职责不是把所有事情都塞进一个大 prompt 里，而是先判断：**下一步应该进入哪个工作流。**
 
@@ -194,12 +194,34 @@ Web UI 才是视觉审阅的主场。
 - brief 用哪个 provider / model
 - prompt 用哪个 provider / model
 - image_generation 用哪个 provider / model / `sync|async`
+- 当前 provider 的图片并发上限
+- 本次批次级 `image_concurrency`
+- 批次默认长宽比
+- 批次默认分辨率
 - 本次是否直接使用 `pipeline run`
 - 是否默认自动批准中间步骤
 
 不要在这些关键配置没有对齐时悄悄开跑。
 
 如果信息已明确，就用一句很短的摘要让用户确认；不要把确认卡写成冗长报告。
+
+## 生图并发边界
+
+这个项目的生图并发分成两层：
+
+1. **provider 级图片并发上限**
+   - 由 provider 配置里的 `image_max_concurrency` 控制
+   - 默认应保守对待，新 provider 建议先从 1 开始
+2. **批次级图片并发**
+   - 由 `pipeline run --image-concurrency` 控制
+   - 这是整批推进时的总并发请求意图
+
+实际执行时，不要把它理解成“无限放开”。应记住：
+
+- 批次级并发只是上层调度意图
+- 同一个 provider 的真实提交并发仍然会被 provider 自己的上限限制
+
+如果用户没有明确要求，不要主动把并发调高。
 
 ## 创建后自检
 

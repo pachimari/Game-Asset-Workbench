@@ -9,6 +9,7 @@ type ProviderDraft = {
   provider_type: string
   base_url: string
   api_key: string
+  image_max_concurrency: string
 }
 
 type ProviderPreset = {
@@ -74,11 +75,6 @@ const PROVIDER_TYPE_META: Record<
     hint: '适合 Gemini 官方原生接口。',
     badge: '官方',
   },
-  mock: {
-    label: '本地 Mock',
-    hint: '开发联调用。',
-    badge: '本地',
-  },
 }
 
 const providerPresets: ProviderPreset[] = [
@@ -110,6 +106,7 @@ const EMPTY_PROVIDER: ProviderDraft = {
   provider_type: 'openai_compatible',
   base_url: '',
   api_key: '',
+  image_max_concurrency: '',
 }
 
 function templateDraftFromSettings(settings: GlobalSettingsData) {
@@ -139,9 +136,6 @@ function providerStages(provider: ProviderDetail): StageName[] {
   const uniqueStages = Array.from(new Set(allStages)) as StageName[]
   if (uniqueStages.length > 0) return uniqueStages
   if (provider.provider_type === 'async_image') return ['image_generation']
-  if (provider.provider_type === 'mock') {
-    return ['brief_generation', 'image_prompt', 'image_generation']
-  }
   return ['brief_generation', 'image_prompt']
 }
 
@@ -177,10 +171,17 @@ export default function GlobalSettings({
     image_provider?: string | null
     image_model?: string | null
   }) => Promise<void>
-  onCreateProvider: (payload: ProviderDraft) => Promise<string>
+  onCreateProvider: (
+    payload: Omit<ProviderDraft, 'image_max_concurrency'> & {
+      image_max_concurrency?: number | null
+    },
+  ) => Promise<string>
   onUpdateProvider: (
     providerId: string,
-    payload: Omit<ProviderDraft, 'api_key'> & { api_key?: string },
+    payload: Omit<ProviderDraft, 'api_key' | 'image_max_concurrency'> & {
+      api_key?: string
+      image_max_concurrency?: number | null
+    },
   ) => Promise<string>
   onDeleteProvider: (providerId: string) => Promise<void>
   onSyncProvider: (providerId: string) => Promise<void>
@@ -264,6 +265,8 @@ export default function GlobalSettings({
       provider_type: provider.provider_type,
       base_url: provider.base_url,
       api_key: '',
+      image_max_concurrency:
+        provider.image_max_concurrency != null ? String(provider.image_max_concurrency) : '',
     })
   }
 
@@ -274,14 +277,21 @@ export default function GlobalSettings({
   }
 
   async function handleProviderSubmit(syncAfterSave = false) {
+    const normalizedConcurrency = providerDraft.image_max_concurrency.trim()
+      ? Math.max(1, Number.parseInt(providerDraft.image_max_concurrency, 10) || 1)
+      : null
     let providerId: string
     if (editingProviderId) {
       providerId = await onUpdateProvider(editingProviderId, {
         ...providerDraft,
         api_key: providerDraft.api_key.trim() ? providerDraft.api_key : undefined,
+        image_max_concurrency: normalizedConcurrency,
       })
     } else {
-      providerId = await onCreateProvider(providerDraft)
+      providerId = await onCreateProvider({
+        ...providerDraft,
+        image_max_concurrency: normalizedConcurrency,
+      })
     }
     if (syncAfterSave && providerId) {
       await onSyncProvider(providerId)
@@ -458,6 +468,28 @@ export default function GlobalSettings({
                   placeholder={editingProviderId ? '留空则保留当前 API Key' : '粘贴新的 API Key'}
                 />
               </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
+                  图片并发上限
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={providerDraft.image_max_concurrency}
+                  onChange={(event) =>
+                    setProviderDraft((current) => ({
+                      ...current,
+                      image_max_concurrency: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3.5 py-3 text-sm text-on-surface outline-none transition-colors focus:border-primary/40"
+                  placeholder="留空则默认 1"
+                />
+                <div className="mt-2 text-xs leading-5 text-on-surface-variant">
+                  控制同一个 Provider 在候选图阶段最多同时提交多少个任务。新接入的服务建议先从 1 开始。
+                </div>
+              </div>
             </div>
 
             <div className="mt-5 flex items-center justify-end gap-3">
@@ -610,6 +642,9 @@ export default function GlobalSettings({
                         </div>
                         <div className="mt-1 truncate font-mono text-[11px] text-on-surface-variant">
                           {maskDisplay(provider.api_key_masked)}
+                        </div>
+                        <div className="mt-1 text-[11px] text-on-surface-variant">
+                          图片并发上限：{provider.image_max_concurrency ?? 1}
                         </div>
                       </div>
 

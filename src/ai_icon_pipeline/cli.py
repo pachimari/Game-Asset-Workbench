@@ -52,6 +52,7 @@ from .providers.registry import ProviderRequestError
 from .providers.registry import sync_provider_models
 from .state_machine import APPROVAL_RULES, GENERATION_RULES, StateMachineError
 from .settings import (
+    UNSET,
     create_custom_provider,
     delete_custom_provider,
     load_global_settings,
@@ -120,7 +121,7 @@ COMMAND_SPECS = {
     "run-pipeline": {
         "group": "pipeline",
         "description": "Run a task or one item end-to-end",
-        "args": ["task_id", "--item-id", "--no-auto-approve"],
+        "args": ["task_id", "--item-id", "--no-auto-approve", "--image-concurrency"],
         "supports_json": True,
         "output": {"type": "object"},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "STATE_TRANSITION_INVALID", "PROVIDER_REQUEST_FAILED"],
@@ -280,7 +281,7 @@ COMMAND_SPECS = {
     "provider-add": {
         "group": "provider",
         "description": "Add one custom provider",
-        "args": ["--label", "--provider-type", "--base-url", "--api-key"],
+        "args": ["--label", "--provider-type", "--base-url", "--api-key", "--image-max-concurrency"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["providers", "custom_providers"]},
         "errors": ["VALIDATION_ERROR"],
@@ -288,7 +289,7 @@ COMMAND_SPECS = {
     "provider-update": {
         "group": "provider",
         "description": "Update one provider config",
-        "args": ["provider_id", "--label", "--provider-type", "--base-url", "--api-key"],
+        "args": ["provider_id", "--label", "--provider-type", "--base-url", "--api-key", "--image-max-concurrency"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["providers", "custom_providers"]},
         "errors": ["PROVIDER_NOT_FOUND", "VALIDATION_ERROR"],
@@ -815,6 +816,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop after each generated step instead of auto-approving it",
     )
+    run_all.add_argument(
+        "--image-concurrency",
+        type=int,
+        default=1,
+        help="Batch-level image generation concurrency. Actual provider submission still respects each provider limit.",
+    )
 
     show = subparsers.add_parser("show-task", help="Show current task snapshot", parents=[common_parser])
     show.add_argument("task_id")
@@ -904,15 +911,17 @@ def build_parser() -> argparse.ArgumentParser:
     provider_show.add_argument("provider_id")
     provider_add = subparsers.add_parser("provider-add", help="Add one custom provider", parents=[common_parser])
     provider_add.add_argument("--label", required=True)
-    provider_add.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native", "mock"])
+    provider_add.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native"])
     provider_add.add_argument("--base-url", required=True)
     provider_add.add_argument("--api-key", default="")
+    provider_add.add_argument("--image-max-concurrency", type=int)
     provider_update = subparsers.add_parser("provider-update", help="Update one provider config", parents=[common_parser])
     provider_update.add_argument("provider_id")
     provider_update.add_argument("--label")
-    provider_update.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native", "mock"])
+    provider_update.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native"])
     provider_update.add_argument("--base-url")
     provider_update.add_argument("--api-key")
+    provider_update.add_argument("--image-max-concurrency", type=int)
     provider_delete = subparsers.add_parser("provider-delete", help="Delete one custom provider", parents=[common_parser])
     provider_delete.add_argument("provider_id")
     provider_sync = subparsers.add_parser("provider-sync-models", help="Sync models for one provider", parents=[common_parser])
@@ -1090,16 +1099,18 @@ def build_parser() -> argparse.ArgumentParser:
     provider_add_group = provider_subparsers.add_parser("add", help="Add one custom provider", parents=[common_parser])
     provider_add_group.set_defaults(command="provider-add")
     provider_add_group.add_argument("--label", required=True)
-    provider_add_group.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native", "mock"])
+    provider_add_group.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native"])
     provider_add_group.add_argument("--base-url", required=True)
     provider_add_group.add_argument("--api-key", default="")
+    provider_add_group.add_argument("--image-max-concurrency", type=int)
     provider_update_group = provider_subparsers.add_parser("update", help="Update one provider config", parents=[common_parser])
     provider_update_group.set_defaults(command="provider-update")
     provider_update_group.add_argument("provider_id")
     provider_update_group.add_argument("--label")
-    provider_update_group.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native", "mock"])
+    provider_update_group.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native"])
     provider_update_group.add_argument("--base-url")
     provider_update_group.add_argument("--api-key")
+    provider_update_group.add_argument("--image-max-concurrency", type=int)
     provider_delete_group = provider_subparsers.add_parser("delete", help="Delete one custom provider", parents=[common_parser])
     provider_delete_group.set_defaults(command="provider-delete")
     provider_delete_group.add_argument("provider_id")
@@ -1140,6 +1151,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-auto-approve",
         action="store_true",
         help="Stop after each generated step instead of auto-approving it",
+    )
+    pipeline_run.add_argument(
+        "--image-concurrency",
+        type=int,
+        default=1,
+        help="Batch-level image generation concurrency. Actual provider submission still respects each provider limit.",
     )
 
     return parser
@@ -1227,6 +1244,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.task_id,
                 item_id=args.item_id,
                 auto_approve=not args.no_auto_approve,
+                image_concurrency=max(1, args.image_concurrency),
             )
             _emit(result, as_json=args.json)
             return 0
@@ -1370,6 +1388,9 @@ def main(argv: list[str] | None = None) -> int:
                 provider_type=args.provider_type,
                 base_url=args.base_url,
                 api_key=args.api_key,
+                image_max_concurrency=max(1, args.image_max_concurrency)
+                if args.image_max_concurrency is not None
+                else None,
             )
             _emit(result, as_json=True)
             return 0
@@ -1386,6 +1407,9 @@ def main(argv: list[str] | None = None) -> int:
                 label=args.label,
                 base_url=args.base_url,
                 api_key=args.api_key,
+                image_max_concurrency=max(1, args.image_max_concurrency)
+                if args.image_max_concurrency is not None
+                else UNSET,
             )
             _emit(result, as_json=True)
             return 0

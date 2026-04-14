@@ -1,6 +1,6 @@
 ---
 name: item-workflow
-description: Drive the workflow for a single item in AI Icon Pipeline, including status inspection, generating or redoing briefs and image prompts, generating candidate images, polling results, rolling back steps, and resolving runtime models. Use this skill whenever the user focuses on one item, one step, prompt regeneration, rollback, or current model selection.
+description: Drive the workflow for a single item in Game Asset Workbench, including status inspection, generating or redoing briefs and image prompts, generating candidate images, polling results, rolling back steps, and resolving runtime models. Use this skill whenever the user focuses on one item, one step, prompt regeneration, rollback, or current model selection.
 ---
 
 # Item Workflow
@@ -67,6 +67,8 @@ description: Drive the workflow for a single item in AI Icon Pipeline, including
 - brief provider / model
 - prompt provider / model
 - image provider / model / `sync|async`
+- 当前生效的长宽比
+- 当前生效的分辨率
 - 是否自动批准中间步骤
 
 如果用户明显想走 CLI-first，不要频繁把他打断到 UI；但这些关键配置仍然要先拍板。
