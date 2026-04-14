@@ -334,7 +334,7 @@ export async function createProvider(payload: {
   provider_type: string
   base_url: string
   api_key: string
-  image_max_concurrency?: string
+  image_max_concurrency?: number | null
 }): Promise<GlobalSettingsData> {
   return request<GlobalSettingsData>('/providers', {
     method: 'POST',
@@ -349,7 +349,7 @@ export async function updateProvider(
     provider_type?: string
     base_url?: string
     api_key?: string
-    image_max_concurrency?: string
+    image_max_concurrency?: number | null
   },
 ): Promise<GlobalSettingsData> {
   return request<GlobalSettingsData>(`/providers/${providerId}`, {

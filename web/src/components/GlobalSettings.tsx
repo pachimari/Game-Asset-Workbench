@@ -171,10 +171,17 @@ export default function GlobalSettings({
     image_provider?: string | null
     image_model?: string | null
   }) => Promise<void>
-  onCreateProvider: (payload: ProviderDraft) => Promise<string>
+  onCreateProvider: (
+    payload: Omit<ProviderDraft, 'image_max_concurrency'> & {
+      image_max_concurrency?: number | null
+    },
+  ) => Promise<string>
   onUpdateProvider: (
     providerId: string,
-    payload: Omit<ProviderDraft, 'api_key'> & { api_key?: string },
+    payload: Omit<ProviderDraft, 'api_key' | 'image_max_concurrency'> & {
+      api_key?: string
+      image_max_concurrency?: number | null
+    },
   ) => Promise<string>
   onDeleteProvider: (providerId: string) => Promise<void>
   onSyncProvider: (providerId: string) => Promise<void>
@@ -278,12 +285,12 @@ export default function GlobalSettings({
       providerId = await onUpdateProvider(editingProviderId, {
         ...providerDraft,
         api_key: providerDraft.api_key.trim() ? providerDraft.api_key : undefined,
-        image_max_concurrency: normalizedConcurrency != null ? String(normalizedConcurrency) : '',
+        image_max_concurrency: normalizedConcurrency,
       })
     } else {
       providerId = await onCreateProvider({
         ...providerDraft,
-        image_max_concurrency: normalizedConcurrency != null ? String(normalizedConcurrency) : '',
+        image_max_concurrency: normalizedConcurrency,
       })
     }
     if (syncAfterSave && providerId) {

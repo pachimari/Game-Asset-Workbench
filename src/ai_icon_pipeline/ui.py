@@ -567,64 +567,22 @@ def _render_global_settings(settings: dict) -> dict:
     st.markdown("### 设置")
     st.caption("这里配置全局 API Key、同步可用模型，并设定三个阶段的默认模型。所有批次和条目都可以继承或覆盖这里的默认值。")
 
-    provider_columns = st.columns(2, gap="large")
-    for column, provider_id in zip(provider_columns, ["gemini", "deepseek"]):
-        provider_settings = provider_settings_for(settings, provider_id)
-        with column:
-            st.markdown(f"#### {provider_label_for(settings, provider_id)}")
-            with st.form(f"provider-settings-{provider_id}"):
-                api_key = st.text_input(
-                    f"{provider_label_for(settings, provider_id)} API Key",
-                    value=provider_settings.get("api_key", ""),
-                    type="password",
-                    key=f"provider-key-{provider_id}",
-                )
-                save_clicked = st.form_submit_button("保存 Key", use_container_width=True)
-            if save_clicked:
-                update_provider_settings(provider_id, api_key=api_key, last_error=None)
-                settings = load_global_settings()
-                st.success(f"{provider_label_for(settings, provider_id)} Key 已保存到本地配置。")
-                _rerun()
+    st.info("这个 Streamlit 设置页现在是 legacy 入口。正式工作流请优先使用 Web 设置页；这里已按“全自定义 Provider”模型对齐，不再区分内置 Gemini/DeepSeek。")
 
-            sync_left, sync_right = st.columns([1.2, 1.0])
-            with sync_left:
-                if st.button(f"同步 {provider_label_for(settings, provider_id)} 模型", key=f"sync-models-{provider_id}", use_container_width=True):
-                    api_key = provider_settings_for(load_global_settings(), provider_id).get("api_key", "")
-                    if not api_key:
-                        st.error("请先保存 API Key。")
-                    else:
-                        try:
-                            models = sync_provider_models(provider_id, api_key, provider_settings_for(load_global_settings(), provider_id))
-                        except ProviderRequestError as exc:
-                            update_provider_settings(provider_id, last_error=str(exc))
-                            st.error(str(exc))
-                        else:
-                            update_provider_settings(
-                                provider_id,
-                                models=models,
-                                last_synced_at=utc_now(),
-                                last_error=None,
-                            )
-                            st.success(f"已同步 {len(models)} 个模型。")
-                            _rerun()
-            with sync_right:
-                st.caption(f"模型数：{len(provider_settings.get('models', []))}")
-            last_synced_at = provider_settings.get("last_synced_at")
-            if last_synced_at:
-                st.caption(f"上次同步：{last_synced_at}")
-            last_error = provider_settings.get("last_error")
-            if last_error:
-                st.warning(last_error)
+    st.markdown("#### Provider")
+    st.caption("这里统一管理所有 Provider。文本类优先选 OpenAI 兼容；图片网关可先选异步图片；Gemini 官方原生接口可选 Gemini 原生。")
 
-    st.markdown("#### 第三方 Provider")
-    st.caption("这里可以新增多个第三方 provider 实例。文本类优先选 OpenAI 兼容；图片网关可先选异步图片。")
-    custom_providers = settings.get("custom_providers", [])
-    if not custom_providers:
-        st.info("还没有第三方 provider。可以先在下面新增一个。")
-    for provider in custom_providers:
+    provider_rows = list(settings.get("custom_providers", []))
+    if not provider_rows:
+        st.info("还没有 Provider。可以先在下面新增一个。")
+    for provider in provider_rows:
         provider_id = provider["id"]
         provider_type = provider.get("provider_type", "openai_compatible")
-        type_label = {"openai_compatible": "OpenAI 兼容", "async_image": "异步图片"}.get(provider_type, provider_type)
+        type_label = {
+            "openai_compatible": "OpenAI 兼容",
+            "async_image": "异步图片",
+            "gemini_native": "Gemini 原生",
+        }.get(provider_type, provider_type)
         with st.expander(f"{provider.get('label', provider_id)} · {type_label}", expanded=False):
             with st.form(f"custom-provider-{provider_id}"):
                 label = st.text_input("名称", value=provider.get("label", ""), key=f"custom-label-{provider_id}")
@@ -649,58 +607,69 @@ def _render_global_settings(settings: dict) -> dict:
             if save_custom:
                 update_provider_settings(
                     provider_id,
+                    provider_type=provider_type,
                     label=label,
                     base_url=base_url,
                     api_key=api_key,
                     models=_parse_manual_model_lines(manual_models, provider_type),
                     last_error=None,
                 )
-                st.success("第三方 Provider 已保存。")
+                st.success("Provider 已保存。")
                 _rerun()
-            if provider_type == "openai_compatible":
-                if st.button(f"同步 {provider.get('label', provider_id)} 模型", key=f"sync-custom-{provider_id}", use_container_width=True):
-                    if not provider.get("api_key"):
-                        st.error("请先保存 API Key。")
+            if st.button(f"同步 {provider.get('label', provider_id)} 模型", key=f"sync-custom-{provider_id}", use_container_width=True):
+                if not provider.get("api_key"):
+                    st.error("请先保存 API Key。")
+                else:
+                    try:
+                        latest = provider_settings_for(load_global_settings(), provider_id)
+                        models = sync_provider_models(provider_id, latest.get("api_key", ""), latest)
+                    except ProviderRequestError as exc:
+                        update_provider_settings(provider_id, last_error=str(exc))
+                        st.error(str(exc))
                     else:
-                        try:
-                            models = sync_provider_models(provider_id, provider.get("api_key", ""), provider)
-                        except ProviderRequestError as exc:
-                            update_provider_settings(provider_id, last_error=str(exc))
-                            st.error(str(exc))
-                        else:
-                            update_provider_settings(
-                                provider_id,
-                                models=models,
-                                last_synced_at=utc_now(),
-                                last_error=None,
-                            )
-                            st.success(f"已同步 {len(models)} 个模型。")
-                            _rerun()
-            if st.button("删除这个 Provider", key=f"delete-custom-{provider_id}", use_container_width=True):
+                        update_provider_settings(
+                            provider_id,
+                            models=models,
+                            last_synced_at=utc_now(),
+                            last_error=None,
+                        )
+                        st.success(f"已同步 {len(models)} 个模型。")
+                        _rerun()
+            if st.button("删除这个 Provider", key=f"delete-provider-{provider_id}", use_container_width=True):
                 delete_custom_provider(provider_id)
                 st.success("已删除第三方 Provider。")
                 _rerun()
 
     with st.form("create-custom-provider"):
-        st.markdown("##### 新增第三方 Provider")
+        st.markdown("##### 新增 Provider")
         new_label = st.text_input("名称", value="异步图片 Provider")
         new_type = st.selectbox(
             "类型",
-            options=["openai_compatible", "async_image"],
-            format_func=lambda value: {"openai_compatible": "OpenAI 兼容", "async_image": "异步图片"}[value],
+            options=["openai_compatible", "async_image", "gemini_native"],
+            format_func=lambda value: {
+                "openai_compatible": "OpenAI 兼容",
+                "async_image": "异步图片",
+                "gemini_native": "Gemini 原生",
+            }[value],
         )
-        default_url = "https://your-async-image-provider.com/v1" if new_type == "async_image" else "https://api.example.com/v1"
+        default_url = (
+            "https://your-async-image-provider.com/v1"
+            if new_type == "async_image"
+            else "https://generativelanguage.googleapis.com"
+            if new_type == "gemini_native"
+            else "https://api.example.com/v1"
+        )
         new_base_url = st.text_input("Base URL", value=default_url)
         new_api_key = st.text_input("API Key", value="", type="password")
         new_models = st.text_area(
             "初始模型列表",
             value="gemini-3.1-flash-image-preview|Gemini 3.1 Flash Image"
-            if new_type == "async_image"
+            if new_type in {"async_image", "gemini_native"}
             else "",
             help="每行一个模型。格式：model_id|显示名称。",
             height=110,
         )
-        create_clicked = st.form_submit_button("新增第三方 Provider", use_container_width=True)
+        create_clicked = st.form_submit_button("新增 Provider", use_container_width=True)
     if create_clicked:
         create_custom_provider(
             label=new_label,
@@ -709,7 +678,7 @@ def _render_global_settings(settings: dict) -> dict:
             api_key=new_api_key,
             models=_parse_manual_model_lines(new_models, new_type),
         )
-        st.success("第三方 Provider 已新增。")
+        st.success("Provider 已新增。")
         _rerun()
 
     st.markdown("#### 默认模型")
