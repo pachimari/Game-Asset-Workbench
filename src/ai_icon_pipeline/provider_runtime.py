@@ -29,12 +29,6 @@ def _merge_brief_context(*, description: str, project_background: str, style_req
     return merged
 
 
-def _merge_prompt_context(*, prompt: str, project_background: str, style_requirements: str) -> str:
-    merged = _append_context_line(prompt, "Project background: ", project_background)
-    merged = _append_context_line(merged, "Style requirements: ", style_requirements)
-    return merged
-
-
 def _brief_user_prompt(**payload: str) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -142,15 +136,10 @@ def generate_prompt_output(
     )
     project_background = str(brief_output.get("project_background", "") or "")
     style_requirements = str(brief_output.get("style_requirements", "") or "")
-    merged_prompt = _merge_prompt_context(
-        prompt=str(raw.get("prompt") or fallback["prompt"]),
-        project_background=project_background,
-        style_requirements=style_requirements,
-    )
     return {
-        "prompt": merged_prompt,
+        "prompt": str(raw.get("prompt") or fallback["prompt"]),
         "negative_prompt": str(raw.get("negative_prompt") or fallback["negative_prompt"]),
-        "constraints": fallback["constraints"],
+        "constraints": raw.get("constraints") if isinstance(raw.get("constraints"), dict) else fallback["constraints"],
         "batch_context": {
             "project_background": project_background,
             "style_requirements": style_requirements,

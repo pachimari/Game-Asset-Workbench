@@ -113,7 +113,7 @@ COMMAND_SPECS = {
     "approve-step": {
         "group": "step",
         "description": "Approve one generated step",
-        "args": ["task_id", "item_id", "step"],
+        "args": ["task_id", "[item_id]", "step", "--all-items"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["task_id", "item_id", "step", "status", "current_versions"]},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "STATE_TRANSITION_INVALID"],
@@ -121,7 +121,7 @@ COMMAND_SPECS = {
     "run-pipeline": {
         "group": "pipeline",
         "description": "Run a task or one item end-to-end",
-        "args": ["task_id", "--item-id", "--no-auto-approve", "--image-concurrency", "--delay"],
+        "args": ["task_id", "--item-id", "--no-auto-approve", "--stop-at", "--parallel", "--image-concurrency", "--delay"],
         "supports_json": True,
         "output": {"type": "object"},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "STATE_TRANSITION_INVALID", "PROVIDER_REQUEST_FAILED"],
@@ -225,7 +225,7 @@ COMMAND_SPECS = {
     "rollback-step": {
         "group": "step",
         "description": "Move an item back to a previous stage",
-        "args": ["task_id", "item_id", "step"],
+        "args": ["task_id", "[item_id]", "step", "--all-items"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["task_id", "item_id", "step", "status", "current_versions"]},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "ARTIFACT_NOT_FOUND", "VALIDATION_ERROR"],
@@ -765,6 +765,52 @@ def _available_actions(task_id: str, item_id: str) -> dict:
     return {"status": status, "available_actions": actions}
 
 
+def _bulk_step_action(
+    task_id: str,
+    *,
+    step: str,
+    action: str,
+) -> dict:
+    results = []
+    skipped = []
+    for item in list_items(task_id):
+        current_item_id = item["item_id"]
+        try:
+            if action == "approve":
+                results.append(approve_step(task_id, current_item_id, step))
+            elif action == "rollback":
+                results.append(rollback_step(task_id, current_item_id, step))
+            else:  # pragma: no cover - defensive
+                raise ValueError(f"Unsupported bulk action: {action}")
+        except (StateMachineError, ValueError) as exc:
+            skipped.append(
+                {
+                    "item_id": current_item_id,
+                    "status": item.get("status"),
+                    "reason": str(exc),
+                }
+            )
+    return {
+        "task_id": task_id,
+        "step": step,
+        "action": action,
+        "updated_count": len(results),
+        "results": results,
+        "skipped": skipped,
+    }
+
+
+def _normalize_step_target(args: argparse.Namespace) -> tuple[str | None, str]:
+    item_id = args.item_id
+    step = args.step
+    if args.all_items and step is None and item_id in STEP_CHOICES:
+        step = item_id
+        item_id = None
+    if not step:
+        raise ValueError("step is required")
+    return item_id, step
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-icon-pipeline")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -805,8 +851,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     approve = subparsers.add_parser("approve-step", help="Approve one generated step", parents=[common_parser])
     approve.add_argument("task_id")
-    approve.add_argument("item_id")
-    approve.add_argument("step", choices=STEP_CHOICES)
+    approve.add_argument("item_id", nargs="?")
+    approve.add_argument("step", nargs="?", choices=STEP_CHOICES)
+    approve.add_argument("--all-items", action="store_true")
 
     run_all = subparsers.add_parser("run-pipeline", help="Run a task or one item end-to-end", parents=[common_parser])
     run_all.add_argument("task_id")
@@ -816,6 +863,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop after each generated step instead of auto-approving it",
     )
+    run_all.add_argument("--stop-at", choices=STATUS_CHOICES)
+    run_all.add_argument("--parallel", type=int, default=1)
     run_all.add_argument(
         "--image-concurrency",
         type=int,
@@ -894,8 +943,9 @@ def build_parser() -> argparse.ArgumentParser:
         "rollback-step", help="Move an item back to a previous stage using the latest version there", parents=[common_parser]
     )
     rollback_parser.add_argument("task_id")
-    rollback_parser.add_argument("item_id")
-    rollback_parser.add_argument("step", choices=[STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT])
+    rollback_parser.add_argument("item_id", nargs="?")
+    rollback_parser.add_argument("step", nargs="?", choices=[STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT])
+    rollback_parser.add_argument("--all-items", action="store_true")
 
     capabilities = subparsers.add_parser("capabilities", help="Show discoverable CLI capabilities", parents=[common_parser])
     capabilities.add_argument("--verbose", action="store_true")
@@ -1038,13 +1088,15 @@ def build_parser() -> argparse.ArgumentParser:
     step_approve = step_subparsers.add_parser("approve", help="Approve one generated step", parents=[common_parser])
     step_approve.set_defaults(command="approve-step")
     step_approve.add_argument("task_id")
-    step_approve.add_argument("item_id")
-    step_approve.add_argument("step", choices=STEP_CHOICES)
+    step_approve.add_argument("item_id", nargs="?")
+    step_approve.add_argument("step", nargs="?", choices=STEP_CHOICES)
+    step_approve.add_argument("--all-items", action="store_true")
     step_rollback = step_subparsers.add_parser("rollback", help="Move an item back to a previous stage", parents=[common_parser])
     step_rollback.set_defaults(command="rollback-step")
     step_rollback.add_argument("task_id")
-    step_rollback.add_argument("item_id")
-    step_rollback.add_argument("step", choices=[STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT])
+    step_rollback.add_argument("item_id", nargs="?")
+    step_rollback.add_argument("step", nargs="?", choices=[STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT])
+    step_rollback.add_argument("--all-items", action="store_true")
 
     artifact_group = subparsers.add_parser("artifact", help="Artifact version commands", parents=[common_parser])
     artifact_subparsers = artifact_group.add_subparsers(dest="artifact_command", required=True)
@@ -1158,6 +1210,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Stop after each generated step instead of auto-approving it",
     )
+    pipeline_run.add_argument("--stop-at", choices=STATUS_CHOICES)
+    pipeline_run.add_argument("--parallel", type=int, default=1)
     pipeline_run.add_argument(
         "--image-concurrency",
         type=int,
@@ -1247,7 +1301,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "approve-step":
-            result = approve_step(args.task_id, args.item_id, args.step)
+            item_id, step = _normalize_step_target(args)
+            if args.all_items:
+                result = _bulk_step_action(args.task_id, step=step, action="approve")
+            else:
+                if not item_id:
+                    raise ValueError("item_id is required unless --all-items is set")
+                result = approve_step(args.task_id, item_id, step)
             _emit(result, as_json=args.json)
             return 0
 
@@ -1256,7 +1316,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.task_id,
                 item_id=args.item_id,
                 auto_approve=not args.no_auto_approve,
-                image_concurrency=max(1, args.image_concurrency),
+                stop_at_status=args.stop_at,
+                parallel=args.parallel,
                 delay_seconds=args.delay,
                 image_concurrency=max(1, args.image_concurrency),
             )
@@ -1347,11 +1408,17 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "rollback-step":
-            result = rollback_step(
-                args.task_id,
-                args.item_id,
-                args.step,
-            )
+            item_id, step = _normalize_step_target(args)
+            if args.all_items:
+                result = _bulk_step_action(args.task_id, step=step, action="rollback")
+            else:
+                if not item_id:
+                    raise ValueError("item_id is required unless --all-items is set")
+                result = rollback_step(
+                    args.task_id,
+                    item_id,
+                    step,
+                )
             _emit(result, as_json=args.json)
             return 0
 

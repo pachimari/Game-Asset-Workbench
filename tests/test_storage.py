@@ -12,6 +12,7 @@ from ai_icon_pipeline import api
 from ai_icon_pipeline import cli
 from ai_icon_pipeline import pipeline
 from ai_icon_pipeline import settings
+from ai_icon_pipeline import provider_runtime
 from ai_icon_pipeline.providers.gemini_native import GeminiNativeProvider
 from ai_icon_pipeline.providers.registry import ProviderRequestError
 
@@ -388,8 +389,103 @@ class StorageSafetyTests(unittest.TestCase):
             "task_001",
             item_id=None,
             auto_approve=True,
+            stop_at_status=None,
+            parallel=1,
             delay_seconds=3.0,
         )
+
+    def test_cli_run_pipeline_forwards_stop_at_and_parallel(self) -> None:
+        with patch.object(cli, "run_pipeline", return_value={"ok": True}) as run_pipeline_mock:
+            exit_code = cli.main(
+                [
+                    "run-pipeline",
+                    "task_001",
+                    "--stop-at",
+                    "prompt_approved",
+                    "--parallel",
+                    "4",
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        run_pipeline_mock.assert_called_once_with(
+            "task_001",
+            item_id=None,
+            auto_approve=True,
+            stop_at_status="prompt_approved",
+            parallel=4,
+            delay_seconds=0.0,
+        )
+
+    def test_run_pipeline_uses_parallel_mode_for_text_stop_at(self) -> None:
+        with patch.object(pipeline, "load_task", return_value={"task_id": "task_001", "items": ["item_001", "item_002"]}):
+            with patch.object(
+                pipeline,
+                "run_item_pipeline",
+                side_effect=[
+                    {"task_id": "task_001", "item_id": "item_001", "status": "prompt_approved"},
+                    {"task_id": "task_001", "item_id": "item_002", "status": "prompt_approved"},
+                ],
+            ):
+                with patch.object(
+                    pipeline,
+                    "refresh_task_summary",
+                    return_value={"task_id": "task_001", "status": "prompt_approved"},
+                ):
+                    result = pipeline.run_pipeline(
+                        "task_001",
+                        stop_at_status="prompt_approved",
+                        parallel=2,
+                    )
+
+        self.assertTrue(result["parallel_mode"])
+        self.assertEqual(result["parallel"], 2)
+        self.assertEqual(result["stop_at_status"], "prompt_approved")
+
+    def test_cli_bulk_approve_uses_all_items(self) -> None:
+        with patch.object(cli, "_bulk_step_action", return_value={"ok": True}) as bulk_mock:
+            exit_code = cli.main(["approve-step", "task_001", "brief_generation", "--all-items", "--json"])
+
+        self.assertEqual(exit_code, 0)
+        bulk_mock.assert_called_once_with("task_001", step="brief_generation", action="approve")
+
+    def test_generate_prompt_output_does_not_append_batch_context_to_prompt_text(self) -> None:
+        fake_provider = Mock()
+        fake_provider.generate_json.return_value = {
+            "prompt": "中心构图，金色护盾，半透明能量边缘，符文碎片环绕",
+            "negative_prompt": "文字，水印，模糊",
+            "constraints": {"composition": "single centered subject"},
+        }
+        with patch.object(provider_runtime, "get_provider", return_value=fake_provider):
+            result = provider_runtime.generate_prompt_output(
+                provider_id="custom_text",
+                provider_config={"provider_type": "openai_compatible"},
+                api_key="secret",
+                model="text-model",
+                brief_output={
+                    "title": "护盾",
+                    "description": "desc",
+                    "keywords": ["金色护盾", "法阵", "能量边缘"],
+                    "icon_subject": "金色护盾",
+                    "visual_focus": "半透明能量边缘与符文碎片",
+                    "project_background": "三国阵法技能图标，统一 1:1",
+                    "style_requirements": "传统网游风格，无文字",
+                },
+                style_spec={"style_tags": ["fantasy"], "forbidden_elements": [], "composition_rules": []},
+                runtime_config={
+                    "candidate_count": 1,
+                    "image_size": "1:1 / 1K",
+                    "image_aspect_ratio": "1:1",
+                    "image_resolution": "1K",
+                },
+            )
+
+        self.assertEqual(
+            result["prompt"],
+            "中心构图，金色护盾，半透明能量边缘，符文碎片环绕",
+        )
+        self.assertEqual(result["batch_context"]["project_background"], "三国阵法技能图标，统一 1:1")
 
     def test_provider_set_default_updates_global_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -7,6 +7,7 @@ import shutil
 import time
 
 from .config import (
+    STATUS_ARCHIVED,
     STATUS_BRIEF_APPROVED,
     STATUS_BRIEF_GENERATING,
     STATUS_BRIEF_GENERATED,
@@ -84,6 +85,23 @@ RETRYABLE_IMAGE_ERROR_MARKERS = (
     "temporarily unavailable",
     "remote end closed connection without response",
 )
+PARALLEL_SAFE_STOP_STATUSES = {
+    STATUS_BRIEF_GENERATED,
+    STATUS_BRIEF_APPROVED,
+    STATUS_PROMPT_GENERATED,
+    STATUS_PROMPT_APPROVED,
+}
+STOP_AT_STATUSES = {
+    STATUS_BRIEF_GENERATED,
+    STATUS_BRIEF_APPROVED,
+    STATUS_PROMPT_GENERATED,
+    STATUS_PROMPT_APPROVED,
+    STATUS_IMAGE_GENERATING,
+    STATUS_IMAGE_GENERATED,
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_ARCHIVED,
+}
 
 
 def _touch_metrics(task_id: str, item_id: str, step: str) -> None:
@@ -1015,11 +1033,15 @@ def run_item_pipeline(
     item_id: str,
     *,
     auto_approve: bool = True,
+    stop_at_status: str | None = None,
     source: str = "cli",
 ) -> dict:
     while True:
         item = load_item(task_id, item_id)
         status = item["status"]
+
+        if stop_at_status and status == stop_at_status:
+            return {"task_id": task_id, "item_id": item_id, "status": status}
 
         if status in TERMINAL_STATUSES:
             return {"task_id": task_id, "item_id": item_id, "status": status}
@@ -1059,10 +1081,14 @@ def run_pipeline(
     *,
     item_id: str | None = None,
     auto_approve: bool = True,
+    stop_at_status: str | None = None,
+    parallel: int = 1,
     delay_seconds: float = 0.0,
     source: str = "cli",
     image_concurrency: int = 1,
 ) -> dict:
+    if stop_at_status and stop_at_status not in STOP_AT_STATUSES:
+        raise ValueError(f"Unsupported stop_at_status: {stop_at_status}")
     task = load_task(task_id)
     item_ids = [item_id] if item_id else task["items"]
 
@@ -1072,6 +1098,7 @@ def run_pipeline(
                 task_id,
                 current_item_id,
                 auto_approve=auto_approve,
+                stop_at_status=stop_at_status,
                 source=source,
             )
         except Exception as exc:
@@ -1083,15 +1110,26 @@ def run_pipeline(
                 "error": str(exc),
             }
 
+    results = []
+    actual_parallel = max(1, parallel)
     worker_count = max(1, image_concurrency)
-    if worker_count <= 1 or len(item_ids) <= 1:
-        results = []
-        for index, current_item_id in enumerate(item_ids):
-            if index > 0 and delay_seconds > 0:
-                time.sleep(delay_seconds)
-            results.append(_run_single(current_item_id))
-    else:
-        results = []
+    parallel_mode = False
+    if (
+        len(item_ids) > 1
+        and actual_parallel > 1
+        and stop_at_status in PARALLEL_SAFE_STOP_STATUSES
+    ):
+        parallel_mode = True
+
+    if parallel_mode:
+        with ThreadPoolExecutor(max_workers=min(actual_parallel, len(item_ids))) as executor:
+            future_map = {
+                executor.submit(_run_single, current_item_id): current_item_id for current_item_id in item_ids
+            }
+            for future in as_completed(future_map):
+                results.append(future.result())
+        results.sort(key=lambda row: item_ids.index(row["item_id"]))
+    elif worker_count > 1 and len(item_ids) > 1:
         with ThreadPoolExecutor(max_workers=min(worker_count, len(item_ids))) as executor:
             future_map = {
                 executor.submit(_run_single, current_item_id): current_item_id for current_item_id in item_ids
@@ -1099,7 +1137,11 @@ def run_pipeline(
             for future in as_completed(future_map):
                 results.append(future.result())
         results.sort(key=lambda row: item_ids.index(row["item_id"]))
-
+    else:
+        for index, current_item_id in enumerate(item_ids):
+            if index > 0 and delay_seconds > 0:
+                time.sleep(delay_seconds)
+            results.append(_run_single(current_item_id))
     summary = refresh_task_summary(task_id)
     blocked_items = [result for result in results if result.get("status") == STATUS_IMAGE_GENERATING]
     terminal_items = [result for result in results if result.get("status") in TERMINAL_STATUSES]
@@ -1111,6 +1153,9 @@ def run_pipeline(
         "results": results,
         "blocked_items": blocked_items,
         "terminal_items": terminal_items,
+        "stop_at_status": stop_at_status,
+        "parallel": actual_parallel,
+        "parallel_mode": parallel_mode,
         "delay_seconds": delay_seconds,
         "message": (
             "Pipeline advances items until they reach a terminal state or block on async image generation. "
