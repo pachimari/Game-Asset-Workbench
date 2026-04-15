@@ -78,6 +78,11 @@ class StorageSafetyTests(unittest.TestCase):
                 with self.assertRaises(Exception):
                     api._safe_file_response_path("task_001/items/item_001/item.json")
 
+    def test_download_headers_encode_utf8_filename(self) -> None:
+        headers = api._download_headers("任务_星标图.zip", "task_starred-images.zip")
+        self.assertIn('filename="task_starred-images.zip"', headers["Content-Disposition"])
+        self.assertIn("filename*=UTF-8''%E4%BB%BB%E5%8A%A1_%E6%98%9F%E6%A0%87%E5%9B%BE.zip", headers["Content-Disposition"])
+
     def test_create_custom_provider_accepts_none_api_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             settings_path = Path(tmpdir) / "app_settings.json"

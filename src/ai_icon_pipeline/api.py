@@ -4,6 +4,7 @@ import logging
 import hmac
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -317,7 +318,7 @@ def _download_headers(filename_utf8: str, fallback_ascii: str) -> dict[str, str]
     return {
         "Content-Disposition": (
             f'attachment; filename="{quoted}"; '
-            f"filename*=UTF-8''{filename_utf8}"
+            f"filename*=UTF-8''{quote(filename_utf8)}"
         )
     }
 
@@ -649,7 +650,6 @@ def create_app() -> FastAPI:
             return FileResponse(
                 archive_path,
                 media_type="application/zip",
-                filename=filename,
                 headers=_download_headers(
                     f"{_download_filename_fragment(task.get('task_name', task_id))}_星标图.zip",
                     filename,
