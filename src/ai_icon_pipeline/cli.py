@@ -121,7 +121,7 @@ COMMAND_SPECS = {
     "run-pipeline": {
         "group": "pipeline",
         "description": "Run a task or one item end-to-end",
-        "args": ["task_id", "--item-id", "--no-auto-approve", "--image-concurrency"],
+        "args": ["task_id", "--item-id", "--no-auto-approve", "--image-concurrency", "--delay"],
         "supports_json": True,
         "output": {"type": "object"},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "STATE_TRANSITION_INVALID", "PROVIDER_REQUEST_FAILED"],
@@ -822,6 +822,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Batch-level image generation concurrency. Actual provider submission still respects each provider limit.",
     )
+    run_all.add_argument(
+        "--delay",
+        type=float,
+        default=0.0,
+        help="Delay in seconds between batch item submissions",
+    )
 
     show = subparsers.add_parser("show-task", help="Show current task snapshot", parents=[common_parser])
     show.add_argument("task_id")
@@ -1158,6 +1164,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Batch-level image generation concurrency. Actual provider submission still respects each provider limit.",
     )
+    pipeline_run.add_argument(
+        "--delay",
+        type=float,
+        default=0.0,
+        help="Delay in seconds between batch item submissions",
+    )
 
     return parser
 
@@ -1244,6 +1256,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.task_id,
                 item_id=args.item_id,
                 auto_approve=not args.no_auto_approve,
+                image_concurrency=max(1, args.image_concurrency),
+                delay_seconds=args.delay,
                 image_concurrency=max(1, args.image_concurrency),
             )
             _emit(result, as_json=args.json)

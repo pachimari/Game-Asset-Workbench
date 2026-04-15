@@ -116,6 +116,32 @@ description: Handle batch-level operations inside Game Asset Workbench, includin
 
 如果图片阶段是异步 provider，默认到“已提交成功并拿到远端任务 id”就可以先交付。
 
+## 图片阶段节奏控制
+
+如果用户要整批跑图片，不要默认把它理解成“适合高并发猛冲”。
+
+当前项目里，批次推进默认是串行的。遇到图片 provider 的临时负载错误时，优先用“放慢提交节奏”而不是“继续机械重试”来处理。
+
+批量图片阶段的优先建议顺序是：
+
+1. 先继续使用 `pipeline run <task_id>`
+2. 如果出现 `429`、`503`、`负载已饱和`、`load saturated`，优先加：
+   - `--delay <秒数>`
+3. 先观察同一 provider / model 是否稳定恢复
+4. 连续两次以上仍在提交层失败，再建议切换 provider 或 model
+
+不要把图片阶段的提交层负载问题误判成：
+
+- prompt 写得不好
+- 用户设定有问题
+- 必须立刻改批次内容
+
+更准确的说法通常是：
+
+- `配置层` 没问题
+- `prompt 层` 已正常产出
+- `提交层` 遇到了 provider 侧临时负载限制
+
 ## 不适合在这里硬做的事
 
 这些不应该在 batch skill 里硬处理：

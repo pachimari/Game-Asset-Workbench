@@ -89,6 +89,23 @@ description: Manage provider setup inside Game Asset Workbench, including protoc
 
 不要把这种问题误判成 prompt 质量问题。
 
+如果失败信息里出现：
+
+- `429`
+- `503`
+- `load saturated`
+- `负载已饱和`
+
+优先判断成 provider 侧临时负载或节奏问题。
+
+这类问题更适合的建议顺序通常是：
+
+1. 先降低批量提交节奏，例如建议 `pipeline run ... --delay`
+2. 再观察同一 provider / model 是否恢复
+3. 连续失败后，再建议切到备用 provider 或 model
+
+不要一看到这类错误就直接建议用户重写 prompt。
+
 ## 判断标准
 
 如果用户只提供了一个第三方地址，不要立刻假设它是 OpenAI 兼容。

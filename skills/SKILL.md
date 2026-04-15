@@ -83,6 +83,33 @@ description: Use this skill as the default entry point for work inside Game Asse
 
 不要让 agent 假装必须全程陪跑到最终图片落地。
 
+## 图片阶段并发与失败诊断
+
+图片生成阶段要和 brief / prompt 阶段分开看。
+
+当前项目里：
+
+- brief_generation / image_prompt 属于文本阶段，失败后更适合直接重试
+- image_generation 属于高成本阶段，默认应更保守
+- 批量运行时，当前默认是串行推进
+
+如果用户在图片阶段遇到 `429`、`503`、`负载已饱和`、`load saturated`、远端提前断开等问题，不要立刻把问题归因到 prompt。
+
+优先按这个顺序诊断：
+
+1. 先判断问题卡在 `提交层`，不是 `prompt 层`
+2. 说明当前图片阶段默认是保守推进，不是假定大并发
+3. 如果用户是批量运行，优先建议：
+   - 继续使用 `pipeline run`
+   - 加 `--delay` 放慢每个 item 的提交节奏
+4. 如果同一个 provider / model 连续出现同类负载错误，再建议切换 provider 或 model
+5. 不要把“临时负载错误”误写成“配置错误”或“prompt 质量差”
+
+如果当前图片 provider 是异步型，还要明确告诉用户：
+
+- `提交成功并拿到 task_id` 就已经是一个可交付节点
+- 后续是否轮询到最终图片，不是判断链路是否成功的唯一标准
+
 ## 路由规则
 
 根据用户目标，只选择一个最主要的工作流进入。

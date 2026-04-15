@@ -5,7 +5,7 @@ import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from ai_icon_pipeline import storage
 from ai_icon_pipeline import api
@@ -13,6 +13,7 @@ from ai_icon_pipeline import cli
 from ai_icon_pipeline import pipeline
 from ai_icon_pipeline import settings
 from ai_icon_pipeline.providers.gemini_native import GeminiNativeProvider
+from ai_icon_pipeline.providers.registry import ProviderRequestError
 
 
 class StorageSafetyTests(unittest.TestCase):
@@ -292,6 +293,103 @@ class StorageSafetyTests(unittest.TestCase):
         self.assertEqual(result["image_concurrency"], 4)
         self.assertEqual([row["item_id"] for row in result["terminal_items"]], ["item_001"])
         self.assertIn("async image generation", result["message"])
+
+    def test_run_pipeline_applies_delay_between_batch_items(self) -> None:
+        with patch.object(pipeline, "load_task", return_value={"task_id": "task_001", "items": ["item_001", "item_002"]}):
+            with patch.object(
+                pipeline,
+                "run_item_pipeline",
+                side_effect=[
+                    {"task_id": "task_001", "item_id": "item_001", "status": "completed"},
+                    {"task_id": "task_001", "item_id": "item_002", "status": "completed"},
+                ],
+            ):
+                with patch.object(
+                    pipeline,
+                    "refresh_task_summary",
+                    return_value={"task_id": "task_001", "status": "completed"},
+                ):
+                    with patch.object(pipeline.time, "sleep") as sleep_mock:
+                        result = pipeline.run_pipeline("task_001", delay_seconds=2.5)
+
+        sleep_mock.assert_called_once_with(2.5)
+        self.assertEqual(result["delay_seconds"], 2.5)
+
+    def test_build_image_generation_payload_retries_transient_async_submit_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Retry Image Submit")
+                item = storage.create_item(
+                    task["task_id"],
+                    title="Retry Item",
+                    description="desc",
+                    category="combat",
+                )
+                current = storage.load_item(task["task_id"], item["item_id"])
+                current["status"] = "prompt_approved"
+                current["current_versions"]["image_prompt"] = "v001"
+                storage.save_item(task["task_id"], current)
+                storage.write_artifact(
+                    task["task_id"],
+                    item["item_id"],
+                    "image_prompt",
+                    {
+                        "step": "image_prompt",
+                        "provider": "manual",
+                        "created_at": current["created_at"],
+                        "output": {
+                            "prompt": "一个金色护盾",
+                            "negative_prompt": "不要文字",
+                            "constraints": {},
+                            "batch_context": {},
+                        },
+                    },
+                    version="v001",
+                )
+
+                fake_provider = Mock()
+                fake_provider.submit_generation.side_effect = [
+                    ProviderRequestError("provider request failed: 429 当前分组上游负载已饱和"),
+                    {"id": "remote_123", "status": "queued", "progress": 0},
+                ]
+
+                with patch.object(pipeline, "get_async_image_provider", return_value=fake_provider):
+                    with patch.object(pipeline.time, "sleep") as sleep_mock:
+                        payload, version = pipeline._build_image_generation_payload(
+                            task["task_id"],
+                            item["item_id"],
+                            item=current,
+                            provider_id="custom_async",
+                            provider_settings={"provider_type": "async_image"},
+                            api_key="secret",
+                            model_id="image-model",
+                            selected_runtime={"provider": "custom_async", "model": "image-model", "source": "task"},
+                            runtime_config={
+                                "candidate_count": 1,
+                                "image_size": "1:1 / 1K",
+                                "image_aspect_ratio": "1:1",
+                                "image_resolution": "1K",
+                            },
+                            source="cli",
+                        )
+
+        self.assertTrue(version.startswith("v"))
+        self.assertEqual(fake_provider.submit_generation.call_count, 2)
+        sleep_mock.assert_called_once_with(5.0)
+        self.assertEqual(payload["async_job"]["task_id"], "remote_123")
+        self.assertEqual(payload["meta"]["submit_attempts"], 2)
+
+    def test_cli_run_pipeline_forwards_delay(self) -> None:
+        with patch.object(cli, "run_pipeline", return_value={"ok": True}) as run_pipeline_mock:
+            exit_code = cli.main(["run-pipeline", "task_001", "--delay", "3", "--json"])
+
+        self.assertEqual(exit_code, 0)
+        run_pipeline_mock.assert_called_once_with(
+            "task_001",
+            item_id=None,
+            auto_approve=True,
+            delay_seconds=3.0,
+        )
 
     def test_provider_set_default_updates_global_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

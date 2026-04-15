@@ -3,8 +3,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from threading import BoundedSemaphore, Lock
-
 import shutil
+import time
 
 from .config import (
     STATUS_BRIEF_APPROVED,
@@ -71,6 +71,19 @@ DOWNSTREAM_STEPS = {
 PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
 _IMAGE_PROVIDER_LIMITER_LOCK = Lock()
 _IMAGE_PROVIDER_LIMITERS: dict[str, tuple[int, BoundedSemaphore]] = {}
+IMAGE_GENERATION_MAX_RETRIES = 3
+IMAGE_GENERATION_RETRY_DELAYS = (5.0, 10.0, 15.0)
+RETRYABLE_IMAGE_ERROR_MARKERS = (
+    " 429 ",
+    "429",
+    "503",
+    "rate limit",
+    "too many requests",
+    "load saturated",
+    "负载已饱和",
+    "temporarily unavailable",
+    "remote end closed connection without response",
+)
 
 
 def _touch_metrics(task_id: str, item_id: str, step: str) -> None:
@@ -227,86 +240,127 @@ def _image_generation_slot(provider_id: str, provider_settings: dict):
         semaphore.release()
 
 
-def _run_image_generation(
-    *,
+def _is_retryable_image_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in RETRYABLE_IMAGE_ERROR_MARKERS)
+
+
+def _image_retry_delay(attempt_index: int) -> float:
+    if attempt_index < len(IMAGE_GENERATION_RETRY_DELAYS):
+        return IMAGE_GENERATION_RETRY_DELAYS[attempt_index]
+    return IMAGE_GENERATION_RETRY_DELAYS[-1]
+
+
+def _build_image_generation_payload(
     task_id: str,
     item_id: str,
-    prompt_artifact: dict,
-    prompt_version: str,
+    *,
+    item: dict,
     provider_id: str,
     provider_settings: dict,
     api_key: str,
     model_id: str,
-    runtime_config: dict,
     selected_runtime: dict,
-    version: str,
-) -> dict:
-    with _image_generation_slot(provider_id, provider_settings):
-        if provider_settings.get("provider_type") == "async_image":
-            async_provider = get_async_image_provider(provider_id, provider_settings)
-            composed_prompt = prompt_artifact["output"].get("prompt", "")
-            negative_prompt = prompt_artifact["output"].get("negative_prompt", "")
-            if negative_prompt:
-                composed_prompt += f"\nAvoid: {negative_prompt}"
-            response = async_provider.submit_generation(
-                api_key=api_key,
-                model=model_id,
-                prompt=composed_prompt,
-                aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
-                resolution=runtime_config.get("image_resolution", "1K"),
-            )
-            return {
-                "step": STEP_IMAGE_GENERATION,
+    runtime_config: dict,
+    source: str,
+) -> tuple[dict, str]:
+    prompt_version = item["current_versions"]["image_prompt"]
+    if not prompt_version:
+        raise ValueError("No approved prompt version found for image generation")
+    version = next_version(task_id, item_id, STEP_IMAGE_GENERATION)
+    prompt_artifact = load_artifact(task_id, item_id, STEP_IMAGE_PROMPT, prompt_version)
+    composed_prompt = prompt_artifact["output"].get("prompt", "")
+    negative_prompt = prompt_artifact["output"].get("negative_prompt", "")
+    if negative_prompt:
+        composed_prompt += f"\nAvoid: {negative_prompt}"
+
+    attempts = 0
+    while True:
+        try:
+            with _image_generation_slot(provider_id, provider_settings):
+                if provider_settings.get("provider_type") == "async_image":
+                    async_provider = get_async_image_provider(provider_id, provider_settings)
+                    response = async_provider.submit_generation(
+                        api_key=api_key,
+                        model=model_id,
+                        prompt=composed_prompt,
+                        aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
+                        resolution=runtime_config.get("image_resolution", "1K"),
+                    )
+                    payload = {
+                        "step": STEP_IMAGE_GENERATION,
+                        "provider": provider_id,
+                        "model": model_id,
+                        "created_at": utc_now(),
+                        "input": {
+                            "image_prompt_version": prompt_version,
+                            "candidate_count": runtime_config["candidate_count"],
+                            "image_size": runtime_config["image_size"],
+                            "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
+                            "image_resolution": runtime_config.get("image_resolution", "1K"),
+                            "selected_runtime": selected_runtime,
+                        },
+                        "async_job": {
+                            "provider_type": provider_settings.get("provider_type"),
+                            "status": response.get("status", "queued"),
+                            "task_id": response.get("id"),
+                            "progress": response.get("progress", 0),
+                            "submitted_at": utc_now(),
+                        },
+                        "output": {"candidates": []},
+                        "meta": {"submit_attempts": attempts + 1},
+                    }
+                else:
+                    candidates = generate_image_candidates(
+                        provider_id=provider_id,
+                        provider_config=provider_settings,
+                        api_key=api_key,
+                        model=model_id,
+                        output_dir=item_dir(task_id, item_id) / "images",
+                        version=version,
+                        candidate_count=runtime_config["candidate_count"],
+                        prompt=prompt_artifact["output"].get("prompt", ""),
+                        negative_prompt=prompt_artifact["output"].get("negative_prompt", ""),
+                        image_size=runtime_config["image_size"],
+                        image_aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
+                        image_resolution=runtime_config.get("image_resolution", "1K"),
+                    )
+                    payload = {
+                        "step": STEP_IMAGE_GENERATION,
+                        "provider": provider_id,
+                        "model": model_id,
+                        "created_at": utc_now(),
+                        "input": {
+                            "image_prompt_version": prompt_version,
+                            "candidate_count": runtime_config["candidate_count"],
+                            "image_size": runtime_config["image_size"],
+                            "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
+                            "image_resolution": runtime_config.get("image_resolution", "1K"),
+                            "selected_runtime": selected_runtime,
+                        },
+                        "output": {"candidates": candidates},
+                        "meta": {"submit_attempts": attempts + 1},
+                    }
+            return payload, version
+        except Exception as exc:
+            if not _is_retryable_image_error(exc) or attempts >= IMAGE_GENERATION_MAX_RETRIES - 1:
+                raise
+            delay_seconds = _image_retry_delay(attempts)
+            retry_event = {
+                "timestamp": utc_now(),
+                "source": source,
+                "action": "retry_image_generation_submit",
+                "item_id": item_id,
                 "provider": provider_id,
                 "model": model_id,
-                "created_at": utc_now(),
-                "input": {
-                    "image_prompt_version": prompt_version,
-                    "candidate_count": runtime_config["candidate_count"],
-                    "image_size": runtime_config["image_size"],
-                    "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
-                    "image_resolution": runtime_config.get("image_resolution", "1K"),
-                    "selected_runtime": selected_runtime,
-                },
-                "async_job": {
-                    "provider_type": provider_settings.get("provider_type"),
-                    "status": response.get("status", "queued"),
-                    "task_id": response.get("id"),
-                    "progress": response.get("progress", 0),
-                    "submitted_at": utc_now(),
-                },
-                "output": {"candidates": []},
+                "attempt": attempts + 1,
+                "retry_in_seconds": delay_seconds,
+                "error": str(exc),
             }
-
-        candidates = generate_image_candidates(
-            provider_id=provider_id,
-            provider_config=provider_settings,
-            api_key=api_key,
-            model=model_id,
-            output_dir=item_dir(task_id, item_id) / "images",
-            version=version,
-            candidate_count=runtime_config["candidate_count"],
-            prompt=prompt_artifact["output"].get("prompt", ""),
-            negative_prompt=prompt_artifact["output"].get("negative_prompt", ""),
-            image_size=runtime_config["image_size"],
-            image_aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
-            image_resolution=runtime_config.get("image_resolution", "1K"),
-        )
-        return {
-            "step": STEP_IMAGE_GENERATION,
-            "provider": provider_id,
-            "model": model_id,
-            "created_at": utc_now(),
-            "input": {
-                "image_prompt_version": prompt_version,
-                "candidate_count": runtime_config["candidate_count"],
-                "image_size": runtime_config["image_size"],
-                "image_aspect_ratio": runtime_config.get("image_aspect_ratio", "1:1"),
-                "image_resolution": runtime_config.get("image_resolution", "1K"),
-                "selected_runtime": selected_runtime,
-            },
-            "output": {"candidates": candidates},
-        }
+            append_item_event(task_id, item_id, retry_event)
+            append_event(task_id, retry_event)
+            time.sleep(delay_seconds)
+            attempts += 1
 
 
 def _select_current_version(
@@ -452,24 +506,18 @@ def run_step(task_id: str, item_id: str, step: str, *, source: str = "cli") -> d
             }
             version = None
         elif step == STEP_IMAGE_GENERATION:
-            prompt_version = item["current_versions"]["image_prompt"]
-            if not prompt_version:
-                raise ValueError("No approved prompt version found for image generation")
             runtime_config = _effective_runtime_config(task_id, item)
-            version = next_version(task_id, item_id, step)
-            prompt_artifact = load_artifact(task_id, item_id, STEP_IMAGE_PROMPT, prompt_version)
-            payload = _run_image_generation(
-                task_id=task_id,
-                item_id=item_id,
-                prompt_artifact=prompt_artifact,
-                prompt_version=prompt_version,
+            payload, version = _build_image_generation_payload(
+                task_id,
+                item_id,
+                item=item,
                 provider_id=provider_id,
                 provider_settings=provider_settings,
                 api_key=api_key,
                 model_id=model_id,
-                runtime_config=runtime_config,
                 selected_runtime=selected_runtime,
-                version=version,
+                runtime_config=runtime_config,
+                source=source,
             )
         else:
             raise ValueError(f"Unsupported step: {step}")
@@ -1011,6 +1059,7 @@ def run_pipeline(
     *,
     item_id: str | None = None,
     auto_approve: bool = True,
+    delay_seconds: float = 0.0,
     source: str = "cli",
     image_concurrency: int = 1,
 ) -> dict:
@@ -1036,7 +1085,11 @@ def run_pipeline(
 
     worker_count = max(1, image_concurrency)
     if worker_count <= 1 or len(item_ids) <= 1:
-        results = [_run_single(current_item_id) for current_item_id in item_ids]
+        results = []
+        for index, current_item_id in enumerate(item_ids):
+            if index > 0 and delay_seconds > 0:
+                time.sleep(delay_seconds)
+            results.append(_run_single(current_item_id))
     else:
         results = []
         with ThreadPoolExecutor(max_workers=min(worker_count, len(item_ids))) as executor:
@@ -1058,6 +1111,7 @@ def run_pipeline(
         "results": results,
         "blocked_items": blocked_items,
         "terminal_items": terminal_items,
+        "delay_seconds": delay_seconds,
         "message": (
             "Pipeline advances items until they reach a terminal state or block on async image generation. "
             "Batch-level concurrency can exceed 1, but each provider still respects its own image concurrency limit."
