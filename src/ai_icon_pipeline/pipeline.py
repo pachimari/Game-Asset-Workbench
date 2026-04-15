@@ -393,6 +393,11 @@ def _select_current_version(
     item = load_item(task_id, item_id)
     load_artifact(task_id, item_id, step, version)
     item["current_versions"][step] = version
+    if step == STEP_IMAGE_GENERATION:
+        starred_versions = list(dict.fromkeys(item.get("starred_image_versions", [])))
+        if version not in starred_versions:
+            starred_versions.append(version)
+            item["starred_image_versions"] = starred_versions
     _reset_downstream(item, step)
     item["status"] = GENERATED_STATUS_BY_STEP[step]
     save_item(task_id, item)

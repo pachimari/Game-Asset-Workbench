@@ -487,6 +487,48 @@ class StorageSafetyTests(unittest.TestCase):
         )
         self.assertEqual(result["batch_context"]["project_background"], "三国阵法技能图标，统一 1:1")
 
+    def test_set_current_image_version_auto_stars_selected_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Current Version Stars")
+                item = storage.create_item(
+                    task["task_id"],
+                    title="赵云",
+                    description="desc",
+                    category="combat",
+                )
+                image_dir = storage.item_dir(task["task_id"], item["item_id"]) / "images"
+                image_dir.mkdir(parents=True, exist_ok=True)
+                (image_dir / "v001_candidate_01.png").write_bytes(b"png")
+                storage.write_artifact(
+                    task["task_id"],
+                    item["item_id"],
+                    "image_generation",
+                    {
+                        "step": "image_generation",
+                        "provider": "mock",
+                        "model": "mock-image-v1",
+                        "created_at": item["created_at"],
+                        "output": {
+                            "candidates": [
+                                {"candidate_id": "candidate_01", "image_path": "v001_candidate_01.png"}
+                            ]
+                        },
+                    },
+                    version="v001",
+                )
+
+                pipeline.set_current_version(
+                    task["task_id"],
+                    item["item_id"],
+                    "image_generation",
+                    "v001",
+                )
+
+                updated_item = storage.load_item(task["task_id"], item["item_id"])
+                self.assertEqual(updated_item["current_versions"]["image_generation"], "v001")
+                self.assertIn("v001", updated_item["starred_image_versions"])
+
     def test_provider_set_default_updates_global_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             settings_path = Path(tmpdir) / "app_settings.json"
