@@ -575,8 +575,10 @@ class StorageSafetyTests(unittest.TestCase):
                     names = archive.namelist()
 
                 image_entries = [name for name in names if name.endswith(".png")]
-                self.assertEqual(len(image_entries), 1)
-                self.assertIn("item_001_锐锋阵·暴击/item_001_锐锋阵·暴击_v001_candidate_01.png", image_entries[0])
+                self.assertEqual(len(image_entries), 2)
+                self.assertIn("item_001_锐锋阵·暴击/item_001_锐锋阵·暴击_v001_candidate_01.png", names)
+                self.assertIn("flat/item_001_锐锋阵·暴击_v001_candidate_01.png", names)
+                self.assertIn("manifest.csv", names)
 
     def test_provider_set_default_updates_global_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

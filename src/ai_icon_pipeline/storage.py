@@ -10,6 +10,8 @@ import re
 import shutil
 import time
 import zipfile
+import csv
+from io import StringIO
 
 from .config import (
     DEFAULT_RUNTIME_CONFIG,
@@ -1087,6 +1089,7 @@ def export_starred_images_zip(task_id: str) -> Path:
         "exported_at": utc_now(),
         "items": [],
     }
+    flat_rows: list[dict[str, str]] = []
     exported_count = 0
 
     with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -1125,8 +1128,22 @@ def export_starred_images_zip(task_id: str) -> Path:
                         f"{item['item_id']}_{item_name}_{version}_{safe_candidate_id}{suffix}"
                     )
                     archive_name = f"{item_folder}/{file_name}"
+                    flat_archive_name = f"flat/{file_name}"
                     archive.write(source_path, arcname=archive_name)
+                    archive.write(source_path, arcname=flat_archive_name)
                     exported_files.append(archive_name)
+                    flat_rows.append(
+                        {
+                            "item_id": item["item_id"],
+                            "title": item.get("title", ""),
+                            "version": version,
+                            "provider": str(artifact.get("provider") or ""),
+                            "model": str(artifact.get("model") or ""),
+                            "candidate_id": str(candidate_id),
+                            "grouped_path": archive_name,
+                            "flat_path": flat_archive_name,
+                        }
+                    )
                     exported_count += 1
 
                 if exported_files:
@@ -1150,5 +1167,22 @@ def export_starred_images_zip(task_id: str) -> Path:
             "manifest.json",
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         )
+        csv_buffer = StringIO()
+        writer = csv.DictWriter(
+            csv_buffer,
+            fieldnames=[
+                "item_id",
+                "title",
+                "version",
+                "provider",
+                "model",
+                "candidate_id",
+                "grouped_path",
+                "flat_path",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(flat_rows)
+        archive.writestr("manifest.csv", csv_buffer.getvalue())
 
     return archive_path
