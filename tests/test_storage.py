@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
+import zipfile
 
 from ai_icon_pipeline import storage
 from ai_icon_pipeline import api
@@ -533,6 +534,49 @@ class StorageSafetyTests(unittest.TestCase):
                 updated_item = storage.load_item(task["task_id"], item["item_id"])
                 self.assertEqual(updated_item["current_versions"]["image_generation"], "v001")
                 self.assertIn("v001", updated_item["starred_image_versions"])
+
+    def test_export_starred_images_uses_globally_unique_filenames(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Export Names")
+                item = storage.create_item(
+                    task["task_id"],
+                    title="锐锋阵·暴击",
+                    description="desc",
+                    category="combat",
+                )
+                current = storage.load_item(task["task_id"], item["item_id"])
+                current["starred_image_versions"] = ["v001"]
+                storage.save_item(task["task_id"], current)
+
+                image_dir = storage.item_dir(task["task_id"], item["item_id"]) / "images"
+                image_dir.mkdir(parents=True, exist_ok=True)
+                (image_dir / "v001_candidate_01.png").write_bytes(b"png")
+                storage.write_artifact(
+                    task["task_id"],
+                    item["item_id"],
+                    "image_generation",
+                    {
+                        "step": "image_generation",
+                        "provider": "mock",
+                        "model": "mock-image-v1",
+                        "created_at": current["created_at"],
+                        "output": {
+                            "candidates": [
+                                {"candidate_id": "candidate_01", "image_path": "v001_candidate_01.png"}
+                            ]
+                        },
+                    },
+                    version="v001",
+                )
+
+                archive_path = storage.export_starred_images_zip(task["task_id"])
+                with zipfile.ZipFile(archive_path) as archive:
+                    names = archive.namelist()
+
+                image_entries = [name for name in names if name.endswith(".png")]
+                self.assertEqual(len(image_entries), 1)
+                self.assertIn("item_001_锐锋阵·暴击/item_001_锐锋阵·暴击_v001_candidate_01.png", image_entries[0])
 
     def test_provider_set_default_updates_global_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

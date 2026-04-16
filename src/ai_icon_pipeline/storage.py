@@ -1121,7 +1121,9 @@ def export_starred_images_zip(task_id: str) -> Path:
                     suffix = source_path.suffix or Path(str(image_path)).suffix or ".png"
                     candidate_id = candidate.get("candidate_id") or f"candidate_{index:02d}"
                     safe_candidate_id = _safe_path_fragment(str(candidate_id))
-                    file_name = f"{version}_{safe_candidate_id}{suffix}"
+                    file_name = (
+                        f"{item['item_id']}_{item_name}_{version}_{safe_candidate_id}{suffix}"
+                    )
                     archive_name = f"{item_folder}/{file_name}"
                     archive.write(source_path, arcname=archive_name)
                     exported_files.append(archive_name)
