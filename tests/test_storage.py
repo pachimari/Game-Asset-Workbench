@@ -398,6 +398,7 @@ class StorageSafetyTests(unittest.TestCase):
             stop_at_status=None,
             parallel=1,
             delay_seconds=3.0,
+            image_concurrency=1,
         )
 
     def test_cli_run_pipeline_forwards_stop_at_and_parallel(self) -> None:
@@ -422,6 +423,7 @@ class StorageSafetyTests(unittest.TestCase):
             stop_at_status="prompt_approved",
             parallel=4,
             delay_seconds=0.0,
+            image_concurrency=1,
         )
 
     def test_run_pipeline_uses_parallel_mode_for_text_stop_at(self) -> None:
