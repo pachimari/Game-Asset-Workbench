@@ -34,7 +34,7 @@ from .utils import ensure_dir, utc_now
 
 TASK_ID_PATTERN = re.compile(r"^task_(\d+)$")
 ITEM_ID_PATTERN = re.compile(r"^item_(\d+)$")
-PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
+PENDING_ASYNC_STATUSES = {"queued", "submitted", "processing", "pending", "running", "in_progress"}
 LOCK_RETRY_SECONDS = 0.05
 LOCK_TIMEOUT_SECONDS = 10.0
 

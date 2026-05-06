@@ -241,7 +241,7 @@ function CandidateCard({
           <Icon name="sync" className="animate-spin text-2xl text-primary-dim" />
           <div className="text-center">
             <p className="text-xs font-bold text-on-surface">
-              {asyncStatus === 'queued' || asyncStatus === 'pending'
+              {asyncStatus === 'queued' || asyncStatus === 'submitted' || asyncStatus === 'pending'
                 ? '排队中'
                 : asyncStatus === 'failed'
                   ? '生成失败'
@@ -426,7 +426,7 @@ export default function ItemWorkspace({
     candidateVersions[0]
   const pendingVersions = candidateVersions.filter((v) => {
     const status = v.async_job?.status?.toLowerCase()
-    return status && ['queued', 'pending', 'running', 'processing', 'in_progress'].includes(status)
+    return status && ['queued', 'submitted', 'pending', 'running', 'processing', 'in_progress'].includes(status)
   })
   const starredVersions = candidateVersions.filter((version) => version.is_starred)
   const candidateGridVersions =

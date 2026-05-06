@@ -30,7 +30,7 @@ ASYNC_IMAGE_SUPPLEMENTAL_MODELS = tuple(
         "AI_ICON_PIPELINE_ASYNC_IMAGE_SUPPLEMENTAL_MODELS",
         os.getenv(
             "AI_ICON_PIPELINE_TOAPIS_SUPPLEMENTAL_IMAGE_MODELS",
-            "gemini-3.1-flash-image-preview",
+            "gemini-3.1-flash-image-preview,gpt-image-2",
         ),
     ).split(",")
     if model_id.strip()

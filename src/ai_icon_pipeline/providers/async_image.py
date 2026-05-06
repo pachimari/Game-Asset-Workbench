@@ -34,12 +34,16 @@ class AsyncImageProvider:
         try:
             with request.urlopen(req, timeout=120) as response:
                 body = response.read().decode("utf-8")
-                return json.loads(body) if body else {}
+                payload = json.loads(body) if body else {}
         except error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="ignore")
             raise ProviderRequestError(f"{self.label} request failed: {exc.code} {body or exc.reason}") from exc
         except error.URLError as exc:
             raise ProviderRequestError(f"{self.label} request failed: {exc.reason}") from exc
+        if int(payload.get("code", 200) or 200) >= 400:
+            message = payload.get("error", {}).get("message") or payload
+            raise ProviderRequestError(f"{self.label} request failed: {message}")
+        return payload
 
     def submit_generation(
         self,
@@ -57,10 +61,14 @@ class AsyncImageProvider:
             "2k": "2K",
             "4k": "4K",
         }.get(str(resolution or "1K").strip().lower(), resolution or "1K")
+        resolution_field = normalized_resolution.lower()
+        if resolution_field == "0.5k":
+            resolution_field = "1k"
         payload = {
             "model": model,
             "prompt": prompt,
             "size": aspect_ratio or "1:1",
+            "resolution": resolution_field,
             "n": 1,
             "metadata": {
                 "resolution": normalized_resolution,
@@ -72,10 +80,19 @@ class AsyncImageProvider:
             api_key=api_key,
             payload=payload,
         )
-        task_id = response.get("id")
+        data = response.get("data")
+        first_data = data[0] if isinstance(data, list) and data else {}
+        task_id = response.get("id") or first_data.get("task_id") or first_data.get("id")
         if not task_id:
             raise ProviderRequestError(f"{self.label} 未返回任务 id")
-        return response
+        if response.get("id"):
+            return response
+        return {
+            "id": task_id,
+            "status": first_data.get("status", response.get("status", "queued")),
+            "progress": first_data.get("progress", response.get("progress", 0)),
+            "raw": response,
+        }
 
     def list_models(self, *, api_key: str) -> list[dict]:
         payload = self._request_json(
@@ -91,11 +108,39 @@ class AsyncImageProvider:
         api_key: str,
         task_id: str,
     ) -> dict:
-        return self._request_json(
-            method="GET",
-            path=f"/images/generations/{parse.quote(task_id)}",
-            api_key=api_key,
-        )
+        try:
+            response = self._request_json(
+                method="GET",
+                path=f"/images/generations/{parse.quote(task_id)}",
+                api_key=api_key,
+            )
+        except ProviderRequestError as exc:
+            if "404" not in str(exc) and "405" not in str(exc):
+                raise
+            response = self._request_json(
+                method="GET",
+                path=f"/tasks/{parse.quote(task_id)}",
+                api_key=api_key,
+            )
+        if "status" in response or "result" in response:
+            return response
+
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        images = ((data.get("result") or {}).get("images") or [])
+        urls: list[str] = []
+        for image in images:
+            raw_url = image.get("url") if isinstance(image, dict) else None
+            if isinstance(raw_url, list):
+                urls.extend(str(url) for url in raw_url if url)
+            elif raw_url:
+                urls.append(str(raw_url))
+        return {
+            "status": data.get("status", response.get("status", "queued")),
+            "progress": data.get("progress", response.get("progress", 0)),
+            "error": data.get("error") or response.get("error"),
+            "result": {"data": [{"url": url} for url in urls]},
+            "raw": response,
+        }
 
     def download_result(self, *, url: str, destination: Path) -> None:
         req = request.Request(url, headers={"User-Agent": "ai-icon-pipeline/0.1"}, method="GET")

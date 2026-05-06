@@ -62,6 +62,8 @@ from .settings import (
     update_provider_settings,
 )
 
+PROVIDER_TYPE_CHOICES = ["openai_compatible", "async_image", "gemini_native"]
+
 
 STEP_CHOICES = [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]
 ASYNC_STEPS = [STEP_IMAGE_GENERATION]
@@ -648,7 +650,7 @@ def _pending_image_jobs(task_id: str, item_id: str) -> list[dict]:
         artifact = load_artifact(task_id, item_id, STEP_IMAGE_GENERATION, version)
         async_job = artifact.get("async_job", {})
         status = str(async_job.get("status", "")).lower()
-        if status in {"queued", "processing", "pending", "running", "in_progress"}:
+        if status in {"queued", "submitted", "processing", "pending", "running", "in_progress"}:
             rows.append(
                 {
                     "version": version,
@@ -967,14 +969,14 @@ def build_parser() -> argparse.ArgumentParser:
     provider_show.add_argument("provider_id")
     provider_add = subparsers.add_parser("provider-add", help="Add one custom provider", parents=[common_parser])
     provider_add.add_argument("--label", required=True)
-    provider_add.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native"])
+    provider_add.add_argument("--provider-type", required=True, choices=PROVIDER_TYPE_CHOICES)
     provider_add.add_argument("--base-url", required=True)
     provider_add.add_argument("--api-key", default="")
     provider_add.add_argument("--image-max-concurrency", type=int)
     provider_update = subparsers.add_parser("provider-update", help="Update one provider config", parents=[common_parser])
     provider_update.add_argument("provider_id")
     provider_update.add_argument("--label")
-    provider_update.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native"])
+    provider_update.add_argument("--provider-type", choices=PROVIDER_TYPE_CHOICES)
     provider_update.add_argument("--base-url")
     provider_update.add_argument("--api-key")
     provider_update.add_argument("--image-max-concurrency", type=int)
@@ -1157,7 +1159,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_add_group = provider_subparsers.add_parser("add", help="Add one custom provider", parents=[common_parser])
     provider_add_group.set_defaults(command="provider-add")
     provider_add_group.add_argument("--label", required=True)
-    provider_add_group.add_argument("--provider-type", required=True, choices=["openai_compatible", "async_image", "gemini_native"])
+    provider_add_group.add_argument("--provider-type", required=True, choices=PROVIDER_TYPE_CHOICES)
     provider_add_group.add_argument("--base-url", required=True)
     provider_add_group.add_argument("--api-key", default="")
     provider_add_group.add_argument("--image-max-concurrency", type=int)
@@ -1165,7 +1167,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_update_group.set_defaults(command="provider-update")
     provider_update_group.add_argument("provider_id")
     provider_update_group.add_argument("--label")
-    provider_update_group.add_argument("--provider-type", choices=["openai_compatible", "async_image", "gemini_native"])
+    provider_update_group.add_argument("--provider-type", choices=PROVIDER_TYPE_CHOICES)
     provider_update_group.add_argument("--base-url")
     provider_update_group.add_argument("--api-key")
     provider_update_group.add_argument("--image-max-concurrency", type=int)

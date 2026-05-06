@@ -685,7 +685,7 @@ export function useWorkbenchController() {
   useEffect(() => {
     const pendingCount =
       workspace?.candidate_pool.versions.filter((version) =>
-        ['queued', 'processing', 'pending', 'running', 'in_progress'].includes(
+        ['queued', 'submitted', 'processing', 'pending', 'running', 'in_progress'].includes(
           String(version.async_job?.status ?? '').toLowerCase(),
         ),
       ).length ?? 0

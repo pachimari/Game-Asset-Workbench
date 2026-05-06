@@ -93,6 +93,13 @@ const providerPresets: ProviderPreset[] = [
     description: '用于候选图阶段的排队式异步图片生成。',
   },
   {
+    title: 'APIMart GPT-Image-2',
+    provider_type: 'async_image',
+    suggestedLabel: 'APIMart GPT-Image-2',
+    suggestedBaseUrl: 'https://api.apimart.ai/v1',
+    description: '使用通用异步图片协议，提交到 APIMart 后轮询任务结果。',
+  },
+  {
     title: 'Gemini 官方',
     provider_type: 'gemini_native',
     suggestedLabel: 'Gemini Official',
@@ -424,7 +431,7 @@ export default function GlobalSettings({
                   {providerDraft.provider_type === 'openai_compatible'
                     ? '如果是第三方聚合平台，通常就选这个。'
                     : providerDraft.provider_type === 'async_image'
-                      ? '适合需要轮询和取消任务的图片服务。'
+                      ? '适合需要提交任务并轮询结果的图片服务，包括 APIMart GPT-Image-2。'
                       : '适合 Gemini 官方原生模型能力。'}
                 </div>
               </div>

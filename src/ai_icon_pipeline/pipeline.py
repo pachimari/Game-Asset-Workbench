@@ -69,7 +69,7 @@ DOWNSTREAM_STEPS = {
     STEP_IMAGE_GENERATION: [],
 }
 
-PENDING_ASYNC_STATUSES = {"queued", "processing", "pending", "running", "in_progress"}
+PENDING_ASYNC_STATUSES = {"queued", "submitted", "processing", "pending", "running", "in_progress"}
 _IMAGE_PROVIDER_LIMITER_LOCK = Lock()
 _IMAGE_PROVIDER_LIMITERS: dict[str, tuple[int, BoundedSemaphore]] = {}
 IMAGE_GENERATION_MAX_RETRIES = 3

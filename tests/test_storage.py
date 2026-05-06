@@ -14,6 +14,7 @@ from ai_icon_pipeline import cli
 from ai_icon_pipeline import pipeline
 from ai_icon_pipeline import settings
 from ai_icon_pipeline import provider_runtime
+from ai_icon_pipeline.providers.async_image import AsyncImageProvider
 from ai_icon_pipeline.providers.gemini_native import GeminiNativeProvider
 from ai_icon_pipeline.providers.registry import ProviderRequestError
 
@@ -131,6 +132,62 @@ class StorageSafetyTests(unittest.TestCase):
                     )
                     provider = settings.load_global_settings()["custom_providers"][0]
                     self.assertEqual(provider["image_max_concurrency"], 3)
+
+    def test_async_image_provider_normalizes_apimart_submit_and_poll_responses(self) -> None:
+        provider = AsyncImageProvider(label="APIMart", base_url="https://api.apimart.ai/v1")
+
+        with patch.object(
+            provider,
+            "_request_json",
+            side_effect=[
+                {
+                    "code": 200,
+                    "data": [
+                        {
+                            "status": "submitted",
+                            "task_id": "task_123",
+                        }
+                    ],
+                },
+                ProviderRequestError("APIMart request failed: 404 not found"),
+                {
+                    "code": 200,
+                    "data": {
+                        "id": "task_123",
+                        "status": "completed",
+                        "progress": 100,
+                        "result": {
+                            "images": [
+                                {
+                                    "url": ["https://upload.apimart.ai/f/image/result.png"],
+                                }
+                            ]
+                        },
+                    },
+                },
+            ],
+        ) as request_mock:
+            submit = provider.submit_generation(
+                api_key="secret",
+                model="gpt-image-2",
+                prompt="prompt",
+                aspect_ratio="16:9",
+                resolution="2K",
+            )
+            poll = provider.poll_generation(api_key="secret", task_id="task_123")
+
+        self.assertEqual(submit["id"], "task_123")
+        self.assertEqual(submit["status"], "submitted")
+        self.assertEqual(poll["status"], "completed")
+        self.assertEqual(
+            poll["result"]["data"],
+            [{"url": "https://upload.apimart.ai/f/image/result.png"}],
+        )
+        submit_payload = request_mock.call_args_list[0].kwargs["payload"]
+        self.assertEqual(submit_payload["resolution"], "2k")
+        self.assertEqual(submit_payload["size"], "16:9")
+        self.assertEqual(request_mock.call_args_list[1].kwargs["path"], "/images/generations/task_123")
+        self.assertEqual(request_mock.call_args_list[2].kwargs["path"], "/tasks/task_123")
 
     def test_local_request_rejects_external_forwarded_client(self) -> None:
         class DummyClient:
