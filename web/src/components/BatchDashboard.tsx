@@ -165,6 +165,10 @@ export default function BatchDashboard({
   const [gridGap, setGridGap] = useState(task.runtime_config?.grid_gap ?? 0)
   const [bulkText, setBulkText] = useState('')
   const [bulkSummary, setBulkSummary] = useState<string | null>(null)
+  const [sheetSelection, setSheetSelection] = useState<{
+    taskId: string
+    sheetId: string | null
+  }>({ taskId: task.task_id, sheetId: sheets[0]?.sheet_id ?? null })
 
   const completed = task.items_summary?.completed ?? 0
   const inProgress = task.items_summary?.in_progress ?? 0
@@ -173,14 +177,20 @@ export default function BatchDashboard({
   const metrics = task.batch_metrics
   const topModelSummary =
     metrics?.top_image_models.map((row) => `${row.model} ×${row.count}`).join(' · ') || '还没有候选图模型数据'
-  const latestSheet = sheets[0]
+  const selectedSheetId =
+    sheetSelection.taskId === task.task_id &&
+    sheetSelection.sheetId &&
+    sheets.some((sheet) => sheet.sheet_id === sheetSelection.sheetId)
+      ? sheetSelection.sheetId
+      : sheets[0]?.sheet_id
+  const selectedSheet = sheets.find((sheet) => sheet.sheet_id === selectedSheetId) ?? sheets[0]
   const gridSheetEnabled = task.runtime_config?.image_generation_mode === 'grid_sheet'
-  const latestSheetCells = latestSheet ? `${latestSheet.input.rows}×${latestSheet.input.cols}` : `${gridRows}×${gridCols}`
-  const latestSheetPrompt = latestSheet?.prompt?.prompt ?? ''
-  const canGenerateSheet = Boolean(latestSheet && ['planned', 'failed'].includes(latestSheet.status))
-  const canPollSheet = Boolean(latestSheet && ['generating'].includes(latestSheet.status))
-  const canSplitSheet = Boolean(latestSheet && ['generated', 'split'].includes(latestSheet.status))
-  const canBackfillSheet = Boolean(latestSheet && ['split'].includes(latestSheet.status) && latestSheet.tiles.length > 0)
+  const selectedSheetCells = selectedSheet ? `${selectedSheet.input.rows}×${selectedSheet.input.cols}` : `${gridRows}×${gridCols}`
+  const selectedSheetPrompt = selectedSheet?.prompt?.prompt ?? ''
+  const canGenerateSheet = Boolean(selectedSheet && ['planned', 'failed'].includes(selectedSheet.status))
+  const canPollSheet = Boolean(selectedSheet && ['generating'].includes(selectedSheet.status))
+  const canSplitSheet = Boolean(selectedSheet && ['generated', 'split'].includes(selectedSheet.status))
+  const canBackfillSheet = Boolean(selectedSheet && ['split'].includes(selectedSheet.status) && selectedSheet.tiles.length > 0)
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
   const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
@@ -635,55 +645,80 @@ export default function BatchDashboard({
                 <Icon name="grid_view" className="text-[18px] text-primary" />
                 <span className="text-sm font-bold text-on-surface">网格切图</span>
                 <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
-                  {latestSheet ? `${latestSheet.sheet_id} · ${statusLabel(latestSheet.status)}` : '未规划'}
+                  {selectedSheet ? `${selectedSheet.sheet_id} · ${statusLabel(selectedSheet.status)}` : '未规划'}
                 </span>
                 <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
-                  {latestSheetCells}
+                  {selectedSheetCells}
                 </span>
               </div>
               <div className="mt-1 text-xs text-on-surface-variant">
-                {latestSheet
-                  ? `槽位 ${latestSheet.slots.length} · 切片 ${latestSheet.tiles.length} · 剩余 ${latestSheet.input.remaining_item_count ?? 0}`
+                {selectedSheet
+                  ? `当前查看 ${selectedSheet.sheet_id}，槽位 ${selectedSheet.slots.length} · 切片 ${selectedSheet.tiles.length} · 剩余 ${selectedSheet.input.remaining_item_count ?? 0}。新建规划不会删除旧图。`
                   : `当前会按 ${gridRows * gridCols} 个槽位规划这一批次。`}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {sheets.length > 0 ? (
+                <select
+                  value={selectedSheet?.sheet_id ?? ''}
+                  onChange={(event) =>
+                    setSheetSelection({ taskId: task.task_id, sheetId: event.target.value || null })
+                  }
+                  className="rounded-xl border border-outline-variant/20 bg-surface-container px-3 py-2 text-xs font-bold text-on-surface outline-none transition-colors hover:bg-surface-container-high"
+                  aria-label="选择 Sheet 版本"
+                >
+                  {sheets.map((sheet) => (
+                    <option key={sheet.sheet_id} value={sheet.sheet_id}>
+                      {sheet.sheet_id} · {statusLabel(sheet.status)}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <button
                 type="button"
                 disabled={actionBusy || items.length === 0}
-                onClick={() => void onGridSheetAction('plan')}
+                title="根据当前批次设置和条目创建一个新的 sheet_vXXX 规划，不会删除已有图片。"
+                onClick={() => {
+                  if (
+                    sheets.length > 0 &&
+                    !window.confirm('这会新建一个 Sheet 规划版本，不会删除已有图片。继续吗？')
+                  ) {
+                    return
+                  }
+                  void onGridSheetAction('plan')
+                }}
                 className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               >
-                规划 Sheet
+                新建规划
               </button>
               <button
                 type="button"
-                disabled={actionBusy || !latestSheet || !canGenerateSheet}
-                onClick={() => latestSheet && void onGridSheetAction('generate', latestSheet.sheet_id)}
+                disabled={actionBusy || !selectedSheet || !canGenerateSheet}
+                onClick={() => selectedSheet && void onGridSheetAction('generate', selectedSheet.sheet_id)}
                 className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
               >
                 提交出图
               </button>
               <button
                 type="button"
-                disabled={actionBusy || !latestSheet || !canPollSheet}
-                onClick={() => latestSheet && void onGridSheetAction('poll', latestSheet.sheet_id)}
+                disabled={actionBusy || !selectedSheet || !canPollSheet}
+                onClick={() => selectedSheet && void onGridSheetAction('poll', selectedSheet.sheet_id)}
                 className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               >
                 轮询结果
               </button>
               <button
                 type="button"
-                disabled={actionBusy || !latestSheet || !canSplitSheet}
-                onClick={() => latestSheet && void onGridSheetAction('split', latestSheet.sheet_id)}
+                disabled={actionBusy || !selectedSheet || !canSplitSheet}
+                onClick={() => selectedSheet && void onGridSheetAction('split', selectedSheet.sheet_id)}
                 className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               >
                 切图
               </button>
               <button
                 type="button"
-                disabled={actionBusy || !latestSheet || !canBackfillSheet}
-                onClick={() => latestSheet && void onGridSheetAction('backfill', latestSheet.sheet_id)}
+                disabled={actionBusy || !selectedSheet || !canBackfillSheet}
+                onClick={() => selectedSheet && void onGridSheetAction('backfill', selectedSheet.sheet_id)}
                 className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               >
                 回填候选池
@@ -691,14 +726,14 @@ export default function BatchDashboard({
             </div>
           </div>
 
-          {latestSheet ? (
+          {selectedSheet ? (
             <div className="grid gap-0 lg:grid-cols-[320px_minmax(0,1fr)]">
               <div className="border-b border-outline-variant/10 bg-surface-container px-4 py-4 lg:border-b-0 lg:border-r">
                 <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest">
-                  {latestSheet.source_image_url ? (
+                  {selectedSheet.source_image_url ? (
                     <img
-                      src={latestSheet.source_image_url}
-                      alt={latestSheet.sheet_id}
+                      src={selectedSheet.source_image_url}
+                      alt={selectedSheet.sheet_id}
                       className="h-full w-full object-contain"
                     />
                   ) : (
@@ -708,15 +743,15 @@ export default function BatchDashboard({
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-lg bg-surface-container-highest px-2 py-2">
                     <div className="text-[11px] text-outline">槽位</div>
-                    <div className="text-sm font-black text-on-surface">{latestSheet.slots.length}</div>
+                    <div className="text-sm font-black text-on-surface">{selectedSheet.slots.length}</div>
                   </div>
                   <div className="rounded-lg bg-surface-container-highest px-2 py-2">
                     <div className="text-[11px] text-outline">切片</div>
-                    <div className="text-sm font-black text-on-surface">{latestSheet.tiles.length}</div>
+                    <div className="text-sm font-black text-on-surface">{selectedSheet.tiles.length}</div>
                   </div>
                   <div className="rounded-lg bg-surface-container-highest px-2 py-2">
                     <div className="text-[11px] text-outline">进度</div>
-                    <div className="text-sm font-black text-on-surface">{latestSheet.async_job?.progress ?? 0}%</div>
+                    <div className="text-sm font-black text-on-surface">{selectedSheet.async_job?.progress ?? 0}%</div>
                   </div>
                 </div>
               </div>
@@ -727,7 +762,7 @@ export default function BatchDashboard({
                       Sheet Prompt
                     </div>
                     <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
-                      {latestSheetPrompt || '尚未生成 prompt'}
+                      {selectedSheetPrompt || '尚未生成 prompt'}
                     </pre>
                   </div>
                   <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
@@ -735,7 +770,7 @@ export default function BatchDashboard({
                       最近槽位
                     </div>
                     <div className="mt-2 grid max-h-52 gap-1.5 overflow-auto">
-                      {latestSheet.slots.slice(0, 12).map((slot) => (
+                      {selectedSheet.slots.slice(0, 12).map((slot) => (
                         <div
                           key={slot.cell_id}
                           className="grid grid-cols-[74px_minmax(0,1fr)] gap-2 rounded-lg bg-surface-container-highest px-2 py-1.5 text-[11px]"
