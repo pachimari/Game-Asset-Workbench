@@ -93,18 +93,21 @@ const providerPresets: ProviderPreset[] = [
     description: '用于候选图阶段的排队式异步图片生成。',
   },
   {
-    title: 'APIMart GPT-Image-2',
-    provider_type: 'async_image',
-    suggestedLabel: 'APIMart GPT-Image-2',
-    suggestedBaseUrl: 'https://api.apimart.ai/v1',
-    description: '使用通用异步图片协议，提交到 APIMart 后轮询任务结果。',
-  },
-  {
     title: 'Gemini 官方',
     provider_type: 'gemini_native',
     suggestedLabel: 'Gemini Official',
     suggestedBaseUrl: 'https://generativelanguage.googleapis.com',
     description: '官方 Gemini 原生接入。',
+  },
+]
+
+const asyncImageQuickPresets: ProviderPreset[] = [
+  {
+    title: 'APIMart GPT-Image-2',
+    provider_type: 'async_image',
+    suggestedLabel: 'APIMart GPT-Image-2',
+    suggestedBaseUrl: 'https://api.apimart.ai/v1',
+    description: '异步图片服务预设：预填 APIMart Base URL，模型使用 gpt-image-2。',
   },
 ]
 
@@ -263,6 +266,15 @@ export default function GlobalSettings({
     )
   }
 
+  function applyProviderPreset(preset: ProviderPreset) {
+    setProviderDraft((current) => ({
+      ...current,
+      label: current.label.trim() ? current.label : preset.suggestedLabel,
+      provider_type: preset.provider_type,
+      base_url: preset.suggestedBaseUrl,
+    }))
+  }
+
   function openEditProvider(provider: ProviderDetail) {
     setActiveTab('providers')
     setEditingProviderId(provider.id)
@@ -366,6 +378,9 @@ export default function GlobalSettings({
             {!editingProviderId ? (
               <div className="rounded-xl border border-outline-variant/15 bg-surface-container p-4">
                 <div className="text-sm font-bold text-on-surface">常见接入模板</div>
+                <div className="mt-1 text-xs leading-5 text-on-surface-variant">
+                  这里选的是协议类型；具体平台预设会在对应协议下方出现。
+                </div>
                 <div className="mt-3 space-y-2">
                   {providerPresets.map((preset) => (
                     <button
@@ -458,6 +473,31 @@ export default function GlobalSettings({
                   }
                 />
               </div>
+
+              {providerDraft.provider_type === 'async_image' ? (
+                <div className="md:col-span-2 rounded-xl border border-primary/15 bg-primary/8 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-on-surface">异步图片快捷预设</div>
+                      <div className="mt-1 text-xs leading-5 text-on-surface-variant">
+                        APIMart 属于异步图片服务，这里只预填 Base URL 和显示名称，不改变协议类型。
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {asyncImageQuickPresets.map((preset) => (
+                        <button
+                          key={preset.title}
+                          type="button"
+                          onClick={() => applyProviderPreset(preset)}
+                          className="rounded-lg border border-primary/20 bg-surface-container px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:border-primary/35 hover:text-primary"
+                        >
+                          {preset.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="md:col-span-2">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
