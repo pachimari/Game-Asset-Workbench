@@ -4,7 +4,7 @@
 
 ## Document Status
 
-- Status: design draft
+- Status: MVP implemented
 - Owner: project maintainers / agents working on grid sheet mode
 - Last updated: 2026-05-06
 - Scope: product model, storage shape, API/CLI/UI sketch, implementation sequence
@@ -120,11 +120,12 @@ tasks/task_001/
   sheets/
     sheet_v001/
       sheet.json
-      source.png
-      tiles/
-        r01c01.png
-        r01c02.png
-        ...
+      images/
+        source.png
+        tiles/
+          r01c01.png
+          r01c02.png
+          ...
 ```
 
 `sheet.json` 示例：
@@ -144,7 +145,7 @@ tasks/task_001/
     "image_aspect_ratio": "1:1",
     "image_resolution": "2K"
   },
-  "source_image_path": "source.png",
+  "source_image_path": "images/source.png",
   "split_config": {
     "rows": 8,
     "cols": 8,
@@ -164,7 +165,7 @@ tasks/task_001/
     {
       "cell_id": "r01c01",
       "item_id": "item_001",
-      "image_path": "tiles/r01c01.png",
+      "image_path": "images/tiles/r01c01.png",
       "status": "split"
     }
   ]
@@ -256,6 +257,7 @@ image_generated
 
 ```text
 GET  /tasks/{task_id}/sheets
+GET  /tasks/{task_id}/sheets/{sheet_id}
 POST /tasks/{task_id}/sheets/plan
 POST /tasks/{task_id}/sheets/{sheet_id}/generate
 POST /tasks/{task_id}/sheets/{sheet_id}/poll
@@ -278,7 +280,7 @@ POST /tasks/{task_id}/sheets/{sheet_id}/backfill
 sheet plan task_001
 sheet generate task_001 sheet_v001
 sheet poll task_001 sheet_v001
-sheet split task_001 sheet_v001 --rows 8 --cols 8 --padding 0 --gap 0
+sheet split task_001 sheet_v001
 sheet backfill task_001 sheet_v001
 sheet list task_001
 sheet show task_001 sheet_v001
@@ -338,6 +340,23 @@ item 工作台只增加来源展示：
 7. **Web sheet review**
    做整张图预览、overlay、切图参数调整和 backfill 操作。
 
+## Implemented MVP
+
+当前已实现：
+
+- `src/ai_icon_pipeline/sheets.py`
+  - `plan_grid_sheet`: 按批次 runtime 配置生成 sheet slots，并使用 item brief 优先、raw item 兜底的策略构造 sheet prompt。
+  - `submit_grid_sheet_generation`: 通过 `async_image` provider 提交整张 sheet 生成任务。
+  - `poll_grid_sheet_generation`: 轮询异步任务，下载整张 source image。
+  - `split_grid_sheet`: 按 rows/cols/padding/gap 等分切图。
+  - `backfill_grid_sheet`: 把每个 tile 复制进对应 item 的 `images/` 目录，并写入 `image_generation` artifact。
+- API 已提供 sheet list/show/plan/generate/poll/split/backfill。
+- CLI 已提供 `sheet` 分组和等价 flat commands。
+- Web 批次页在 `grid_sheet` 模式下显示 sheet 工作区，支持规划、提交、轮询、切图、回填。
+- Item 工作台会展示候选来源，如 `sheet_v001 · r01c01`。
+
+当前不自动调用视觉判断，tile 质量筛选仍然回到 Web UI。
+
 ## Non-Goals For V1
 
 第一版不做：
@@ -359,6 +378,10 @@ item 工作台只增加来源展示：
 | 2026-05-06 | 保留现有 `single` 流程，不用 `grid_sheet` 替代。 | 原画、角色、大图仍需要逐 item 精修。 |
 | 2026-05-06 | tile 切分后回填到 item 候选池，最终采用仍回到 item 维度。 | Web UI 的人工审图和最终确认心智可以复用。 |
 | 2026-05-06 | 第一版不重构 candidate-level 星标。 | 避免把数据模型升级和 sheet MVP 绑在一起，降低首版风险。 |
+| 2026-05-06 | V1 只处理前 `rows * cols` 个 item，超过容量的 item 留待下一张 sheet。 | 先保证一个 sheet 的端到端链路可验收，再做自动多 sheet 编排。 |
+| 2026-05-06 | `plan_grid_sheet` 优先读取已生成 brief，没有 brief 时使用 raw item。 | 兼容已有流程，同时允许导入 item 后直接规划 sheet。 |
+| 2026-05-06 | backfill 后自动把 tile 设为 item 当前 `image_generation` 版本。 | 回填的目标就是让 item 候选池马上可审图、星标和确认。 |
+| 2026-05-06 | tile 复制进 item `images/`，不只引用 sheet tile。 | 保持导出、预览和候选池文件访问路径与现有单图流程一致。 |
 
 ## Update Log
 
@@ -367,13 +390,13 @@ item 工作台只增加来源展示：
 | 2026-05-06 | 新增 grid sheet mode 设计草案。 |
 | 2026-05-06 | 在 README、README_en、AGENTS 中加入 grid sheet 文档入口和维护提醒。 |
 | 2026-05-06 | 实施第一片 runtime config：批次级 `image_generation_mode` 与网格切图参数可保存和展示。 |
+| 2026-05-06 | 实施 grid sheet MVP：storage/API/CLI/Web 接线、专用 sheet prompt、等分切图、tile 回填候选池。 |
 
 ## Open Questions
 
-需要实现前确认：
+后续迭代再确认：
 
-1. `grid_sheet` 的默认尺寸是 8x8，还是 6x6 更适合首版？
-2. 超过一个 sheet 容量时，是自动生成多个 sheet，还是先只处理前 N 个 item？
-3. sheet prompt 是否复用已有 item brief，还是直接从 item 原始输入生成 slots？
-4. backfill 后是否自动把每个 item 的当前候选设为对应 tile？
-5. 切分结果是否复制进 item `images/`，还是只在 candidate 中引用 sheet tile 路径？
+1. 是否加入自动多 sheet 编排，一次覆盖超过 `rows * cols` 的整批 item。
+2. 是否加入 Web 上可拖拽的切线调整和 tile overlay。
+3. 是否加入 sheet 级 prompt 人工编辑 / 审批版本。
+4. 是否升级 candidate-level 星标，让同一 artifact 下多个 candidate 能独立星标。

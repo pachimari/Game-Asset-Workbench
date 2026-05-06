@@ -39,6 +39,16 @@ from .settings import (
     update_prompt_templates,
     update_provider_settings,
 )
+from .sheets import (
+    backfill_grid_sheet,
+    list_sheets,
+    load_sheet,
+    plan_grid_sheet,
+    poll_grid_sheet_generation,
+    sheet_dir,
+    split_grid_sheet,
+    submit_grid_sheet_generation,
+)
 from .storage import (
     TASKS_DIR,
     create_item,
@@ -190,6 +200,10 @@ class TaskPipelinePayload(BaseModel):
     auto_approve: bool = True
     source: str = "web"
     image_concurrency: Optional[int] = None
+
+
+class SheetActionPayload(BaseModel):
+    source: str = "web"
 
 
 def _to_http_error(exc: Exception) -> HTTPException:
@@ -413,6 +427,11 @@ def _candidate_rows(task_id: str, item_id: str) -> dict:
                     "image_path": image_path,
                     "image_url": image_url,
                     "source_url": candidate.get("source_url"),
+                    "source": candidate.get("source"),
+                    "sheet_id": candidate.get("sheet_id"),
+                    "cell_id": candidate.get("cell_id"),
+                    "row": candidate.get("row"),
+                    "col": candidate.get("col"),
                 }
             )
         rows.append(
@@ -494,6 +513,21 @@ def _task_payload(task_id: str) -> dict:
     task["runtime_config"] = load_runtime_config(task_id)
     task["batch_metrics"] = compute_batch_metrics(task_id)
     return task
+
+
+def _sheet_payload(task_id: str, sheet: dict) -> dict:
+    payload = dict(sheet)
+    root = sheet_dir(task_id, sheet["sheet_id"])
+    source_image_path = payload.get("source_image_path")
+    payload["source_image_url"] = _file_url(root / source_image_path) if source_image_path else None
+    tiles = []
+    for tile in payload.get("tiles", []):
+        row = dict(tile)
+        image_path = row.get("image_path")
+        row["image_url"] = _file_url(root / image_path) if image_path else None
+        tiles.append(row)
+    payload["tiles"] = tiles
+    return payload
 
 
 def _provider_rows() -> list[dict]:
@@ -674,6 +708,87 @@ def create_app() -> FastAPI:
                     filename,
                 ),
             )
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.get("/tasks/{task_id}/sheets")
+    async def get_task_sheets(task_id: str) -> dict:
+        try:
+            return {
+                "task_id": task_id,
+                "sheets": [_sheet_payload(task_id, sheet) for sheet in list_sheets(task_id)],
+            }
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.get("/tasks/{task_id}/sheets/{sheet_id}")
+    async def get_task_sheet(task_id: str, sheet_id: str) -> dict:
+        try:
+            return _sheet_payload(task_id, load_sheet(task_id, sheet_id))
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/plan")
+    async def post_plan_grid_sheet(task_id: str, payload: SheetActionPayload) -> dict:
+        try:
+            sheet = await run_in_threadpool(plan_grid_sheet, task_id, source=payload.source)
+            return {"sheet": _sheet_payload(task_id, sheet)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/generate")
+    async def post_generate_grid_sheet(task_id: str, sheet_id: str, payload: SheetActionPayload) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                submit_grid_sheet_generation,
+                task_id,
+                sheet_id,
+                source=payload.source,
+            )
+            return {"sheet": _sheet_payload(task_id, sheet)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/poll")
+    async def post_poll_grid_sheet(task_id: str, sheet_id: str, payload: SheetActionPayload) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                poll_grid_sheet_generation,
+                task_id,
+                sheet_id,
+                source=payload.source,
+            )
+            return {"sheet": _sheet_payload(task_id, sheet)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/split")
+    async def post_split_grid_sheet(task_id: str, sheet_id: str, payload: SheetActionPayload) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                split_grid_sheet,
+                task_id,
+                sheet_id,
+                source=payload.source,
+            )
+            return {"sheet": _sheet_payload(task_id, sheet)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/backfill")
+    async def post_backfill_grid_sheet(task_id: str, sheet_id: str, payload: SheetActionPayload) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                backfill_grid_sheet,
+                task_id,
+                sheet_id,
+                source=payload.source,
+            )
+            return {
+                "sheet": _sheet_payload(task_id, sheet),
+                "task": _task_payload(task_id),
+                "items": [_item_summary_payload(task_id, item) for item in list_items(task_id)],
+            }
         except Exception as exc:
             raise _to_http_error(exc) from exc
 

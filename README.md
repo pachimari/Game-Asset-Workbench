@@ -44,7 +44,7 @@ Game Asset Workbench 用来把一批游戏资产需求，跑过一条完整的�
 
 当前稳定工作流是 **单图模式**：每个 item 独立生成候选图，再在 Web UI 中筛选、星标、确认。
 
-项目正在设计第二种 **批次级网格切图模式**：一个批次一次生成一张或多张网格 sheet，切分成 tiles 后回填到各个 item 的候选池。这个模式用于道具、技能、材料、宝箱等大量同风格小资产，不用于替代原画、角色等单张精修流程。
+项目也支持第二种 **批次级网格切图模式**：一个批次一次生成网格 sheet，切分成 tiles 后回填到各个 item 的候选池。这个模式用于道具、技能、材料、宝箱等大量同风格小资产，不用于替代原画、角色等单张精修流程。
 
 设计细节、决策记录和更新记录见：
 
@@ -271,6 +271,23 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli runtime resolve task_001 item_001
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli image starred task_001 --json
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli export starred task_001 --json
 ```
+
+### 网格切图批次
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli task update task_001 \
+  --image-generation-mode grid_sheet \
+  --grid-rows 8 \
+  --grid-cols 8
+
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet plan task_001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet generate task_001 sheet_v001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet poll task_001 sheet_v001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet split task_001 sheet_v001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet backfill task_001 sheet_v001 --json
+```
+
+回填后，每个 tile 会成为对应 item 的候选图。最终视觉筛选、星标和采用仍然回到 Web UI。
 
 ## Provider 支持
 

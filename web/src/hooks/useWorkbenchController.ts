@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
   approveItemStep,
+  backfillTaskGridSheet,
   cancelItemImage,
   createProvider,
   createTask,
@@ -14,8 +15,12 @@ import {
   fetchTask,
   fetchTaskItem,
   fetchTaskItems,
+  fetchTaskSheets,
   fetchTaskItemWorkspace,
   fetchTasks,
+  generateTaskGridSheet,
+  planTaskGridSheet,
+  pollTaskGridSheet,
   pollItemImage,
   rollbackItemStep,
   runItemStep,
@@ -23,6 +28,7 @@ import {
   saveGlobalDefaults,
   savePromptTemplates,
   selectTaskItemVersion,
+  splitTaskGridSheet,
   syncProviderModels,
   toggleTaskItemCandidateStar,
   updateProvider,
@@ -31,6 +37,7 @@ import {
 } from '../lib/api'
 import type {
   GlobalSettingsData,
+  GridSheetSummary,
   ItemSummary,
   TaskSummary,
   WorkspacePayload,
@@ -58,6 +65,7 @@ export function useWorkbenchController() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [activeTask, setActiveTask] = useState<TaskSummary | null>(null)
   const [items, setItems] = useState<ItemSummary[]>([])
+  const [sheets, setSheets] = useState<GridSheetSummary[]>([])
   const [activeItemId, setActiveItemId] = useState<string | null>(null)
   const [activeItem, setActiveItem] = useState<ItemSummary | null>(null)
   const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null)
@@ -95,15 +103,20 @@ export function useWorkbenchController() {
   }
 
   async function reloadTaskContext(taskId: string, preferredItemId?: string | null) {
-    const [task, itemRows] = await Promise.all([fetchTask(taskId), fetchTaskItems(taskId)])
+    const [task, itemRows, sheetRows] = await Promise.all([
+      fetchTask(taskId),
+      fetchTaskItems(taskId),
+      fetchTaskSheets(taskId),
+    ])
     setActiveTask(task)
     setItems(itemRows)
+    setSheets(sheetRows)
     const nextItemId =
       preferredItemId && itemRows.some((row) => row.item_id === preferredItemId)
         ? preferredItemId
         : itemRows[0]?.item_id ?? null
     setActiveItemId(nextItemId)
-    return { task, itemRows, nextItemId }
+    return { task, itemRows, sheetRows, nextItemId }
   }
 
   async function reloadWorkspace(taskId: string, itemId: string) {
@@ -185,10 +198,11 @@ export function useWorkbenchController() {
     dashboardScrollTopRef.current = 0
     clearWorkspaceActionState()
     setActiveTaskId(taskId)
-    setActiveItemId(null)
-    setActiveItem(null)
-    setWorkspace(null)
-    setView('dashboard')
+      setActiveItemId(null)
+      setActiveItem(null)
+      setWorkspace(null)
+      setSheets([])
+      setView('dashboard')
   }
 
   function handleSelectItem(itemId: string) {
@@ -315,6 +329,7 @@ export function useWorkbenchController() {
       setActiveItemId(null)
       setActiveItem(null)
       setWorkspace(null)
+      setSheets([])
       setView('dashboard')
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '删除批次失败')
@@ -379,6 +394,45 @@ export function useWorkbenchController() {
       await downloadTaskStarredImages(activeTaskId)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : '导出星标图失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function handleGridSheetAction(
+    action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
+    sheetId?: string,
+  ) {
+    if (!activeTaskId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      let response:
+        | { sheet: GridSheetSummary; task?: TaskSummary; items?: ItemSummary[] }
+        | undefined
+      if (action === 'plan') {
+        response = await planTaskGridSheet(activeTaskId)
+      } else if (sheetId && action === 'generate') {
+        response = await generateTaskGridSheet(activeTaskId, sheetId)
+      } else if (sheetId && action === 'poll') {
+        response = await pollTaskGridSheet(activeTaskId, sheetId)
+      } else if (sheetId && action === 'split') {
+        response = await splitTaskGridSheet(activeTaskId, sheetId)
+      } else if (sheetId && action === 'backfill') {
+        response = await backfillTaskGridSheet(activeTaskId, sheetId)
+      }
+
+      if (response?.task && response.items) {
+        setActiveTask(response.task)
+        setItems(response.items)
+      }
+      await reloadTaskContext(activeTaskId, activeItemId)
+      await reloadTaskList(activeTaskId)
+      if (activeItemId) {
+        await reloadWorkspace(activeTaskId, activeItemId)
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '网格切图操作失败')
     } finally {
       setActionBusy(false)
     }
@@ -741,6 +795,7 @@ export function useWorkbenchController() {
     activeTaskId,
     activeTask,
     items,
+    sheets,
     activeItemId,
     activeItem,
     workspace,
@@ -765,6 +820,7 @@ export function useWorkbenchController() {
     handleUpdateTaskSettings,
     handleRunBatchPipeline,
     handleExportStarredImages,
+    handleGridSheetAction,
     handleEditBrief,
     handleEditPrompt,
     handleUpdateItemModel,

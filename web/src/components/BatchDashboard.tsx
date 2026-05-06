@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { useState } from 'react'
-import type { ItemSummary, TaskSummary } from '../types'
+import type { GridSheetSummary, ItemSummary, TaskSummary } from '../types'
 import { buildImportTemplate, parseImportedItems } from '../lib/itemImport'
 import { statusLabel } from '../lib/display'
 import { Icon } from './Sidebar'
@@ -82,11 +82,13 @@ const CATEGORY_OPTIONS = [
 export default function BatchDashboard({
   task,
   items,
+  sheets,
   activeItemId,
   onSelectItem,
   onSaveTaskSettings,
   onRunBatchPipeline,
   onExportStarredImages,
+  onGridSheetAction,
   onCreateItem,
   onCreateItemsBulk,
   actionBusy,
@@ -94,6 +96,7 @@ export default function BatchDashboard({
 }: {
   task: TaskSummary
   items: ItemSummary[]
+  sheets: GridSheetSummary[]
   activeItemId: string | null
   onSelectItem: (itemId: string) => void
   onSaveTaskSettings: (payload: {
@@ -111,6 +114,10 @@ export default function BatchDashboard({
   }) => Promise<void>
   onRunBatchPipeline: (options?: { autoApprove?: boolean }) => Promise<void>
   onExportStarredImages: () => Promise<void>
+  onGridSheetAction: (
+    action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
+    sheetId?: string,
+  ) => Promise<void>
   onCreateItem: (payload: {
     asset_type: string
     title: string
@@ -166,6 +173,14 @@ export default function BatchDashboard({
   const metrics = task.batch_metrics
   const topModelSummary =
     metrics?.top_image_models.map((row) => `${row.model} ×${row.count}`).join(' · ') || '还没有候选图模型数据'
+  const latestSheet = sheets[0]
+  const gridSheetEnabled = task.runtime_config?.image_generation_mode === 'grid_sheet'
+  const latestSheetCells = latestSheet ? `${latestSheet.input.rows}×${latestSheet.input.cols}` : `${gridRows}×${gridCols}`
+  const latestSheetPrompt = latestSheet?.prompt?.prompt ?? ''
+  const canGenerateSheet = Boolean(latestSheet && ['planned', 'failed'].includes(latestSheet.status))
+  const canPollSheet = Boolean(latestSheet && ['generating'].includes(latestSheet.status))
+  const canSplitSheet = Boolean(latestSheet && ['generated', 'split'].includes(latestSheet.status))
+  const canBackfillSheet = Boolean(latestSheet && ['split'].includes(latestSheet.status) && latestSheet.tiles.length > 0)
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
   const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
@@ -611,6 +626,132 @@ export default function BatchDashboard({
           </div>
         ) : null}
       </section>
+
+      {gridSheetEnabled ? (
+        <section className="mb-4 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
+          <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Icon name="grid_view" className="text-[18px] text-primary" />
+                <span className="text-sm font-bold text-on-surface">网格切图</span>
+                <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
+                  {latestSheet ? `${latestSheet.sheet_id} · ${statusLabel(latestSheet.status)}` : '未规划'}
+                </span>
+                <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
+                  {latestSheetCells}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-on-surface-variant">
+                {latestSheet
+                  ? `槽位 ${latestSheet.slots.length} · 切片 ${latestSheet.tiles.length} · 剩余 ${latestSheet.input.remaining_item_count ?? 0}`
+                  : `当前会按 ${gridRows * gridCols} 个槽位规划这一批次。`}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={actionBusy || items.length === 0}
+                onClick={() => void onGridSheetAction('plan')}
+                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                规划 Sheet
+              </button>
+              <button
+                type="button"
+                disabled={actionBusy || !latestSheet || !canGenerateSheet}
+                onClick={() => latestSheet && void onGridSheetAction('generate', latestSheet.sheet_id)}
+                className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                提交出图
+              </button>
+              <button
+                type="button"
+                disabled={actionBusy || !latestSheet || !canPollSheet}
+                onClick={() => latestSheet && void onGridSheetAction('poll', latestSheet.sheet_id)}
+                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                轮询结果
+              </button>
+              <button
+                type="button"
+                disabled={actionBusy || !latestSheet || !canSplitSheet}
+                onClick={() => latestSheet && void onGridSheetAction('split', latestSheet.sheet_id)}
+                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                切图
+              </button>
+              <button
+                type="button"
+                disabled={actionBusy || !latestSheet || !canBackfillSheet}
+                onClick={() => latestSheet && void onGridSheetAction('backfill', latestSheet.sheet_id)}
+                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                回填候选池
+              </button>
+            </div>
+          </div>
+
+          {latestSheet ? (
+            <div className="grid gap-0 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="border-b border-outline-variant/10 bg-surface-container px-4 py-4 lg:border-b-0 lg:border-r">
+                <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest">
+                  {latestSheet.source_image_url ? (
+                    <img
+                      src={latestSheet.source_image_url}
+                      alt={latestSheet.sheet_id}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <Icon name="image" className="text-[34px] text-outline" />
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg bg-surface-container-highest px-2 py-2">
+                    <div className="text-[11px] text-outline">槽位</div>
+                    <div className="text-sm font-black text-on-surface">{latestSheet.slots.length}</div>
+                  </div>
+                  <div className="rounded-lg bg-surface-container-highest px-2 py-2">
+                    <div className="text-[11px] text-outline">切片</div>
+                    <div className="text-sm font-black text-on-surface">{latestSheet.tiles.length}</div>
+                  </div>
+                  <div className="rounded-lg bg-surface-container-highest px-2 py-2">
+                    <div className="text-[11px] text-outline">进度</div>
+                    <div className="text-sm font-black text-on-surface">{latestSheet.async_job?.progress ?? 0}%</div>
+                  </div>
+                </div>
+              </div>
+              <div className="min-w-0 px-4 py-4">
+                <div className="grid gap-3 xl:grid-cols-2">
+                  <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                      Sheet Prompt
+                    </div>
+                    <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
+                      {latestSheetPrompt || '尚未生成 prompt'}
+                    </pre>
+                  </div>
+                  <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                      最近槽位
+                    </div>
+                    <div className="mt-2 grid max-h-52 gap-1.5 overflow-auto">
+                      {latestSheet.slots.slice(0, 12).map((slot) => (
+                        <div
+                          key={slot.cell_id}
+                          className="grid grid-cols-[74px_minmax(0,1fr)] gap-2 rounded-lg bg-surface-container-highest px-2 py-1.5 text-[11px]"
+                        >
+                          <span className="font-mono text-outline">{slot.cell_id}</span>
+                          <span className="truncate text-on-surface-variant">{slot.title || slot.item_id}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">

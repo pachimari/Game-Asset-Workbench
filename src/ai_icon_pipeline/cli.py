@@ -50,6 +50,15 @@ from .storage import (
 )
 from .providers.registry import ProviderRequestError
 from .providers.registry import sync_provider_models
+from .sheets import (
+    backfill_grid_sheet,
+    list_sheets,
+    load_sheet,
+    plan_grid_sheet,
+    poll_grid_sheet_generation,
+    split_grid_sheet,
+    submit_grid_sheet_generation,
+)
 from .state_machine import APPROVAL_RULES, GENERATION_RULES, StateMachineError
 from .settings import (
     UNSET,
@@ -389,6 +398,62 @@ COMMAND_SPECS = {
         "output": {"type": "object", "keys": ["task_id", "item_id", "step", "provider", "model", "source"]},
         "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "VALIDATION_ERROR"],
     },
+    "sheet-list": {
+        "group": "sheet",
+        "description": "List grid sheets for one task",
+        "args": ["task_id"],
+        "supports_json": True,
+        "output": {"type": "array"},
+        "errors": ["TASK_NOT_FOUND"],
+    },
+    "sheet-show": {
+        "group": "sheet",
+        "description": "Show one grid sheet payload",
+        "args": ["task_id", "sheet_id"],
+        "supports_json": True,
+        "output": {"type": "object"},
+        "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
+    },
+    "sheet-plan": {
+        "group": "sheet",
+        "description": "Plan a batch-level grid sheet and generate its specialized prompt",
+        "args": ["task_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["sheet_id", "status", "input", "prompt", "slots"]},
+        "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
+    },
+    "sheet-generate": {
+        "group": "sheet",
+        "description": "Submit a planned grid sheet image generation job",
+        "args": ["task_id", "sheet_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["sheet_id", "status", "async_job"]},
+        "errors": ["TASK_NOT_FOUND", "PROVIDER_REQUEST_FAILED", "VALIDATION_ERROR"],
+    },
+    "sheet-poll": {
+        "group": "sheet",
+        "description": "Poll a grid sheet generation job",
+        "args": ["task_id", "sheet_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["sheet_id", "status", "async_job", "source_image_path"]},
+        "errors": ["TASK_NOT_FOUND", "PROVIDER_REQUEST_FAILED", "VALIDATION_ERROR"],
+    },
+    "sheet-split": {
+        "group": "sheet",
+        "description": "Split a generated grid sheet into item tiles",
+        "args": ["task_id", "sheet_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["sheet_id", "status", "tiles"]},
+        "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
+    },
+    "sheet-backfill": {
+        "group": "sheet",
+        "description": "Backfill split tiles into item image candidate pools",
+        "args": ["task_id", "sheet_id"],
+        "supports_json": True,
+        "output": {"type": "object", "keys": ["sheet_id", "status", "backfilled"]},
+        "errors": ["TASK_NOT_FOUND", "ITEM_NOT_FOUND", "VALIDATION_ERROR"],
+    },
 }
 COMMAND_ALIASES = {
     "task.create": "create-task",
@@ -427,6 +492,13 @@ COMMAND_ALIASES = {
     "image.starred": "image-starred",
     "export.starred": "export-starred",
     "runtime.resolve": "runtime-resolve",
+    "sheet.list": "sheet-list",
+    "sheet.show": "sheet-show",
+    "sheet.plan": "sheet-plan",
+    "sheet.generate": "sheet-generate",
+    "sheet.poll": "sheet-poll",
+    "sheet.split": "sheet-split",
+    "sheet.backfill": "sheet-backfill",
 }
 
 
@@ -1030,6 +1102,26 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_resolve.add_argument("item_id")
     runtime_resolve.add_argument("--step", required=True, choices=STEP_CHOICES)
 
+    sheet_list = subparsers.add_parser("sheet-list", help="List grid sheets for one task", parents=[common_parser])
+    sheet_list.add_argument("task_id")
+    sheet_show = subparsers.add_parser("sheet-show", help="Show one grid sheet payload", parents=[common_parser])
+    sheet_show.add_argument("task_id")
+    sheet_show.add_argument("sheet_id")
+    sheet_plan = subparsers.add_parser("sheet-plan", help="Plan a grid sheet", parents=[common_parser])
+    sheet_plan.add_argument("task_id")
+    sheet_generate = subparsers.add_parser("sheet-generate", help="Submit a grid sheet generation job", parents=[common_parser])
+    sheet_generate.add_argument("task_id")
+    sheet_generate.add_argument("sheet_id")
+    sheet_poll = subparsers.add_parser("sheet-poll", help="Poll a grid sheet generation job", parents=[common_parser])
+    sheet_poll.add_argument("task_id")
+    sheet_poll.add_argument("sheet_id")
+    sheet_split = subparsers.add_parser("sheet-split", help="Split a generated grid sheet", parents=[common_parser])
+    sheet_split.add_argument("task_id")
+    sheet_split.add_argument("sheet_id")
+    sheet_backfill = subparsers.add_parser("sheet-backfill", help="Backfill split tiles into item candidate pools", parents=[common_parser])
+    sheet_backfill.add_argument("task_id")
+    sheet_backfill.add_argument("sheet_id")
+
     task_group = subparsers.add_parser("task", help="Task-scoped commands", parents=[common_parser])
     task_subparsers = task_group.add_subparsers(dest="task_command", required=True)
     task_create = task_subparsers.add_parser("create", help="Create a batch task", parents=[common_parser])
@@ -1215,6 +1307,35 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_resolve_group.add_argument("task_id")
     runtime_resolve_group.add_argument("item_id")
     runtime_resolve_group.add_argument("--step", required=True, choices=STEP_CHOICES)
+
+    sheet_group = subparsers.add_parser("sheet", help="Grid sheet commands", parents=[common_parser])
+    sheet_subparsers = sheet_group.add_subparsers(dest="sheet_command", required=True)
+    sheet_list_group = sheet_subparsers.add_parser("list", help="List grid sheets for one task", parents=[common_parser])
+    sheet_list_group.set_defaults(command="sheet-list")
+    sheet_list_group.add_argument("task_id")
+    sheet_show_group = sheet_subparsers.add_parser("show", help="Show one grid sheet payload", parents=[common_parser])
+    sheet_show_group.set_defaults(command="sheet-show")
+    sheet_show_group.add_argument("task_id")
+    sheet_show_group.add_argument("sheet_id")
+    sheet_plan_group = sheet_subparsers.add_parser("plan", help="Plan a grid sheet", parents=[common_parser])
+    sheet_plan_group.set_defaults(command="sheet-plan")
+    sheet_plan_group.add_argument("task_id")
+    sheet_generate_group = sheet_subparsers.add_parser("generate", help="Submit a grid sheet generation job", parents=[common_parser])
+    sheet_generate_group.set_defaults(command="sheet-generate")
+    sheet_generate_group.add_argument("task_id")
+    sheet_generate_group.add_argument("sheet_id")
+    sheet_poll_group = sheet_subparsers.add_parser("poll", help="Poll a grid sheet generation job", parents=[common_parser])
+    sheet_poll_group.set_defaults(command="sheet-poll")
+    sheet_poll_group.add_argument("task_id")
+    sheet_poll_group.add_argument("sheet_id")
+    sheet_split_group = sheet_subparsers.add_parser("split", help="Split a generated grid sheet", parents=[common_parser])
+    sheet_split_group.set_defaults(command="sheet-split")
+    sheet_split_group.add_argument("task_id")
+    sheet_split_group.add_argument("sheet_id")
+    sheet_backfill_group = sheet_subparsers.add_parser("backfill", help="Backfill split tiles into item candidate pools", parents=[common_parser])
+    sheet_backfill_group.set_defaults(command="sheet-backfill")
+    sheet_backfill_group.add_argument("task_id")
+    sheet_backfill_group.add_argument("sheet_id")
 
     pipeline_group = subparsers.add_parser("pipeline", help="Pipeline orchestration commands", parents=[common_parser])
     pipeline_subparsers = pipeline_group.add_subparsers(dest="pipeline_command", required=True)
@@ -1620,6 +1741,34 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "runtime-resolve":
             _emit(_runtime_resolution(args.task_id, args.item_id, args.step), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-list":
+            _emit(list_sheets(args.task_id), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-show":
+            _emit(load_sheet(args.task_id, args.sheet_id), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-plan":
+            _emit(plan_grid_sheet(args.task_id), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-generate":
+            _emit(submit_grid_sheet_generation(args.task_id, args.sheet_id), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-poll":
+            _emit(poll_grid_sheet_generation(args.task_id, args.sheet_id), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-split":
+            _emit(split_grid_sheet(args.task_id, args.sheet_id), as_json=args.json)
+            return 0
+
+        if args.command == "sheet-backfill":
+            _emit(backfill_grid_sheet(args.task_id, args.sheet_id), as_json=args.json)
             return 0
     except KeyboardInterrupt:
         _emit(

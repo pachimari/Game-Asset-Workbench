@@ -10,6 +10,7 @@ function App() {
       activeTaskId={controller.activeTaskId}
       activeTask={controller.activeTask}
       items={controller.items}
+      sheets={controller.sheets}
       activeItemId={controller.activeItemId}
       activeItem={controller.activeItem}
       workspace={controller.workspace}
@@ -34,6 +35,7 @@ function App() {
       onSaveTaskSettings={controller.handleUpdateTaskSettings}
       onRunBatchPipeline={controller.handleRunBatchPipeline}
       onExportStarredImages={controller.handleExportStarredImages}
+      onGridSheetAction={controller.handleGridSheetAction}
       onEditBrief={controller.handleEditBrief}
       onEditPrompt={controller.handleEditPrompt}
       onUpdateItemModel={controller.handleUpdateItemModel}

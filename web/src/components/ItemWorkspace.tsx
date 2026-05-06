@@ -180,7 +180,12 @@ function CandidateCard({
   onSelect: () => void
   onToggleStar: () => void
 }) {
-  const firstImage = version.candidates[0]?.image_url
+  const firstCandidate = version.candidates[0]
+  const firstImage = firstCandidate?.image_url
+  const sourceLabel =
+    firstCandidate?.source === 'grid_sheet'
+      ? `${firstCandidate.sheet_id ?? 'sheet'} · ${firstCandidate.cell_id ?? ''}`.trim()
+      : null
   const asyncStatus = version.async_job?.status
   const progress = Number(version.async_job?.progress ?? 0)
 
@@ -259,13 +264,15 @@ function CandidateCard({
       )}
       <div className="flex min-h-[66px] items-center justify-between gap-3 px-3 py-2">
         <div className="min-w-0 line-clamp-2 text-[11px] leading-5 text-on-surface-variant">
-          {version.is_current
-            ? hasApprovedResult
-              ? '当前审批会使用这张图'
-              : '这张图已被选为当前候选'
-            : version.is_starred
-              ? '已加入星标收藏'
-              : '可星标，也可切成当前候选'}
+          {sourceLabel
+            ? `来自 ${sourceLabel}`
+            : version.is_current
+              ? hasApprovedResult
+                ? '当前审批会使用这张图'
+                : '这张图已被选为当前候选'
+              : version.is_starred
+                ? '已加入星标收藏'
+                : '可星标，也可切成当前候选'}
         </div>
         <button
           type="button"

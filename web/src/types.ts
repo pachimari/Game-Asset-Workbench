@@ -100,6 +100,11 @@ export type CandidateImage = {
   image_path: string | null
   image_url: string | null
   source_url?: string | null
+  source?: string | null
+  sheet_id?: string | null
+  cell_id?: string | null
+  row?: number | null
+  col?: number | null
 }
 
 export type CandidateVersion = {
@@ -116,6 +121,64 @@ export type CandidateVersion = {
     error?: string
   } | null
   candidates: CandidateImage[]
+}
+
+export type SheetSlot = {
+  cell_id: string
+  row: number
+  col: number
+  item_id: string
+  title: string
+  brief?: Record<string, unknown>
+}
+
+export type SheetTile = {
+  cell_id: string
+  row: number
+  col: number
+  item_id: string
+  image_path: string | null
+  image_url?: string | null
+  status: string
+}
+
+export type GridSheetSummary = {
+  sheet_id: string
+  status: string
+  provider?: string | null
+  model?: string | null
+  created_at: string
+  updated_at: string
+  input: {
+    rows: number
+    cols: number
+    grid_padding?: number
+    grid_gap?: number
+    image_aspect_ratio?: string
+    image_resolution?: string
+    item_count?: number
+    remaining_item_count?: number
+  }
+  prompt?: {
+    mode?: string
+    brief_strategy?: string
+    prompt?: string
+    negative_prompt?: string
+    constraints?: Record<string, unknown>
+    slot_briefs?: Array<Record<string, unknown>>
+  }
+  slots: SheetSlot[]
+  tiles: SheetTile[]
+  async_job?: {
+    status?: string
+    progress?: number
+    task_id?: string
+    error?: string
+  } | null
+  source_image_path?: string | null
+  source_image_url?: string | null
+  source_url?: string | null
+  backfilled?: Array<Record<string, unknown>>
 }
 
 export type ArtifactSnapshot = {

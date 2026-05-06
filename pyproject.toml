@@ -7,7 +7,7 @@ name = "ai-icon-pipeline"
 version = "0.1.0"
 description = "Local-first workbench for generating, reviewing, and exporting game assets."
 requires-python = ">=3.9"
-dependencies = ["google-genai>=1.0.0"]
+dependencies = ["google-genai>=1.0.0", "Pillow>=10.0"]
 
 [project.optional-dependencies]
 api = ["fastapi>=0.115", "uvicorn>=0.30"]

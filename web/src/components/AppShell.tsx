@@ -7,6 +7,7 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import type {
   GlobalSettingsData,
+  GridSheetSummary,
   ItemSummary,
   TaskSummary,
   WorkspacePayload,
@@ -19,6 +20,7 @@ type Props = {
   activeTaskId: string | null
   activeTask: TaskSummary | null
   items: ItemSummary[]
+  sheets: GridSheetSummary[]
   activeItemId: string | null
   activeItem: ItemSummary | null
   workspace: WorkspacePayload | null
@@ -83,6 +85,10 @@ type Props = {
   }) => Promise<void>
   onRunBatchPipeline: (options?: { autoApprove?: boolean }) => Promise<void>
   onExportStarredImages: () => Promise<void>
+  onGridSheetAction: (
+    action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
+    sheetId?: string,
+  ) => Promise<void>
   onEditBrief: (payload: {
     title?: string | null
     description?: string | null
@@ -145,6 +151,7 @@ export default function AppShell({
   activeTaskId,
   activeTask,
   items,
+  sheets,
   activeItemId,
   activeItem,
   workspace,
@@ -169,6 +176,7 @@ export default function AppShell({
   onSaveTaskSettings,
   onRunBatchPipeline,
   onExportStarredImages,
+  onGridSheetAction,
   onEditBrief,
   onEditPrompt,
   onUpdateItemModel,
@@ -259,11 +267,13 @@ export default function AppShell({
               <BatchDashboard
                 task={activeTask}
                 items={items}
+                sheets={sheets}
                 activeItemId={activeItemId}
                 onSelectItem={onSelectItem}
                 onSaveTaskSettings={onSaveTaskSettings}
                 onRunBatchPipeline={onRunBatchPipeline}
                 onExportStarredImages={onExportStarredImages}
+                onGridSheetAction={onGridSheetAction}
                 onCreateItem={onCreateItem}
                 onCreateItemsBulk={onCreateItemsBulk}
                 actionBusy={actionBusy}

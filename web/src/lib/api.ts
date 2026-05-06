@@ -1,5 +1,6 @@
 import type {
   GlobalSettingsData,
+  GridSheetSummary,
   ItemSummary,
   ProviderSummary,
   TaskSummary,
@@ -64,6 +65,43 @@ export async function fetchTaskItems(taskId: string): Promise<ItemSummary[]> {
     `/tasks/${taskId}/items`,
   )
   return payload.items
+}
+
+export async function fetchTaskSheets(taskId: string): Promise<GridSheetSummary[]> {
+  const payload = await request<{ task_id: string; sheets: GridSheetSummary[] }>(
+    `/tasks/${taskId}/sheets`,
+  )
+  return payload.sheets
+}
+
+async function sheetAction(
+  taskId: string,
+  path: string,
+): Promise<{ sheet: GridSheetSummary; task?: TaskSummary; items?: ItemSummary[] }> {
+  return request(`/tasks/${taskId}${path}`, {
+    method: 'POST',
+    body: JSON.stringify({ source: 'web' }),
+  })
+}
+
+export async function planTaskGridSheet(taskId: string) {
+  return sheetAction(taskId, '/sheets/plan')
+}
+
+export async function generateTaskGridSheet(taskId: string, sheetId: string) {
+  return sheetAction(taskId, `/sheets/${sheetId}/generate`)
+}
+
+export async function pollTaskGridSheet(taskId: string, sheetId: string) {
+  return sheetAction(taskId, `/sheets/${sheetId}/poll`)
+}
+
+export async function splitTaskGridSheet(taskId: string, sheetId: string) {
+  return sheetAction(taskId, `/sheets/${sheetId}/split`)
+}
+
+export async function backfillTaskGridSheet(taskId: string, sheetId: string) {
+  return sheetAction(taskId, `/sheets/${sheetId}/backfill`)
 }
 
 export async function fetchTaskItem(

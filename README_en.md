@@ -42,7 +42,7 @@ Core ideas:
 
 The stable workflow today is **single-image mode**: each item generates its own candidate images, then humans review, star, and approve candidates in the Web UI.
 
-The project is also designing a second **batch-level grid sheet mode**: a batch generates one or more grid sheets, splits them into tiles, and backfills those tiles into item candidate pools. This mode is intended for many small same-style assets such as items, skills, materials, and chests. It does not replace single-image workflows for illustrations, characters, or assets that need individual refinement.
+The project also supports a second **batch-level grid sheet mode**: a batch generates a grid sheet, splits it into tiles, and backfills those tiles into item candidate pools. This mode is intended for many small same-style assets such as items, skills, materials, and chests. It does not replace single-image workflows for illustrations, characters, or assets that need individual refinement.
 
 Design details, decision records, and update history live here:
 
@@ -258,6 +258,23 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli runtime resolve task_001 item_001
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli image starred task_001 --json
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli export starred task_001 --json
 ```
+
+### Grid Sheet Batch
+
+```bash
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli task update task_001 \
+  --image-generation-mode grid_sheet \
+  --grid-rows 8 \
+  --grid-cols 8
+
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet plan task_001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet generate task_001 sheet_v001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet poll task_001 sheet_v001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet split task_001 sheet_v001 --json
+PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet backfill task_001 sheet_v001 --json
+```
+
+After backfill, each tile becomes a candidate image for its mapped item. Final review, starring, and approval still happen in the Web UI.
 
 ## Provider Support
 
