@@ -31,6 +31,13 @@ export default function Sidebar({
     project_background: string
     style_requirements: string
     asset_domain: string
+    image_generation_mode?: 'single' | 'grid_sheet'
+    image_aspect_ratio?: string
+    image_resolution?: string
+    grid_rows?: number
+    grid_cols?: number
+    grid_padding?: number
+    grid_gap?: number
   }) => Promise<void>
   onDeleteTask: (taskId: string) => Promise<void>
   productName?: string
@@ -41,12 +48,26 @@ export default function Sidebar({
   const [projectBackground, setProjectBackground] = useState('')
   const [styleRequirements, setStyleRequirements] = useState('')
   const [assetDomain, setAssetDomain] = useState('game_icon_assets')
+  const [imageGenerationMode, setImageGenerationMode] = useState<'single' | 'grid_sheet'>('single')
+  const [imageAspectRatio, setImageAspectRatio] = useState('1:1')
+  const [imageResolution, setImageResolution] = useState('1K')
+  const [gridRows, setGridRows] = useState(8)
+  const [gridCols, setGridCols] = useState(8)
+  const [gridPadding, setGridPadding] = useState(0)
+  const [gridGap, setGridGap] = useState(0)
 
   function resetCreateDraft() {
     setTaskName('')
     setProjectBackground('')
     setStyleRequirements('')
     setAssetDomain('game_icon_assets')
+    setImageGenerationMode('single')
+    setImageAspectRatio('1:1')
+    setImageResolution('1K')
+    setGridRows(8)
+    setGridCols(8)
+    setGridPadding(0)
+    setGridGap(0)
   }
 
   async function submitCreateTask() {
@@ -57,6 +78,13 @@ export default function Sidebar({
         project_background: projectBackground,
         style_requirements: styleRequirements,
         asset_domain: assetDomain,
+        image_generation_mode: imageGenerationMode,
+        image_aspect_ratio: imageAspectRatio,
+        image_resolution: imageResolution,
+        grid_rows: gridRows,
+        grid_cols: gridCols,
+        grid_padding: gridPadding,
+        grid_gap: gridGap,
       })
       resetCreateDraft()
       setCreating(false)
@@ -173,7 +201,7 @@ export default function Sidebar({
             }}
           />
           <form
-            className="relative z-10 w-full max-w-3xl overflow-hidden rounded-[28px] border border-outline-variant/12 bg-surface-container-low shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
+            className="relative z-10 max-h-[88vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-outline-variant/12 bg-surface-container-low shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
             onSubmit={async (event) => {
               event.preventDefault()
               await submitCreateTask()
@@ -224,6 +252,10 @@ export default function Sidebar({
                     <div className="rounded-xl bg-surface-container-low px-3 py-3">
                       <div className="text-xs font-bold text-on-surface">资产域</div>
                       <div className="mt-1 leading-6">主要用于区分任务类型，默认填当前图标资产工作流即可。</div>
+                    </div>
+                    <div className="rounded-xl bg-surface-container-low px-3 py-3">
+                      <div className="text-xs font-bold text-on-surface">生产模式</div>
+                      <div className="mt-1 leading-6">单图适合原画精修；网格切图适合一次生成一批小资产再切分。</div>
                     </div>
                   </div>
                 </div>
@@ -285,11 +317,155 @@ export default function Sidebar({
                       placeholder="game_icon_assets"
                     />
                   </label>
+
+                  <div className="rounded-2xl border border-outline-variant/12 bg-surface-container-high p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          生产模式
+                        </div>
+                        <div className="mt-1 text-xs text-on-surface-variant">
+                          创建后仍可在批次设定里调整。
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">
+                        {imageGenerationMode === 'grid_sheet' ? `${gridRows}×${gridCols}` : '单图'}
+                      </span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setImageGenerationMode('single')}
+                        className={clsx(
+                          'rounded-xl border px-3 py-3 text-left transition-colors',
+                          imageGenerationMode === 'single'
+                            ? 'border-primary/35 bg-primary/10 text-on-surface'
+                            : 'border-outline-variant/14 bg-surface-container-low text-on-surface-variant hover:border-primary/25',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-bold">
+                          <Icon name="image" className="text-[18px]" />
+                          单图模式
+                        </div>
+                        <div className="mt-1 text-xs leading-5">每个 item 独立出候选图。</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageGenerationMode('grid_sheet')}
+                        className={clsx(
+                          'rounded-xl border px-3 py-3 text-left transition-colors',
+                          imageGenerationMode === 'grid_sheet'
+                            ? 'border-primary/35 bg-primary/10 text-on-surface'
+                            : 'border-outline-variant/14 bg-surface-container-low text-on-surface-variant hover:border-primary/25',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-bold">
+                          <Icon name="grid_view" className="text-[18px]" />
+                          网格切图模式
+                        </div>
+                        <div className="mt-1 text-xs leading-5">整批先出 sheet，再切成 tiles 回填。</div>
+                      </button>
+                    </div>
+
+                    {imageGenerationMode === 'grid_sheet' ? (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                        <label className="block">
+                          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                            行
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={12}
+                            value={gridRows}
+                            onChange={(event) => setGridRows(Number(event.target.value))}
+                            className="w-full rounded-xl border border-outline-variant/12 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none focus:border-primary/35"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                            列
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={12}
+                            value={gridCols}
+                            onChange={(event) => setGridCols(Number(event.target.value))}
+                            className="w-full rounded-xl border border-outline-variant/12 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none focus:border-primary/35"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                            外边距
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={512}
+                            value={gridPadding}
+                            onChange={(event) => setGridPadding(Number(event.target.value))}
+                            className="w-full rounded-xl border border-outline-variant/12 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none focus:border-primary/35"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                            间距
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={512}
+                            value={gridGap}
+                            onChange={(event) => setGridGap(Number(event.target.value))}
+                            className="w-full rounded-xl border border-outline-variant/12 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none focus:border-primary/35"
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          画面比例
+                        </span>
+                        <select
+                          value={imageAspectRatio}
+                          onChange={(event) => setImageAspectRatio(event.target.value)}
+                          className="w-full rounded-xl border border-outline-variant/12 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none focus:border-primary/35"
+                        >
+                          {['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9'].map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          分辨率
+                        </span>
+                        <select
+                          value={imageResolution}
+                          onChange={(event) => setImageResolution(event.target.value)}
+                          className="w-full rounded-xl border border-outline-variant/12 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none focus:border-primary/35"
+                        >
+                          {['auto', '512', '1K', '2K', '4K'].map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-6 flex items-center justify-between gap-3">
                   <div className="text-xs text-on-surface-variant">
-                    创建后就可以往这个批次里继续加 item。
+                    {imageGenerationMode === 'grid_sheet'
+                      ? '创建后会在批次页出现网格切图工作区。'
+                      : '创建后就可以往这个批次里继续加 item。'}
                   </div>
                   <div className="flex gap-2">
                     <button

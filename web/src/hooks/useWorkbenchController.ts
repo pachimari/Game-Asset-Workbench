@@ -231,6 +231,13 @@ export function useWorkbenchController() {
     project_background: string
     style_requirements: string
     asset_domain: string
+    image_generation_mode?: 'single' | 'grid_sheet'
+    image_aspect_ratio?: string
+    image_resolution?: string
+    grid_rows?: number
+    grid_cols?: number
+    grid_padding?: number
+    grid_gap?: number
   }) {
     setActionError(null)
     setActionBusy(true)

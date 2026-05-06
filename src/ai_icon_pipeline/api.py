@@ -84,6 +84,13 @@ class TaskCreatePayload(BaseModel):
     project_background: str = ""
     style_requirements: str = ""
     asset_domain: str = "game_icon_assets"
+    image_generation_mode: str = "single"
+    image_aspect_ratio: str = "1:1"
+    image_resolution: str = "1K"
+    grid_rows: int = 8
+    grid_cols: int = 8
+    grid_padding: int = 0
+    grid_gap: int = 0
 
 
 class TaskUpdatePayload(BaseModel):
@@ -646,6 +653,15 @@ def create_app() -> FastAPI:
             project_background=payload.project_background,
             style_requirements=payload.style_requirements,
             asset_domain=payload.asset_domain,
+            runtime_config={
+                "image_generation_mode": payload.image_generation_mode,
+                "image_aspect_ratio": payload.image_aspect_ratio,
+                "image_resolution": payload.image_resolution,
+                "grid_rows": payload.grid_rows,
+                "grid_cols": payload.grid_cols,
+                "grid_padding": payload.grid_padding,
+                "grid_gap": payload.grid_gap,
+            },
         )
         return _task_payload(task["task_id"])
 
