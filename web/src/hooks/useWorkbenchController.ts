@@ -330,6 +330,11 @@ export function useWorkbenchController() {
     asset_domain: string
     image_aspect_ratio: string
     image_resolution: string
+    image_generation_mode: 'single' | 'grid_sheet'
+    grid_rows: number
+    grid_cols: number
+    grid_padding: number
+    grid_gap: number
   }) {
     if (!activeTaskId) return
     setActionError(null)

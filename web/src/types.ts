@@ -36,9 +36,15 @@ export type TaskSummary = {
   runtime_config_ref: string
   items_summary?: Record<string, number>
   runtime_config?: {
+    image_generation_mode?: 'single' | 'grid_sheet'
     image_aspect_ratio: string | null
     image_resolution: string | null
     image_size?: string | null
+    grid_rows?: number
+    grid_cols?: number
+    grid_padding?: number
+    grid_gap?: number
+    grid_cell_count?: number
   }
   batch_metrics?: {
     total_elapsed_seconds: number

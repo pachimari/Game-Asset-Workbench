@@ -73,12 +73,18 @@ DEFAULT_RUNTIME_CONFIG = {
     "brief_provider": None,
     "prompt_provider": None,
     "image_provider": None,
+    "image_generation_mode": "single",
     "candidate_count": 1,
     "image_size": "512x512",
     "image_aspect_ratio": "1:1",
     "image_resolution": "1K",
+    "grid_rows": 8,
+    "grid_cols": 8,
+    "grid_padding": 0,
+    "grid_gap": 0,
 }
 
+IMAGE_GENERATION_MODE_OPTIONS = ["single", "grid_sheet"]
 IMAGE_ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"]
 IMAGE_RESOLUTION_OPTIONS = ["auto", "512", "1K", "2K", "4K"]
 

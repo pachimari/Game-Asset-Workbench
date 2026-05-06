@@ -366,6 +366,7 @@ item 工作台只增加来源展示：
 | --- | --- |
 | 2026-05-06 | 新增 grid sheet mode 设计草案。 |
 | 2026-05-06 | 在 README、README_en、AGENTS 中加入 grid sheet 文档入口和维护提醒。 |
+| 2026-05-06 | 实施第一片 runtime config：批次级 `image_generation_mode` 与网格切图参数可保存和展示。 |
 
 ## Open Questions
 

@@ -133,6 +133,48 @@ class StorageSafetyTests(unittest.TestCase):
                     provider = settings.load_global_settings()["custom_providers"][0]
                     self.assertEqual(provider["image_max_concurrency"], 3)
 
+    def test_runtime_config_persists_grid_sheet_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="Grid Sheet Settings")
+                runtime = storage.update_runtime_config(
+                    task["task_id"],
+                    image_generation_mode="grid_sheet",
+                    grid_rows=6,
+                    grid_cols=7,
+                    grid_padding=12,
+                    grid_gap=4,
+                )
+
+                self.assertEqual(runtime["image_generation_mode"], "grid_sheet")
+                self.assertEqual(runtime["grid_rows"], 6)
+                self.assertEqual(runtime["grid_cols"], 7)
+                self.assertEqual(runtime["grid_padding"], 12)
+                self.assertEqual(runtime["grid_gap"], 4)
+                self.assertEqual(runtime["grid_cell_count"], 42)
+
+                reloaded = storage.load_runtime_config(task["task_id"])
+                self.assertEqual(reloaded["image_generation_mode"], "grid_sheet")
+                self.assertEqual(reloaded["grid_cell_count"], 42)
+
+    def test_runtime_config_normalizes_invalid_grid_values(self) -> None:
+        normalized = storage.normalize_runtime_config(
+            {
+                "image_generation_mode": "unknown",
+                "grid_rows": 99,
+                "grid_cols": 0,
+                "grid_padding": -3,
+                "grid_gap": 999,
+            }
+        )
+
+        self.assertEqual(normalized["image_generation_mode"], "single")
+        self.assertEqual(normalized["grid_rows"], 12)
+        self.assertEqual(normalized["grid_cols"], 1)
+        self.assertEqual(normalized["grid_padding"], 0)
+        self.assertEqual(normalized["grid_gap"], 512)
+        self.assertEqual(normalized["grid_cell_count"], 12)
+
     def test_async_image_provider_normalizes_apimart_submit_and_poll_responses(self) -> None:
         provider = AsyncImageProvider(label="APIMart", base_url="https://api.apimart.ai/v1")
 

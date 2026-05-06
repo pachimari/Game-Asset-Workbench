@@ -17,6 +17,7 @@ from .config import (
     DEFAULT_RUNTIME_CONFIG,
     DEFAULT_STYLE_SPEC,
     GENERATING_STALE_SECONDS,
+    IMAGE_GENERATION_MODE_OPTIONS,
     STATUS_FAILED,
     STATUS_DRAFT,
     STATUS_BRIEF_GENERATING,
@@ -37,6 +38,14 @@ ITEM_ID_PATTERN = re.compile(r"^item_(\d+)$")
 PENDING_ASYNC_STATUSES = {"queued", "submitted", "processing", "pending", "running", "in_progress"}
 LOCK_RETRY_SECONDS = 0.05
 LOCK_TIMEOUT_SECONDS = 10.0
+
+
+def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        resolved = int(value) if value not in (None, "") else default
+    except (TypeError, ValueError):
+        resolved = default
+    return min(max(resolved, minimum), maximum)
 
 
 def default_model_overrides() -> dict:
@@ -64,6 +73,13 @@ def normalize_runtime_config(runtime_config: dict | None) -> dict:
         merged.update(runtime_config)
     # 产品语义调整：候选图按“每次生成 1 张、历史累积”工作，不再一次批量吐多张。
     merged["candidate_count"] = 1
+    if merged.get("image_generation_mode") not in IMAGE_GENERATION_MODE_OPTIONS:
+        merged["image_generation_mode"] = DEFAULT_RUNTIME_CONFIG["image_generation_mode"]
+    merged["grid_rows"] = _bounded_int(merged.get("grid_rows"), default=8, minimum=1, maximum=12)
+    merged["grid_cols"] = _bounded_int(merged.get("grid_cols"), default=8, minimum=1, maximum=12)
+    merged["grid_padding"] = _bounded_int(merged.get("grid_padding"), default=0, minimum=0, maximum=512)
+    merged["grid_gap"] = _bounded_int(merged.get("grid_gap"), default=0, minimum=0, maximum=512)
+    merged["grid_cell_count"] = merged["grid_rows"] * merged["grid_cols"]
     return merged
 
 
@@ -354,6 +370,11 @@ def update_runtime_config(
     image_size: str | None = None,
     image_aspect_ratio: str | None = None,
     image_resolution: str | None = None,
+    image_generation_mode: str | None = None,
+    grid_rows: int | None = None,
+    grid_cols: int | None = None,
+    grid_padding: int | None = None,
+    grid_gap: int | None = None,
 ) -> dict:
     current = load_runtime_config(task_id)
     merged = normalize_runtime_config(current)
@@ -363,6 +384,19 @@ def update_runtime_config(
         merged["image_aspect_ratio"] = image_aspect_ratio
     if image_resolution is not None:
         merged["image_resolution"] = image_resolution
+    if image_generation_mode is not None:
+        if image_generation_mode not in IMAGE_GENERATION_MODE_OPTIONS:
+            raise ValueError(f"Unsupported image_generation_mode: {image_generation_mode}")
+        merged["image_generation_mode"] = image_generation_mode
+    if grid_rows is not None:
+        merged["grid_rows"] = grid_rows
+    if grid_cols is not None:
+        merged["grid_cols"] = grid_cols
+    if grid_padding is not None:
+        merged["grid_padding"] = grid_padding
+    if grid_gap is not None:
+        merged["grid_gap"] = grid_gap
+    merged = normalize_runtime_config(merged)
     write_json(task_dir(task_id) / "configs" / "runtime_config.json", merged)
     append_event(
         task_id,
@@ -374,6 +408,12 @@ def update_runtime_config(
             "image_size": merged["image_size"],
             "image_aspect_ratio": merged["image_aspect_ratio"],
             "image_resolution": merged["image_resolution"],
+            "image_generation_mode": merged["image_generation_mode"],
+            "grid_rows": merged["grid_rows"],
+            "grid_cols": merged["grid_cols"],
+            "grid_padding": merged["grid_padding"],
+            "grid_gap": merged["grid_gap"],
+            "grid_cell_count": merged["grid_cell_count"],
         },
     )
     return merged

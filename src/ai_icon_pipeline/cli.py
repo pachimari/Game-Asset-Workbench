@@ -155,6 +155,11 @@ COMMAND_SPECS = {
             "--asset-domain",
             "--image-aspect-ratio",
             "--image-resolution",
+            "--image-generation-mode",
+            "--grid-rows",
+            "--grid-cols",
+            "--grid-padding",
+            "--grid-gap",
         ],
         "supports_json": True,
         "output": {"type": "object", "keys": ["task_id", "task_name", "project_background", "style_requirements", "asset_domain"]},
@@ -891,6 +896,11 @@ def build_parser() -> argparse.ArgumentParser:
     update_task_parser.add_argument("--asset-domain")
     update_task_parser.add_argument("--image-aspect-ratio")
     update_task_parser.add_argument("--image-resolution")
+    update_task_parser.add_argument("--image-generation-mode", choices=["single", "grid_sheet"])
+    update_task_parser.add_argument("--grid-rows", type=int)
+    update_task_parser.add_argument("--grid-cols", type=int)
+    update_task_parser.add_argument("--grid-padding", type=int)
+    update_task_parser.add_argument("--grid-gap", type=int)
     task_metrics_parser = subparsers.add_parser("task-metrics", help="Show batch workflow metrics", parents=[common_parser])
     task_metrics_parser.add_argument("task_id")
 
@@ -1044,6 +1054,11 @@ def build_parser() -> argparse.ArgumentParser:
     task_update.add_argument("--asset-domain")
     task_update.add_argument("--image-aspect-ratio")
     task_update.add_argument("--image-resolution")
+    task_update.add_argument("--image-generation-mode", choices=["single", "grid_sheet"])
+    task_update.add_argument("--grid-rows", type=int)
+    task_update.add_argument("--grid-cols", type=int)
+    task_update.add_argument("--grid-padding", type=int)
+    task_update.add_argument("--grid-gap", type=int)
     task_metrics = task_subparsers.add_parser("metrics", help="Show batch workflow metrics", parents=[common_parser])
     task_metrics.set_defaults(command="task-metrics")
     task_metrics.add_argument("task_id")
@@ -1344,11 +1359,25 @@ def main(argv: list[str] | None = None) -> int:
                 style_requirements=args.style_requirements,
                 asset_domain=args.asset_domain,
             )
-            if args.image_aspect_ratio is not None or args.image_resolution is not None:
+            runtime_fields = (
+                args.image_aspect_ratio,
+                args.image_resolution,
+                args.image_generation_mode,
+                args.grid_rows,
+                args.grid_cols,
+                args.grid_padding,
+                args.grid_gap,
+            )
+            if any(value is not None for value in runtime_fields):
                 runtime_config = update_runtime_config(
                     args.task_id,
                     image_aspect_ratio=args.image_aspect_ratio,
                     image_resolution=args.image_resolution,
+                    image_generation_mode=args.image_generation_mode,
+                    grid_rows=args.grid_rows,
+                    grid_cols=args.grid_cols,
+                    grid_padding=args.grid_padding,
+                    grid_gap=args.grid_gap,
                 )
                 task["runtime_config"] = runtime_config
             _emit(task, as_json=args.json)

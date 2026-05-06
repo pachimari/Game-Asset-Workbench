@@ -103,6 +103,11 @@ export default function BatchDashboard({
     asset_domain: string
     image_aspect_ratio: string
     image_resolution: string
+    image_generation_mode: 'single' | 'grid_sheet'
+    grid_rows: number
+    grid_cols: number
+    grid_padding: number
+    grid_gap: number
   }) => Promise<void>
   onRunBatchPipeline: (options?: { autoApprove?: boolean }) => Promise<void>
   onExportStarredImages: () => Promise<void>
@@ -144,6 +149,13 @@ export default function BatchDashboard({
   const [imageResolution, setImageResolution] = useState(
     task.runtime_config?.image_resolution || '1K',
   )
+  const [imageGenerationMode, setImageGenerationMode] = useState<'single' | 'grid_sheet'>(
+    task.runtime_config?.image_generation_mode || 'single',
+  )
+  const [gridRows, setGridRows] = useState(task.runtime_config?.grid_rows ?? 8)
+  const [gridCols, setGridCols] = useState(task.runtime_config?.grid_cols ?? 8)
+  const [gridPadding, setGridPadding] = useState(task.runtime_config?.grid_padding ?? 0)
+  const [gridGap, setGridGap] = useState(task.runtime_config?.grid_gap ?? 0)
   const [bulkText, setBulkText] = useState('')
   const [bulkSummary, setBulkSummary] = useState<string | null>(null)
 
@@ -199,6 +211,11 @@ export default function BatchDashboard({
     setAssetDomain(task.asset_domain)
     setImageAspectRatio(task.runtime_config?.image_aspect_ratio || '1:1')
     setImageResolution(task.runtime_config?.image_resolution || '1K')
+    setImageGenerationMode(task.runtime_config?.image_generation_mode || 'single')
+    setGridRows(task.runtime_config?.grid_rows ?? 8)
+    setGridCols(task.runtime_config?.grid_cols ?? 8)
+    setGridPadding(task.runtime_config?.grid_padding ?? 0)
+    setGridGap(task.runtime_config?.grid_gap ?? 0)
   }
 
   async function handleBulkFileChange(file: File | null) {
@@ -353,6 +370,9 @@ export default function BatchDashboard({
                 资产域：{task.asset_domain || '未填写'}
               </span>
               <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
+                出图模式：{task.runtime_config?.image_generation_mode === 'grid_sheet' ? '网格切图' : '单图'}
+              </span>
+              <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
                 宽高比：{task.runtime_config?.image_aspect_ratio || '1:1'}
               </span>
               <span className="rounded-full border border-outline-variant/14 bg-surface-container px-2.5 py-1">
@@ -407,6 +427,11 @@ export default function BatchDashboard({
                   asset_domain: assetDomain,
                   image_aspect_ratio: imageAspectRatio,
                   image_resolution: imageResolution,
+                  image_generation_mode: imageGenerationMode,
+                  grid_rows: gridRows,
+                  grid_cols: gridCols,
+                  grid_padding: gridPadding,
+                  grid_gap: gridGap,
                 })
                 setSettingsExpanded(false)
               }}
@@ -465,6 +490,76 @@ export default function BatchDashboard({
                       </option>
                     ))}
                   </select>
+                </label>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-[0.8fr_0.5fr_0.5fr_0.5fr_0.5fr]">
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    出图模式
+                  </span>
+                  <select
+                    value={imageGenerationMode}
+                    onChange={(event) =>
+                      setImageGenerationMode(event.target.value as 'single' | 'grid_sheet')
+                    }
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  >
+                    <option value="single">单图模式</option>
+                    <option value="grid_sheet">网格切图模式</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    行数
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={gridRows}
+                    onChange={(event) => setGridRows(Number(event.target.value))}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    列数
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={gridCols}
+                    onChange={(event) => setGridCols(Number(event.target.value))}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    外边距
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={512}
+                    value={gridPadding}
+                    onChange={(event) => setGridPadding(Number(event.target.value))}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                    间距
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={512}
+                    value={gridGap}
+                    onChange={(event) => setGridGap(Number(event.target.value))}
+                    className="w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
+                  />
                 </label>
               </div>
 

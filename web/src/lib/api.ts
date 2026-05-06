@@ -141,6 +141,11 @@ export async function updateTask(
     asset_domain?: string | null
     image_aspect_ratio?: string | null
     image_resolution?: string | null
+    image_generation_mode?: 'single' | 'grid_sheet' | null
+    grid_rows?: number | null
+    grid_cols?: number | null
+    grid_padding?: number | null
+    grid_gap?: number | null
   },
 ): Promise<TaskSummary> {
   return request<TaskSummary>(`/tasks/${taskId}`, {

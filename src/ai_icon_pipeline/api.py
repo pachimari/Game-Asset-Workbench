@@ -89,6 +89,11 @@ class TaskUpdatePayload(BaseModel):
     image_model: Optional[str] = None
     image_aspect_ratio: Optional[str] = None
     image_resolution: Optional[str] = None
+    image_generation_mode: Optional[str] = None
+    grid_rows: Optional[int] = None
+    grid_cols: Optional[int] = None
+    grid_padding: Optional[int] = None
+    grid_gap: Optional[int] = None
 
 
 class ItemCreatePayload(BaseModel):
@@ -622,12 +627,26 @@ def create_app() -> FastAPI:
                 asset_domain=payload.asset_domain,
             )
             _apply_task_model_overrides(task_id, payload)
-            if payload.image_aspect_ratio is not None or payload.image_resolution is not None:
+            runtime_fields = (
+                payload.image_aspect_ratio,
+                payload.image_resolution,
+                payload.image_generation_mode,
+                payload.grid_rows,
+                payload.grid_cols,
+                payload.grid_padding,
+                payload.grid_gap,
+            )
+            if any(value is not None for value in runtime_fields):
                 await run_in_threadpool(
                     update_runtime_config,
                     task_id,
                     image_aspect_ratio=payload.image_aspect_ratio,
                     image_resolution=payload.image_resolution,
+                    image_generation_mode=payload.image_generation_mode,
+                    grid_rows=payload.grid_rows,
+                    grid_cols=payload.grid_cols,
+                    grid_padding=payload.grid_padding,
+                    grid_gap=payload.grid_gap,
                 )
             return _task_payload(task_id)
         except Exception as exc:
