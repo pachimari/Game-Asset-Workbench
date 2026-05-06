@@ -38,6 +38,16 @@ Core ideas:
 - **multi-provider**
 - **CLI + Web**
 
+## Generation Modes
+
+The stable workflow today is **single-image mode**: each item generates its own candidate images, then humans review, star, and approve candidates in the Web UI.
+
+The project is also designing a second **batch-level grid sheet mode**: a batch generates one or more grid sheets, splits them into tiles, and backfills those tiles into item candidate pools. This mode is intended for many small same-style assets such as items, skills, materials, and chests. It does not replace single-image workflows for illustrations, characters, or assets that need individual refinement.
+
+Design details, decision records, and update history live here:
+
+- [docs/grid-sheet-mode-design.md](./docs/grid-sheet-mode-design.md)
+
 ## Product Shape
 
 ### What the Web UI Is Best At

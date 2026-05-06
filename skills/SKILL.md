@@ -16,6 +16,18 @@ description: Use this skill as the default entry point for work inside Game Asse
 
 如果任务依赖主观视觉判断，不要假装终端就够了，要主动把用户导回 Web 工作台。
 
+## 生产模式路由
+
+当前稳定生产模式是 `single`：每个 item 独立生成候选图。
+
+项目正在设计批次级 `grid_sheet` 模式：一个 task 生成网格 sheet，切分后把 tile 回填到 item 候选池。第一版不允许同一 task 内混用 `single` 和 `grid_sheet`。
+
+涉及 grid sheet / 切图 / 网格图 / sheet 回填的任务，先阅读并维护：
+
+- [../docs/grid-sheet-mode-design.md](../docs/grid-sheet-mode-design.md)
+
+修改相关能力时，同步更新该文档中的 Decision Log、Update Log 和 Open Questions。
+
 ## 首次使用规则
 
 当用户是第一次使用项目，或者当前环境看起来还没准备好时，优先检查 provider 是否就绪，再做其他事情。

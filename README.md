@@ -40,6 +40,16 @@ Game Asset Workbench 用来把一批游戏资产需求，跑过一条完整的�
 - **multi-provider**
 - **CLI + Web**
 
+## 生产模式
+
+当前稳定工作流是 **单图模式**：每个 item 独立生成候选图，再在 Web UI 中筛选、星标、确认。
+
+项目正在设计第二种 **批次级网格切图模式**：一个批次一次生成一张或多张网格 sheet，切分成 tiles 后回填到各个 item 的候选池。这个模式用于道具、技能、材料、宝箱等大量同风格小资产，不用于替代原画、角色等单张精修流程。
+
+设计细节、决策记录和更新记录见：
+
+- [docs/grid-sheet-mode-design.md](./docs/grid-sheet-mode-design.md)
+
 ## 产品形态
 
 ### Web UI 更适合什么

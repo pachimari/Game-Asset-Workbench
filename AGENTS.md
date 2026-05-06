@@ -20,6 +20,22 @@
 
 对于候选图筛选、最终采用判断这类视觉决策，默认应该回到 Web UI。
 
+## 生产模式心智
+
+当前稳定模式是 `single`：每个 item 独立生成候选图。
+
+新增的切图方向应按批次级 `grid_sheet` 模式设计：一个 task 选择一种出图模式，不在同一批次里混用 `single` 和 `grid_sheet`。`grid_sheet` 生成的是 task 级 sheet，切分成 tile 后再回填到 item 候选池。
+
+设计、决策记录和更新记录见：
+
+- [docs/grid-sheet-mode-design.md](./docs/grid-sheet-mode-design.md)
+
+修改 grid sheet 相关能力前，先更新或确认该设计文档中的：
+
+- Decision Log
+- Update Log
+- Open Questions
+
 ## 目录地图
 
 ### Python Core
