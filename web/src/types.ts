@@ -236,6 +236,8 @@ export type GlobalSettingsData = {
   prompt_templates: {
     brief_system_prompt: string
     prompt_system_prompt: string
+    grid_sheet_prompt_template: string
+    grid_sheet_negative_prompt: string
   }
   providers: ProviderDetail[]
 }

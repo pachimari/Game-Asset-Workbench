@@ -409,6 +409,8 @@ export async function runTaskPipeline(
 export async function savePromptTemplates(payload: {
   brief_system_prompt?: string | null
   prompt_system_prompt?: string | null
+  grid_sheet_prompt_template?: string | null
+  grid_sheet_negative_prompt?: string | null
 }): Promise<GlobalSettingsData> {
   return request<GlobalSettingsData>('/settings/templates', {
     method: 'PATCH',

@@ -240,6 +240,20 @@ Prompt 约束重点：
 - 统一风格、材质、光照和背景。
 - 不要让主体跨格。
 
+模板配置：
+
+- `grid_sheet_prompt_template`: 整张 sheet 的正向模板。
+- `grid_sheet_negative_prompt`: 整张 sheet 的负向模板。
+
+模板变量：
+
+- `{{rows}}`
+- `{{cols}}`
+- `{{cell_count}}`
+- `{{project_background}}`
+- `{{style_requirements}}`
+- `{{slot_lines}}`
+
 ## State Flow
 
 建议新增 task 级 sheet 状态，不要塞进 item 状态机：
@@ -358,7 +372,7 @@ item 工作台只增加来源展示：
 当前已实现：
 
 - `src/ai_icon_pipeline/sheets.py`
-  - `plan_grid_sheet`: 按批次 runtime 配置生成 sheet slots，并使用 item brief 优先、raw item 兜底的策略构造 sheet prompt。
+  - `plan_grid_sheet`: 按批次 runtime 配置生成 sheet slots，并使用 item brief 优先、raw item 兜底的策略构造 sheet prompt；prompt 使用全局 `grid_sheet_prompt_template`。
   - `submit_grid_sheet_generation`: 通过 `async_image` provider 提交整张 sheet 生成任务。
   - `poll_grid_sheet_generation`: 轮询异步任务，下载整张 source image。
   - `split_grid_sheet`: 按 rows/cols/padding/gap 等分切图。
@@ -408,6 +422,7 @@ item 工作台只增加来源展示：
 | 2026-05-06 | 实施第一片 runtime config：批次级 `image_generation_mode` 与网格切图参数可保存和展示。 |
 | 2026-05-06 | 实施 grid sheet MVP：storage/API/CLI/Web 接线、专用 sheet prompt、等分切图、tile 回填候选池。 |
 | 2026-05-07 | 新增 Sheet Review：真实切分线 overlay、tile 审图状态、单 tile 采纳并星标、从 tile 创建 item。 |
+| 2026-05-07 | 将 grid sheet prompt 纳入全局模板页，新增 `grid_sheet_prompt_template` 和 `grid_sheet_negative_prompt`。 |
 
 ## Open Questions
 

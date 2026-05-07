@@ -704,6 +704,8 @@ export function useWorkbenchController() {
   async function handleSaveTemplates(payload: {
     brief_system_prompt?: string | null
     prompt_system_prompt?: string | null
+    grid_sheet_prompt_template?: string | null
+    grid_sheet_negative_prompt?: string | null
   }) {
     setSettingsBusy(true)
     try {

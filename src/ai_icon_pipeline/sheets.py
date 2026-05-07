@@ -12,7 +12,7 @@ from .config import (
     STEP_IMAGE_GENERATION,
 )
 from .providers.registry import get_async_image_provider
-from .settings import load_global_settings, provider_settings_for, resolve_stage_selection
+from .settings import DEFAULT_PROMPT_TEMPLATES, load_global_settings, provider_settings_for, resolve_stage_selection
 from .storage import (
     PENDING_ASYNC_STATUSES,
     append_event,
@@ -38,6 +38,8 @@ from .utils import ensure_dir, utc_now
 
 SHEET_ID_PATTERN = re.compile(r"^sheet_v(\d+)$")
 TILE_REVIEW_STATUSES = {"pending", "selected", "rejected", "emergent"}
+DEFAULT_GRID_SHEET_TEMPLATE = DEFAULT_PROMPT_TEMPLATES["grid_sheet_prompt_template"]
+DEFAULT_GRID_SHEET_NEGATIVE_PROMPT = DEFAULT_PROMPT_TEMPLATES["grid_sheet_negative_prompt"]
 
 
 def sheets_dir(task_id: str) -> Path:
@@ -116,6 +118,13 @@ def _brief_for_item(task_id: str, item: dict) -> dict:
     }
 
 
+def _render_grid_sheet_template(template: str, values: dict[str, object]) -> str:
+    rendered = template
+    for key, value in values.items():
+        rendered = rendered.replace("{{" + key + "}}", str(value))
+    return rendered
+
+
 def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) -> dict:
     rows = int(runtime.get("grid_rows", 8))
     cols = int(runtime.get("grid_cols", 8))
@@ -145,35 +154,28 @@ def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) ->
             fragments.append("keywords=" + ", ".join(str(value) for value in brief["keywords"]))
         slot_lines.append(" | ".join(fragment for fragment in fragments if fragment and not fragment.endswith("=")))
 
-    prompt = f"""Create one complete game asset icon grid sheet.
-
-Canvas and grid:
-- Exact grid: {rows} rows x {cols} columns, {rows * cols} equal cells.
-- Fill cells in row-major order from left to right, top to bottom.
-- Keep each cell visually separated with clear empty space or subtle separators.
-- Each cell must contain exactly one independent asset subject.
-- Do not let any subject cross cell boundaries.
-- Do not add text, labels, numbering, watermarks, logos, signatures, captions, UI badges, or extra symbols.
-
-Style:
-- Project background: {task.get('project_background', '')}
-- Unified style requirements: {task.get('style_requirements', '')}
-- Use consistent camera angle, lighting, material rendering, background treatment, and icon scale across the whole sheet.
-- Prefer centered subjects, readable silhouettes, and simple backgrounds suitable for later tile cropping.
-
-Cell assignments:
-{chr(10).join(slot_lines)}
-
-Empty cells:
-- If the grid has more cells than assignments, keep remaining cells visually empty and unobtrusive.
-"""
-    negative_prompt = (
-        "text, labels, numbers, watermark, signature, logo, subject crossing cell boundaries, "
-        "merged cells, uneven grid, duplicated unrelated objects, busy background, cropped subject"
+    prompt_templates = load_global_settings().get("prompt_templates", {})
+    template = prompt_templates.get("grid_sheet_prompt_template", "")
+    if not template:
+        template = DEFAULT_GRID_SHEET_TEMPLATE
+    prompt = _render_grid_sheet_template(
+        template,
+        {
+            "rows": rows,
+            "cols": cols,
+            "cell_count": rows * cols,
+            "project_background": task.get("project_background", ""),
+            "style_requirements": task.get("style_requirements", ""),
+            "slot_lines": "\n".join(slot_lines),
+        },
     )
+    negative_prompt = prompt_templates.get("grid_sheet_negative_prompt", "")
+    if not negative_prompt:
+        negative_prompt = DEFAULT_GRID_SHEET_NEGATIVE_PROMPT
     return {
         "mode": "grid_sheet",
         "brief_strategy": "slot briefs use approved item brief when available, otherwise raw item input",
+        "template": "grid_sheet_prompt_template",
         "slot_briefs": slot_briefs,
         "prompt": prompt.strip(),
         "negative_prompt": negative_prompt,

@@ -123,6 +123,8 @@ function templateDraftFromSettings(settings: GlobalSettingsData) {
   return {
     brief: settings.prompt_templates.brief_system_prompt || '',
     prompt: settings.prompt_templates.prompt_system_prompt || '',
+    gridSheet: settings.prompt_templates.grid_sheet_prompt_template || '',
+    gridSheetNegative: settings.prompt_templates.grid_sheet_negative_prompt || '',
   }
 }
 
@@ -172,6 +174,8 @@ export default function GlobalSettings({
   onSaveTemplates: (payload: {
     brief_system_prompt?: string | null
     prompt_system_prompt?: string | null
+    grid_sheet_prompt_template?: string | null
+    grid_sheet_negative_prompt?: string | null
   }) => Promise<void>
   onSaveDefaults: (payload: {
     brief_provider?: string | null
@@ -200,6 +204,8 @@ export default function GlobalSettings({
   const [templateDraft, setTemplateDraft] = useState<{
     brief: string
     prompt: string
+    gridSheet: string
+    gridSheetNegative: string
   } | null>(null)
   const [defaultsDraft, setDefaultsDraft] = useState<{
     brief_provider: string
@@ -334,6 +340,8 @@ export default function GlobalSettings({
     await onSaveTemplates({
       brief_system_prompt: templateValues.brief,
       prompt_system_prompt: templateValues.prompt,
+      grid_sheet_prompt_template: templateValues.gridSheet,
+      grid_sheet_negative_prompt: templateValues.gridSheetNegative,
     })
     setTemplateDraft(null)
   }
@@ -932,7 +940,8 @@ export default function GlobalSettings({
             {activeTab === 'templates' ? (
               <div className="space-y-5">
                 <div className="rounded-xl border border-outline-variant/15 bg-surface-container px-4 py-3 text-sm leading-6 text-on-surface-variant">
-                  这里管理系统提示词，不和 Provider 或默认模型混在一起。
+                  这里管理系统提示词，不和 Provider 或默认模型混在一起。网格切图模板支持变量：
+                  <span className="font-mono"> {'{{rows}} {{cols}} {{cell_count}} {{project_background}} {{style_requirements}} {{slot_lines}}'}</span>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
@@ -968,6 +977,44 @@ export default function GlobalSettings({
                         setTemplateDraft((current) => ({
                           ...(current ?? templateValues),
                           prompt: event.target.value,
+                        }))
+                      }
+                      className="flex-1 resize-none bg-surface-container-lowest/60 p-4 font-mono text-[12px] leading-6 text-on-surface-variant outline-none"
+                    />
+                  </div>
+
+                  <div className="flex h-[360px] flex-col rounded-xl border border-outline-variant/15 bg-surface-container">
+                    <div className="border-b border-outline-variant/10 px-4 py-3">
+                      <div className="text-sm font-bold text-on-surface">网格切图模板</div>
+                      <div className="mt-1 font-mono text-[11px] text-on-surface-variant">
+                        grid_sheet_prompt_template
+                      </div>
+                    </div>
+                    <textarea
+                      value={templateValues.gridSheet}
+                      onChange={(event) =>
+                        setTemplateDraft((current) => ({
+                          ...(current ?? templateValues),
+                          gridSheet: event.target.value,
+                        }))
+                      }
+                      className="flex-1 resize-none bg-surface-container-lowest/60 p-4 font-mono text-[12px] leading-6 text-on-surface-variant outline-none"
+                    />
+                  </div>
+
+                  <div className="flex h-[360px] flex-col rounded-xl border border-outline-variant/15 bg-surface-container">
+                    <div className="border-b border-outline-variant/10 px-4 py-3">
+                      <div className="text-sm font-bold text-on-surface">网格切图负向模板</div>
+                      <div className="mt-1 font-mono text-[11px] text-on-surface-variant">
+                        grid_sheet_negative_prompt
+                      </div>
+                    </div>
+                    <textarea
+                      value={templateValues.gridSheetNegative}
+                      onChange={(event) =>
+                        setTemplateDraft((current) => ({
+                          ...(current ?? templateValues),
+                          gridSheetNegative: event.target.value,
                         }))
                       }
                       className="flex-1 resize-none bg-surface-container-lowest/60 p-4 font-mono text-[12px] leading-6 text-on-surface-variant outline-none"

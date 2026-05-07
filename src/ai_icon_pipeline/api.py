@@ -204,6 +204,8 @@ class SettingsDefaultsPayload(BaseModel):
 class PromptTemplatesPayload(BaseModel):
     brief_system_prompt: Optional[str] = None
     prompt_system_prompt: Optional[str] = None
+    grid_sheet_prompt_template: Optional[str] = None
+    grid_sheet_negative_prompt: Optional[str] = None
 
 
 class TaskPipelinePayload(BaseModel):
@@ -1123,6 +1125,8 @@ def create_app() -> FastAPI:
             update_prompt_templates,
             brief_system_prompt=payload.brief_system_prompt,
             prompt_system_prompt=payload.prompt_system_prompt,
+            grid_sheet_prompt_template=payload.grid_sheet_prompt_template,
+            grid_sheet_negative_prompt=payload.grid_sheet_negative_prompt,
         )
         return _settings_payload()
 

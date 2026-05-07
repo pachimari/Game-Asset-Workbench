@@ -96,6 +96,38 @@ JSON 字段必须包含：
 1. constraints 应尽量包含当前生成所需的重要约束，例如 image_size、composition、key_elements_required、text_allowed 等。
 2. batch_context 至少应保留 project_background 和 style_requirements，并可补充 core_style_tags 等结构化字段。
 """,
+    "grid_sheet_prompt_template": """Create one complete game asset icon grid sheet.
+
+Canvas and grid:
+- Exact grid: {{rows}} rows x {{cols}} columns, {{cell_count}} equal cells.
+- Fill cells in row-major order from left to right, top to bottom.
+- Keep each cell visually separated with clear empty space or subtle separators.
+- Each cell must contain exactly one independent asset subject.
+- Do not let any subject cross cell boundaries.
+- Do not add text, labels, numbering, watermarks, logos, signatures, captions, UI badges, or extra symbols.
+
+Cropping safety:
+- Assume the image will be split by a strict mathematical {{rows}} x {{cols}} overlay after generation.
+- Keep every subject centered inside its own cell with generous safe margin.
+- Avoid merged cells, uneven cell sizes, panoramic compositions, shared backgrounds, or subjects spanning multiple cells.
+
+Style:
+- Project background: {{project_background}}
+- Unified style requirements: {{style_requirements}}
+- Use consistent camera angle, lighting, material rendering, background treatment, and icon scale across the whole sheet.
+- Prefer centered subjects, readable silhouettes, and simple backgrounds suitable for later tile cropping.
+
+Cell assignments:
+{{slot_lines}}
+
+Empty cells:
+- If the grid has more cells than assignments, keep remaining cells visually empty and unobtrusive.
+""",
+    "grid_sheet_negative_prompt": (
+        "text, labels, numbers, watermark, signature, logo, subject crossing cell boundaries, "
+        "merged cells, uneven grid, inconsistent cell sizes, panoramic composition, shared scene, "
+        "duplicated unrelated objects, busy background, cropped subject"
+    ),
 }
 
 DEFAULT_PROVIDER_SETTINGS: dict[str, dict] = {}
@@ -409,6 +441,8 @@ def update_prompt_templates(
     *,
     brief_system_prompt: str | None = None,
     prompt_system_prompt: str | None = None,
+    grid_sheet_prompt_template: str | None = None,
+    grid_sheet_negative_prompt: str | None = None,
 ) -> dict:
     settings = load_global_settings()
     templates = settings.setdefault("prompt_templates", deepcopy(DEFAULT_PROMPT_TEMPLATES))
@@ -416,6 +450,10 @@ def update_prompt_templates(
         templates["brief_system_prompt"] = brief_system_prompt
     if prompt_system_prompt is not None:
         templates["prompt_system_prompt"] = prompt_system_prompt
+    if grid_sheet_prompt_template is not None:
+        templates["grid_sheet_prompt_template"] = grid_sheet_prompt_template
+    if grid_sheet_negative_prompt is not None:
+        templates["grid_sheet_negative_prompt"] = grid_sheet_negative_prompt
     save_global_settings(settings)
     return settings
 

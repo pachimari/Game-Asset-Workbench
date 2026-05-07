@@ -134,6 +134,8 @@ type Props = {
   onSaveTemplates: (payload: {
     brief_system_prompt?: string | null
     prompt_system_prompt?: string | null
+    grid_sheet_prompt_template?: string | null
+    grid_sheet_negative_prompt?: string | null
   }) => Promise<void>
   onSaveDefaults: (payload: {
     brief_provider?: string | null
