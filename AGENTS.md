@@ -24,7 +24,7 @@
 
 当前稳定模式是 `single`：每个 item 独立生成候选图。
 
-新增的切图方向应按批次级 `grid_sheet` 模式设计：一个 task 选择一种出图模式，不在同一批次里混用 `single` 和 `grid_sheet`。`grid_sheet` 生成的是 task 级 sheet，切分成 tile 后先进入 Web UI 的 Sheet Review；只有人工采纳的 tile 才回填到 item 候选池，并默认星标。
+新增的切图方向应按批次级 `grid_sheet` 模式设计：一个 task 选择一种出图模式，不在同一批次里混用 `single` 和 `grid_sheet`。`grid_sheet` 规划前应先为既定 item 补齐 brief / 意图识别，再把 bound slots 和 emergent slots 汇总进整张 sheet prompt。切分成 tile 后先进入 Web UI 的 Sheet Review；只有人工采纳的 tile 才回填到 item 候选池，并默认星标。
 
 设计、决策记录和更新记录见：
 

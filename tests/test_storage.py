@@ -180,87 +180,103 @@ class StorageSafetyTests(unittest.TestCase):
 
     def test_grid_sheet_plan_split_and_promote_creates_starred_item_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
             with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
-                task = storage.create_task(
-                    task_name="Grid Workflow",
-                    project_background="fantasy RPG",
-                    style_requirements="painterly icons",
-                )
-                storage.update_runtime_config(
-                    task["task_id"],
-                    image_generation_mode="grid_sheet",
-                    grid_rows=2,
-                    grid_cols=2,
-                    grid_padding=0,
-                    grid_gap=0,
-                )
-                items = [
-                    storage.create_item(task["task_id"], title="Fire Orb", description="red flame orb"),
-                    storage.create_item(task["task_id"], title="Ice Shard", description="blue crystal shard"),
-                    storage.create_item(task["task_id"], title="Healing Potion", description="green vial"),
-                ]
+                with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                    with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                        settings.set_global_default(
+                            "brief_generation",
+                            provider="mock",
+                            model="mock-brief-v1",
+                        )
+                        self._run_grid_sheet_plan_split_and_promote_case()
 
-                sheet = sheets.plan_grid_sheet(task["task_id"])
+    def _run_grid_sheet_plan_split_and_promote_case(self) -> None:
+        task = storage.create_task(
+            task_name="Grid Workflow",
+            project_background="fantasy RPG",
+            style_requirements="painterly icons",
+        )
+        storage.update_runtime_config(
+            task["task_id"],
+            image_generation_mode="grid_sheet",
+            grid_rows=2,
+            grid_cols=2,
+            grid_padding=0,
+            grid_gap=0,
+        )
+        items = [
+            storage.create_item(task["task_id"], title="Fire Orb", description="red flame orb"),
+            storage.create_item(task["task_id"], title="Ice Shard", description="blue crystal shard"),
+            storage.create_item(task["task_id"], title="Healing Potion", description="green vial"),
+        ]
 
-                self.assertEqual(sheet["sheet_id"], "sheet_v001")
-                self.assertEqual(sheet["input"]["item_count"], 3)
-                self.assertEqual(sheet["prompt"]["mode"], "grid_sheet")
-                self.assertIn("Exact grid: 2 rows x 2 columns", sheet["prompt"]["prompt"])
-                self.assertIn("Fire Orb", sheet["prompt"]["prompt"])
-                self.assertEqual(sheet["slots"][0]["cell_id"], "r01c01")
+        sheet = sheets.plan_grid_sheet(task["task_id"])
 
-                source_path = sheets.sheet_dir(task["task_id"], sheet["sheet_id"]) / "images" / "source.png"
-                source_path.parent.mkdir(parents=True, exist_ok=True)
-                image = Image.new("RGB", (20, 20), "white")
-                colors = {
-                    (0, 0, 10, 10): "red",
-                    (10, 0, 20, 10): "blue",
-                    (0, 10, 10, 20): "green",
-                    (10, 10, 20, 20): "black",
-                }
-                for box, color in colors.items():
-                    image.paste(color, box)
-                image.save(source_path)
+        self.assertEqual(sheet["sheet_id"], "sheet_v001")
+        self.assertEqual(sheet["input"]["item_count"], 3)
+        self.assertEqual(sheet["input"]["emergent_item_count"], 1)
+        self.assertEqual(sheet["brief_generation"]["generated"], 3)
+        self.assertEqual(sheet["prompt"]["mode"], "grid_sheet")
+        self.assertIn("Exact grid: 2 rows x 2 columns", sheet["prompt"]["prompt"])
+        self.assertIn("Fire Orb", sheet["prompt"]["prompt"])
+        self.assertEqual(sheet["slots"][0]["cell_id"], "r01c01")
+        self.assertEqual(sheet["slots"][0]["kind"], "bound")
+        self.assertEqual(sheet["slots"][3]["kind"], "emergent")
 
-                sheet["status"] = "generated"
-                sheet["source_image_path"] = "images/source.png"
-                sheets.save_sheet(task["task_id"], sheet)
+        source_path = sheets.sheet_dir(task["task_id"], sheet["sheet_id"]) / "images" / "source.png"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        image = Image.new("RGB", (20, 20), "white")
+        colors = {
+            (0, 0, 10, 10): "red",
+            (10, 0, 20, 10): "blue",
+            (0, 10, 10, 20): "green",
+            (10, 10, 20, 20): "black",
+        }
+        for box, color in colors.items():
+            image.paste(color, box)
+        image.save(source_path)
 
-                split = sheets.split_grid_sheet(task["task_id"], sheet["sheet_id"])
-                self.assertEqual(split["status"], "split")
-                self.assertEqual(len(split["tiles"]), 3)
-                self.assertEqual(split["tiles"][0]["review_status"], "pending")
-                self.assertTrue(
-                    (sheets.sheet_dir(task["task_id"], sheet["sheet_id"]) / "images" / "tiles" / "r01c01.png").exists()
-                )
+        sheet["status"] = "generated"
+        sheet["source_image_path"] = "images/source.png"
+        sheets.save_sheet(task["task_id"], sheet)
 
-                reviewed = sheets.review_grid_sheet_tile(
-                    task["task_id"],
-                    sheet["sheet_id"],
-                    "r01c02",
-                    review_status="rejected",
-                )
-                rejected_tile = next(tile for tile in reviewed["tiles"] if tile["cell_id"] == "r01c02")
-                self.assertEqual(rejected_tile["review_status"], "rejected")
+        split = sheets.split_grid_sheet(task["task_id"], sheet["sheet_id"])
+        self.assertEqual(split["status"], "split")
+        self.assertEqual(len(split["tiles"]), 4)
+        self.assertEqual(split["tiles"][0]["review_status"], "pending")
+        self.assertEqual(split["tiles"][3]["kind"], "emergent")
+        self.assertTrue(
+            (sheets.sheet_dir(task["task_id"], sheet["sheet_id"]) / "images" / "tiles" / "r01c01.png").exists()
+        )
 
-                promoted = sheets.promote_grid_sheet_tile(task["task_id"], sheet["sheet_id"], "r01c01")
-                self.assertEqual(promoted["status"], "reviewing")
-                promoted_tile = next(tile for tile in promoted["tiles"] if tile["cell_id"] == "r01c01")
-                self.assertEqual(promoted_tile["review_status"], "selected")
-                self.assertTrue(promoted_tile["starred"])
+        reviewed = sheets.review_grid_sheet_tile(
+            task["task_id"],
+            sheet["sheet_id"],
+            "r01c02",
+            review_status="rejected",
+        )
+        rejected_tile = next(tile for tile in reviewed["tiles"] if tile["cell_id"] == "r01c02")
+        self.assertEqual(rejected_tile["review_status"], "rejected")
 
-                item = storage.load_item(task["task_id"], items[0]["item_id"])
-                version = item["current_versions"]["image_generation"]
-                self.assertIsNotNone(version)
-                self.assertIn(version, item["starred_image_versions"])
-                artifact = storage.load_artifact(task["task_id"], items[0]["item_id"], "image_generation", version)
-                candidate = artifact["output"]["candidates"][0]
-                self.assertEqual(candidate["source"], "grid_sheet")
-                self.assertEqual(candidate["sheet_id"], "sheet_v001")
-                self.assertEqual(candidate["cell_id"], "r01c01")
-                self.assertTrue(
-                    (storage.item_dir(task["task_id"], items[0]["item_id"]) / "images" / candidate["image_path"]).exists()
-                )
+        promoted = sheets.promote_grid_sheet_tile(task["task_id"], sheet["sheet_id"], "r01c01")
+        self.assertEqual(promoted["status"], "reviewing")
+        promoted_tile = next(tile for tile in promoted["tiles"] if tile["cell_id"] == "r01c01")
+        self.assertEqual(promoted_tile["review_status"], "selected")
+        self.assertTrue(promoted_tile["starred"])
+
+        item = storage.load_item(task["task_id"], items[0]["item_id"])
+        version = item["current_versions"]["image_generation"]
+        self.assertIsNotNone(version)
+        self.assertIn(version, item["starred_image_versions"])
+        artifact = storage.load_artifact(task["task_id"], items[0]["item_id"], "image_generation", version)
+        candidate = artifact["output"]["candidates"][0]
+        self.assertEqual(candidate["source"], "grid_sheet")
+        self.assertEqual(candidate["sheet_id"], "sheet_v001")
+        self.assertEqual(candidate["cell_id"], "r01c01")
+        self.assertTrue(
+            (storage.item_dir(task["task_id"], items[0]["item_id"]) / "images" / candidate["image_path"]).exists()
+        )
 
     def test_async_image_provider_normalizes_apimart_submit_and_poll_responses(self) -> None:
         provider = AsyncImageProvider(label="APIMart", base_url="https://api.apimart.ai/v1")

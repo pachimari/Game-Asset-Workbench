@@ -127,7 +127,8 @@ export type SheetSlot = {
   cell_id: string
   row: number
   col: number
-  item_id: string
+  kind?: 'bound' | 'emergent' | string
+  item_id?: string | null
   title: string
   brief?: Record<string, unknown>
 }
@@ -136,7 +137,8 @@ export type SheetTile = {
   cell_id: string
   row: number
   col: number
-  item_id: string
+  kind?: 'bound' | 'emergent' | string
+  item_id?: string | null
   target_item_id?: string | null
   image_path: string | null
   image_url?: string | null
@@ -162,7 +164,14 @@ export type GridSheetSummary = {
     image_aspect_ratio?: string
     image_resolution?: string
     item_count?: number
+    emergent_item_count?: number
     remaining_item_count?: number
+  }
+  brief_generation?: {
+    required?: number
+    generated?: number
+    existing?: number
+    items?: Array<Record<string, unknown>>
   }
   prompt?: {
     mode?: string

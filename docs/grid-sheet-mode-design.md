@@ -78,7 +78,8 @@ task
 核心心智：
 
 ```text
-一个 task 先把多个 item 打包成 sheet slots，一次生成网格大图。
+一个 task 先对既定 item 做 brief / 意图识别，再打包成 bound slots。
+容量内剩余格子会补成 emergent slots，一起生成网格大图。
 确认切分后，tile 先进入 Sheet Review，不直接污染 item 候选池。
 只有人工采纳的 tile 才回填成对应 item 的候选图，并默认星标。
 最终采用仍然回到 item 维度。
@@ -208,9 +209,9 @@ tile review 状态：
 
 ## Prompt Strategy
 
-`grid_sheet` 不能复用单 item prompt。
+`grid_sheet` 不能复用单 item prompt，但仍然应该复用 brief / 意图识别。
 
-需要新增 sheet prompt 生成逻辑，输入是一组 slots：
+规划 sheet 时，既定目标 item 必须先生成 brief。sheet prompt 的输入是一组 slots：
 
 ```json
 {
@@ -223,8 +224,15 @@ tile review 状态：
   "slots": [
     {
       "cell": "r01c01",
+      "kind": "bound",
       "title": "Healing Potion",
-      "description": "red potion bottle with golden cork"
+      "description": "brief-normalized visual description"
+    },
+    {
+      "cell": "r01c02",
+      "kind": "emergent",
+      "title": "涌现槽 01",
+      "description": "free invention under the same batch world and style"
     }
   ]
 }
@@ -234,6 +242,8 @@ Prompt 约束重点：
 
 - 生成一张完整网格 sheet。
 - 按 row-major 顺序放置每个资产。
+- bound slot 来自 item brief，不直接使用未理解的 raw item。
+- emergent slot 用来补足空余格子，要求同世界观、同风格、但不重复 bound slot 主题。
 - 每个格子只包含一个独立主体。
 - 格子之间要有清晰留白或分隔，便于切分。
 - 禁止文字、编号、水印。
@@ -372,7 +382,7 @@ item 工作台只增加来源展示：
 当前已实现：
 
 - `src/ai_icon_pipeline/sheets.py`
-  - `plan_grid_sheet`: 按批次 runtime 配置生成 sheet slots，并使用 item brief 优先、raw item 兜底的策略构造 sheet prompt；prompt 使用全局 `grid_sheet_prompt_template`。
+  - `plan_grid_sheet`: 按批次 runtime 配置生成 sheet slots；规划前自动补齐既定 item 的 brief，bound slots 使用 brief，剩余容量补 emergent slots；prompt 使用全局 `grid_sheet_prompt_template`。
   - `submit_grid_sheet_generation`: 通过 `async_image` provider 提交整张 sheet 生成任务。
   - `poll_grid_sheet_generation`: 轮询异步任务，下载整张 source image。
   - `split_grid_sheet`: 按 rows/cols/padding/gap 等分切图。
@@ -412,6 +422,7 @@ item 工作台只增加来源展示：
 | 2026-05-06 | `plan_grid_sheet` 优先读取已生成 brief，没有 brief 时使用 raw item。 | 兼容已有流程，同时允许导入 item 后直接规划 sheet。 |
 | 2026-05-07 | `backfill_grid_sheet` 只处理已 `selected` 且未 promoted 的 tile。 | 保留 CLI 批量入口，但语义从“全量回填”改成“采纳选中”。 |
 | 2026-05-06 | tile 复制进 item `images/`，不只引用 sheet tile。 | 保持导出、预览和候选池文件访问路径与现有单图流程一致。 |
+| 2026-05-07 | grid sheet 规划前自动为既定 item 补齐 brief；空余容量补 emergent slots。 | 网格出图也需要意图识别，但不需要逐 item 生成单图 prompt；涌现内容应该有明确 slot 语义。 |
 
 ## Update Log
 
@@ -423,6 +434,7 @@ item 工作台只增加来源展示：
 | 2026-05-06 | 实施 grid sheet MVP：storage/API/CLI/Web 接线、专用 sheet prompt、等分切图、tile 回填候选池。 |
 | 2026-05-07 | 新增 Sheet Review：真实切分线 overlay、tile 审图状态、单 tile 采纳并星标、从 tile 创建 item。 |
 | 2026-05-07 | 将 grid sheet prompt 纳入全局模板页，新增 `grid_sheet_prompt_template` 和 `grid_sheet_negative_prompt`。 |
+| 2026-05-07 | grid sheet 规划改为 brief-first，并自动生成 emergent slots 填满 sheet 容量。 |
 
 ## Open Questions
 

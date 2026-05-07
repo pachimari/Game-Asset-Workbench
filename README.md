@@ -287,6 +287,8 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet split task_001 sheet_v001 -
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet backfill task_001 sheet_v001 --json
 ```
 
+规划 sheet 时，系统会先为缺失 brief 的既定 item 自动生成意图识别；容量内剩余格子会作为涌现槽写入整张 sheet 的 `slot_lines`。
+
 切图后应先回到 Web UI 做 Sheet Review：用系统真实切分线检查每个 tile，只把人工采纳的 tile 写入 item 候选池。被采纳的 tile 会自动成为对应 item 的星标候选图；废弃或待定 tile 不会污染候选池。
 
 ## Provider 支持

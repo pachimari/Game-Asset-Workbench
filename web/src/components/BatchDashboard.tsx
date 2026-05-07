@@ -695,7 +695,7 @@ export default function BatchDashboard({
               </div>
               <div className="mt-1 text-xs text-on-surface-variant">
                 {selectedSheet
-                  ? `当前查看 ${selectedSheet.sheet_id}，槽位 ${selectedSheet.slots.length} · 切片 ${selectedSheet.tiles.length} · 剩余 ${selectedSheet.input.remaining_item_count ?? 0}。新建规划不会删除旧图。`
+                  ? `当前查看 ${selectedSheet.sheet_id}，目标 ${selectedSheet.input.item_count ?? 0} · 涌现 ${selectedSheet.input.emergent_item_count ?? 0} · 切片 ${selectedSheet.tiles.length} · 剩余 ${selectedSheet.input.remaining_item_count ?? 0}。新建规划会先补齐意图识别。`
                   : `当前会按 ${gridRows * gridCols} 个槽位规划这一批次。`}
               </div>
             </div>
@@ -719,7 +719,7 @@ export default function BatchDashboard({
               <button
                 type="button"
                 disabled={actionBusy || items.length === 0}
-                title="根据当前批次设置和条目创建一个新的 sheet_vXXX 规划，不会删除已有图片。"
+                title="先为缺失的目标 item 生成 brief，再按当前批次设置创建一个新的 sheet_vXXX 规划，不会删除已有图片。"
                 onClick={() => {
                   if (
                     sheets.length > 0 &&
@@ -731,7 +731,7 @@ export default function BatchDashboard({
                 }}
                 className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               >
-                新建规划
+                生成意图并规划
               </button>
               <button
                 type="button"
@@ -897,6 +897,7 @@ export default function BatchDashboard({
                           }
                           className="min-w-0 rounded-xl border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-xs font-bold text-on-surface outline-none"
                         >
+                          <option value="">未绑定 item</option>
                           {items.map((item) => (
                             <option key={item.item_id} value={item.item_id}>
                               {item.item_id} · {item.title || '未命名'}
@@ -905,7 +906,7 @@ export default function BatchDashboard({
                         </select>
                         <button
                           type="button"
-                          disabled={actionBusy || Boolean(selectedTile.promoted_version)}
+                          disabled={actionBusy || Boolean(selectedTile.promoted_version) || !selectedTileTarget}
                           onClick={() =>
                             void onGridSheetTileAction('promote', selectedSheet.sheet_id, selectedTile.cell_id, {
                               targetItemId: selectedTileTarget,

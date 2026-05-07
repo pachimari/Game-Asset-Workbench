@@ -7,10 +7,14 @@ import shutil
 from PIL import Image
 
 from .config import (
+    STATUS_BRIEF_GENERATED,
+    STATUS_DRAFT,
+    STATUS_FAILED,
     STATUS_IMAGE_GENERATED,
     STEP_BRIEF_GENERATION,
     STEP_IMAGE_GENERATION,
 )
+from .pipeline import approve_step, run_step
 from .providers.registry import get_async_image_provider
 from .settings import DEFAULT_PROMPT_TEMPLATES, load_global_settings, provider_settings_for, resolve_stage_selection
 from .storage import (
@@ -118,6 +122,51 @@ def _brief_for_item(task_id: str, item: dict) -> dict:
     }
 
 
+def _ensure_grid_sheet_briefs(task_id: str, items: list[dict], *, source: str) -> dict:
+    results = []
+    for item in items:
+        item_id = item["item_id"]
+        current = load_item(task_id, item_id)
+        if current.get("current_versions", {}).get(STEP_BRIEF_GENERATION):
+            results.append({"item_id": item_id, "status": "exists"})
+            continue
+
+        if current.get("status") not in {STATUS_DRAFT, STATUS_BRIEF_GENERATED, STATUS_FAILED}:
+            raise ValueError(
+                f"grid_sheet 规划需要先完成 brief，但 {item_id} 当前状态 {current.get('status')} 不能自动生成 brief"
+            )
+
+        if current.get("status") != STATUS_BRIEF_GENERATED:
+            run_step(task_id, item_id, STEP_BRIEF_GENERATION, source=source)
+        current = load_item(task_id, item_id)
+        if current.get("status") == STATUS_BRIEF_GENERATED:
+            approve_step(task_id, item_id, STEP_BRIEF_GENERATION, source=source)
+        results.append({"item_id": item_id, "status": "generated"})
+
+    return {
+        "required": len(items),
+        "generated": sum(1 for row in results if row["status"] == "generated"),
+        "existing": sum(1 for row in results if row["status"] == "exists"),
+        "items": results,
+    }
+
+
+def _emergent_brief(*, index: int, task: dict) -> dict:
+    return {
+        "source": "emergent_slot",
+        "title": f"涌现槽 {index:02d}",
+        "description": (
+            "自由涌现一个同批次世界观和统一风格下的原创游戏资产图标。"
+            "不要重复已指定槽位的主题，优先补充新的攻击、防御、治疗、控制、位移、召唤、诅咒或资源类视觉概念。"
+        ),
+        "icon_subject": "原创涌现游戏资产图标",
+        "visual_focus": (
+            "探索槽位：让模型自由发明，但必须保持单主体、图标可读、居中、安全边距充足、无文字。"
+        ),
+        "keywords": ["grid_sheet", "emergent", task.get("asset_domain", "game_icon_assets")],
+    }
+
+
 def _render_grid_sheet_template(template: str, values: dict[str, object]) -> str:
     rendered = template
     for key, value in values.items():
@@ -135,7 +184,8 @@ def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) ->
         slot_briefs.append(
             {
                 "cell_id": slot["cell_id"],
-                "item_id": slot["item_id"],
+                "kind": slot.get("kind", "bound"),
+                "item_id": slot.get("item_id"),
                 "title": brief["title"],
                 "source": brief["source"],
                 "icon_subject": brief["icon_subject"],
@@ -204,6 +254,8 @@ def plan_grid_sheet(task_id: str, *, source: str = "cli") -> dict:
         raise ValueError("当前批次没有可规划的 item")
 
     selected_items = items[:capacity]
+    brief_summary = _ensure_grid_sheet_briefs(task_id, selected_items, source=source)
+    selected_items = [load_item(task_id, item["item_id"]) for item in selected_items]
     sheet_id = next_sheet_id(task_id)
     root = sheet_dir(task_id, sheet_id)
     ensure_dir(root / "images" / "tiles")
@@ -219,9 +271,26 @@ def plan_grid_sheet(task_id: str, *, source: str = "cli") -> dict:
                 "cell_id": cell_id,
                 "row": row,
                 "col": col,
+                "kind": "bound",
                 "item_id": item["item_id"],
                 "title": item.get("title", ""),
                 "brief": brief,
+            }
+        )
+    for offset in range(len(selected_items), capacity):
+        row = offset // cols + 1
+        col = offset % cols + 1
+        cell_id = f"r{row:02d}c{col:02d}"
+        emergent_index = offset - len(selected_items) + 1
+        slots.append(
+            {
+                "cell_id": cell_id,
+                "row": row,
+                "col": col,
+                "kind": "emergent",
+                "item_id": None,
+                "title": f"涌现槽 {emergent_index:02d}",
+                "brief": _emergent_brief(index=emergent_index, task=task),
             }
         )
 
@@ -240,8 +309,10 @@ def plan_grid_sheet(task_id: str, *, source: str = "cli") -> dict:
             "image_aspect_ratio": runtime.get("image_aspect_ratio", "1:1"),
             "image_resolution": runtime.get("image_resolution", "1K"),
             "item_count": len(selected_items),
+            "emergent_item_count": max(0, capacity - len(selected_items)),
             "remaining_item_count": max(0, len(items) - len(selected_items)),
         },
+        "brief_generation": brief_summary,
         "prompt": prompt,
         "slots": slots,
         "tiles": [],
@@ -427,8 +498,9 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
                         "cell_id": cell_id,
                         "row": row,
                         "col": col,
-                        "item_id": slot["item_id"],
-                        "target_item_id": existing_tiles.get(cell_id, {}).get("target_item_id") or slot["item_id"],
+                        "kind": slot.get("kind", "bound"),
+                        "item_id": slot.get("item_id"),
+                        "target_item_id": existing_tiles.get(cell_id, {}).get("target_item_id") or slot.get("item_id"),
                         "image_path": f"images/tiles/{cell_id}.png",
                         "status": "split",
                         "review_status": existing_tiles.get(cell_id, {}).get("review_status", "pending"),

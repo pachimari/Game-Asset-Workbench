@@ -774,7 +774,11 @@ def create_app() -> FastAPI:
     async def post_plan_grid_sheet(task_id: str, payload: SheetActionPayload) -> dict:
         try:
             sheet = await run_in_threadpool(plan_grid_sheet, task_id, source=payload.source)
-            return {"sheet": _sheet_payload(task_id, sheet)}
+            return {
+                "sheet": _sheet_payload(task_id, sheet),
+                "task": _task_payload(task_id),
+                "items": [_item_summary_payload(task_id, item) for item in list_items(task_id)],
+            }
         except Exception as exc:
             raise _to_http_error(exc) from exc
 
