@@ -225,6 +225,7 @@ export default function BatchDashboard({
   const gridSheetEnabled = task.runtime_config?.image_generation_mode === 'grid_sheet'
   const selectedSheetCells = selectedSheet ? `${selectedSheet.input.rows}×${selectedSheet.input.cols}` : `${gridRows}×${gridCols}`
   const selectedSheetPrompt = selectedSheet?.prompt?.prompt ?? ''
+  const selectedSheetGenerating = selectedSheet?.status === 'generating'
   const canGenerateSheet = Boolean(selectedSheet && ['planned', 'failed'].includes(selectedSheet.status))
   const canPollSheet = Boolean(selectedSheet && ['generating'].includes(selectedSheet.status))
   const canSplitSheet = Boolean(selectedSheet && ['generated', 'split'].includes(selectedSheet.status))
@@ -823,6 +824,23 @@ export default function BatchDashboard({
                         })}
                       </div>
                     </>
+                  ) : selectedSheetGenerating ? (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/25 bg-primary/10">
+                        <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-black text-on-surface">Sheet 正在生成中</div>
+                        <div className="mt-1 text-xs leading-5 text-on-surface-variant">
+                          已提交到 Provider，等待轮询结果。这里不展示假进度，只提示任务还在跑。
+                        </div>
+                      </div>
+                      {selectedSheet.async_job?.task_id ? (
+                        <div className="max-w-full truncate rounded-full border border-outline-variant/16 bg-surface-container px-2.5 py-1 font-mono text-[10px] text-outline">
+                          {selectedSheet.async_job.task_id}
+                        </div>
+                      ) : null}
+                    </div>
                   ) : (
                     <Icon name="image" className="text-[34px] text-outline" />
                   )}
@@ -840,8 +858,10 @@ export default function BatchDashboard({
                     <div className="text-sm font-black text-on-surface">{selectedSheet.tiles.length}</div>
                   </div>
                   <div className="rounded-lg bg-surface-container-highest px-2 py-2">
-                    <div className="text-[11px] text-outline">进度</div>
-                    <div className="text-sm font-black text-on-surface">{selectedSheet.async_job?.progress ?? 0}%</div>
+                    <div className="text-[11px] text-outline">任务</div>
+                    <div className="text-sm font-black text-on-surface">
+                      {selectedSheetGenerating ? '运行中' : `${selectedSheet.async_job?.progress ?? 0}%`}
+                    </div>
                   </div>
                 </div>
               </div>
