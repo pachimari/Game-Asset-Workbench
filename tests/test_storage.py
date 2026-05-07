@@ -178,7 +178,7 @@ class StorageSafetyTests(unittest.TestCase):
         self.assertEqual(normalized["grid_gap"], 512)
         self.assertEqual(normalized["grid_cell_count"], 12)
 
-    def test_grid_sheet_plan_split_and_backfill_creates_item_candidates(self) -> None:
+    def test_grid_sheet_plan_split_and_promote_creates_starred_item_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
                 task = storage.create_task(
@@ -229,17 +229,30 @@ class StorageSafetyTests(unittest.TestCase):
                 split = sheets.split_grid_sheet(task["task_id"], sheet["sheet_id"])
                 self.assertEqual(split["status"], "split")
                 self.assertEqual(len(split["tiles"]), 3)
+                self.assertEqual(split["tiles"][0]["review_status"], "pending")
                 self.assertTrue(
                     (sheets.sheet_dir(task["task_id"], sheet["sheet_id"]) / "images" / "tiles" / "r01c01.png").exists()
                 )
 
-                backfilled = sheets.backfill_grid_sheet(task["task_id"], sheet["sheet_id"])
-                self.assertEqual(backfilled["status"], "backfilled")
-                self.assertEqual(len(backfilled["backfilled"]), 3)
+                reviewed = sheets.review_grid_sheet_tile(
+                    task["task_id"],
+                    sheet["sheet_id"],
+                    "r01c02",
+                    review_status="rejected",
+                )
+                rejected_tile = next(tile for tile in reviewed["tiles"] if tile["cell_id"] == "r01c02")
+                self.assertEqual(rejected_tile["review_status"], "rejected")
+
+                promoted = sheets.promote_grid_sheet_tile(task["task_id"], sheet["sheet_id"], "r01c01")
+                self.assertEqual(promoted["status"], "reviewing")
+                promoted_tile = next(tile for tile in promoted["tiles"] if tile["cell_id"] == "r01c01")
+                self.assertEqual(promoted_tile["review_status"], "selected")
+                self.assertTrue(promoted_tile["starred"])
 
                 item = storage.load_item(task["task_id"], items[0]["item_id"])
                 version = item["current_versions"]["image_generation"]
                 self.assertIsNotNone(version)
+                self.assertIn(version, item["starred_image_versions"])
                 artifact = storage.load_artifact(task["task_id"], items[0]["item_id"], "image_generation", version)
                 candidate = artifact["output"]["candidates"][0]
                 self.assertEqual(candidate["source"], "grid_sheet")

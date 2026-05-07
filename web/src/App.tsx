@@ -36,6 +36,7 @@ function App() {
       onRunBatchPipeline={controller.handleRunBatchPipeline}
       onExportStarredImages={controller.handleExportStarredImages}
       onGridSheetAction={controller.handleGridSheetAction}
+      onGridSheetTileAction={controller.handleGridSheetTileAction}
       onEditBrief={controller.handleEditBrief}
       onEditPrompt={controller.handleEditPrompt}
       onUpdateItemModel={controller.handleUpdateItemModel}

@@ -61,6 +61,25 @@ function formatPercent(numerator: number, denominator: number) {
   return `${Math.round((numerator / denominator) * 100)}%`
 }
 
+function reviewLabel(status: string | null | undefined) {
+  if (status === 'selected') return '已采纳'
+  if (status === 'rejected') return '已废弃'
+  if (status === 'emergent') return '涌现好图'
+  return '待审'
+}
+
+function reviewTone(status: string | null | undefined) {
+  if (status === 'selected') return 'border-emerald-300/45 bg-emerald-300/18 text-emerald-100'
+  if (status === 'rejected') return 'border-error/45 bg-error/14 text-error'
+  if (status === 'emergent') return 'border-amber-300/45 bg-amber-300/18 text-amber-100'
+  return 'border-sky-300/28 bg-sky-300/10 text-sky-100'
+}
+
+function sheetAspectRatio(value: string | undefined) {
+  if (!value || value === 'auto') return '1 / 1'
+  return value.replace(':', ' / ')
+}
+
 const IMAGE_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9']
 const IMAGE_RESOLUTION_OPTIONS = ['auto', '512', '1K', '2K', '4K']
 const ASSET_TYPE_OPTIONS = [
@@ -89,6 +108,7 @@ export default function BatchDashboard({
   onRunBatchPipeline,
   onExportStarredImages,
   onGridSheetAction,
+  onGridSheetTileAction,
   onCreateItem,
   onCreateItemsBulk,
   actionBusy,
@@ -117,6 +137,16 @@ export default function BatchDashboard({
   onGridSheetAction: (
     action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
     sheetId?: string,
+  ) => Promise<void>
+  onGridSheetTileAction: (
+    action: 'pending' | 'rejected' | 'emergent' | 'promote' | 'create_item',
+    sheetId: string,
+    cellId: string,
+    options?: {
+      targetItemId?: string | null
+      title?: string
+      description?: string
+    },
   ) => Promise<void>
   onCreateItem: (payload: {
     asset_type: string
@@ -169,6 +199,8 @@ export default function BatchDashboard({
     taskId: string
     sheetId: string | null
   }>({ taskId: task.task_id, sheetId: sheets[0]?.sheet_id ?? null })
+  const [selectedTileCellId, setSelectedTileCellId] = useState<string | null>(null)
+  const [tileTargets, setTileTargets] = useState<Record<string, string>>({})
 
   const completed = task.items_summary?.completed ?? 0
   const inProgress = task.items_summary?.in_progress ?? 0
@@ -184,13 +216,22 @@ export default function BatchDashboard({
       ? sheetSelection.sheetId
       : sheets[0]?.sheet_id
   const selectedSheet = sheets.find((sheet) => sheet.sheet_id === selectedSheetId) ?? sheets[0]
+  const selectedTile =
+    (selectedTileCellId && selectedSheet?.tiles.find((tile) => tile.cell_id === selectedTileCellId)) ||
+    selectedSheet?.tiles[0] ||
+    null
+  const selectedTileTarget =
+    selectedTile ? (tileTargets[selectedTile.cell_id] ?? selectedTile.target_item_id ?? selectedTile.item_id ?? '') : ''
   const gridSheetEnabled = task.runtime_config?.image_generation_mode === 'grid_sheet'
   const selectedSheetCells = selectedSheet ? `${selectedSheet.input.rows}×${selectedSheet.input.cols}` : `${gridRows}×${gridCols}`
   const selectedSheetPrompt = selectedSheet?.prompt?.prompt ?? ''
   const canGenerateSheet = Boolean(selectedSheet && ['planned', 'failed'].includes(selectedSheet.status))
   const canPollSheet = Boolean(selectedSheet && ['generating'].includes(selectedSheet.status))
   const canSplitSheet = Boolean(selectedSheet && ['generated', 'split'].includes(selectedSheet.status))
-  const canBackfillSheet = Boolean(selectedSheet && ['split'].includes(selectedSheet.status) && selectedSheet.tiles.length > 0)
+  const canBackfillSheet = Boolean(
+    selectedSheet &&
+      selectedSheet.tiles.some((tile) => tile.review_status === 'selected' && !tile.promoted_version),
+  )
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
   const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
@@ -721,24 +762,73 @@ export default function BatchDashboard({
                 onClick={() => selectedSheet && void onGridSheetAction('backfill', selectedSheet.sheet_id)}
                 className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
               >
-                回填候选池
+                采纳选中
               </button>
             </div>
           </div>
 
           {selectedSheet ? (
-            <div className="grid gap-0 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="grid gap-0 lg:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.1fr)]">
               <div className="border-b border-outline-variant/10 bg-surface-container px-4 py-4 lg:border-b-0 lg:border-r">
-                <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest">
+                <div
+                  className="relative flex items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest"
+                  style={{ aspectRatio: sheetAspectRatio(selectedSheet.input.image_aspect_ratio) }}
+                >
                   {selectedSheet.source_image_url ? (
-                    <img
-                      src={selectedSheet.source_image_url}
-                      alt={selectedSheet.sheet_id}
-                      className="h-full w-full object-contain"
-                    />
+                    <>
+                      <img
+                        src={selectedSheet.source_image_url}
+                        alt={selectedSheet.sheet_id}
+                        className="h-full w-full object-contain"
+                      />
+                      <div
+                        className="absolute inset-0 grid"
+                        style={{
+                          gridTemplateColumns: `repeat(${selectedSheet.input.cols}, minmax(0, 1fr))`,
+                          gridTemplateRows: `repeat(${selectedSheet.input.rows}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {selectedSheet.tiles.map((tile) => {
+                          const isActive = selectedTile?.cell_id === tile.cell_id
+                          return (
+                            <button
+                              key={tile.cell_id}
+                              type="button"
+                              title={`${tile.cell_id} · ${reviewLabel(tile.review_status)}`}
+                              onClick={() => setSelectedTileCellId(tile.cell_id)}
+                              className={clsx(
+                                'group relative border border-sky-300/70 bg-sky-300/0 transition-colors hover:bg-sky-300/12',
+                                isActive && 'z-10 border-2 border-primary bg-primary/10',
+                                tile.review_status === 'selected' && 'bg-emerald-300/12',
+                                tile.review_status === 'rejected' && 'bg-error/16',
+                                tile.review_status === 'emergent' && 'bg-amber-300/14',
+                              )}
+                            >
+                              <span
+                                className={clsx(
+                                  'absolute left-1 top-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
+                                  reviewTone(tile.review_status),
+                                  isActive && 'opacity-100',
+                                )}
+                              >
+                                {tile.cell_id}
+                              </span>
+                              {tile.promoted_version ? (
+                                <span className="absolute right-1 top-1 rounded-full bg-emerald-300 px-1.5 py-0.5 text-[10px] font-black text-emerald-950">
+                                  ★
+                                </span>
+                              ) : null}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
                   ) : (
                     <Icon name="image" className="text-[34px] text-outline" />
                   )}
+                </div>
+                <div className="mt-2 text-[11px] leading-5 text-on-surface-variant">
+                  蓝线是系统真实切分层，采纳时按这套边界切片入池。
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-lg bg-surface-container-highest px-2 py-2">
@@ -756,6 +846,93 @@ export default function BatchDashboard({
                 </div>
               </div>
               <div className="min-w-0 px-4 py-4">
+                {selectedTile ? (
+                  <div className="mb-3 grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)]">
+                    <div className="overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container">
+                      {selectedTile.image_url ? (
+                        <img src={selectedTile.image_url} alt={selectedTile.cell_id} className="aspect-square w-full object-cover" />
+                      ) : (
+                        <div className="flex aspect-square items-center justify-center">
+                          <Icon name="image" className="text-[28px] text-outline" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-black text-on-surface">{selectedTile.cell_id}</span>
+                        <span className={clsx('rounded-full border px-2 py-0.5 text-[11px] font-bold', reviewTone(selectedTile.review_status))}>
+                          {reviewLabel(selectedTile.review_status)}
+                        </span>
+                        {selectedTile.promoted_version ? (
+                          <span className="rounded-full border border-emerald-300/35 bg-emerald-300/12 px-2 py-0.5 text-[11px] font-bold text-emerald-100">
+                            已入池并星标
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                        <select
+                          value={selectedTileTarget}
+                          onChange={(event) =>
+                            setTileTargets((current) => ({ ...current, [selectedTile.cell_id]: event.target.value }))
+                          }
+                          className="min-w-0 rounded-xl border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-xs font-bold text-on-surface outline-none"
+                        >
+                          {items.map((item) => (
+                            <option key={item.item_id} value={item.item_id}>
+                              {item.item_id} · {item.title || '未命名'}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={actionBusy || Boolean(selectedTile.promoted_version)}
+                          onClick={() =>
+                            void onGridSheetTileAction('promote', selectedSheet.sheet_id, selectedTile.cell_id, {
+                              targetItemId: selectedTileTarget,
+                            })
+                          }
+                          className="rounded-xl bg-primary px-3 py-2 text-xs font-black text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          采纳并星标
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={actionBusy}
+                          onClick={() => void onGridSheetTileAction('rejected', selectedSheet.sheet_id, selectedTile.cell_id)}
+                          className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+                        >
+                          废弃
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionBusy}
+                          onClick={() => void onGridSheetTileAction('emergent', selectedSheet.sheet_id, selectedTile.cell_id)}
+                          className="rounded-xl border border-amber-300/30 px-3 py-2 text-xs font-bold text-amber-100 transition-colors hover:bg-amber-300/10 disabled:opacity-60"
+                        >
+                          标记涌现好图
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionBusy || Boolean(selectedTile.promoted_version)}
+                          onClick={() => {
+                            const suggested = `涌现图标 ${selectedTile.cell_id}`
+                            const createdTitle = window.prompt('给这个涌现切片命名', suggested)
+                            if (!createdTitle) return
+                            void onGridSheetTileAction('create_item', selectedSheet.sheet_id, selectedTile.cell_id, {
+                              title: createdTitle,
+                              description: `从 ${selectedSheet.sheet_id} ${selectedTile.cell_id} 采纳的涌现技能图标。`,
+                            })
+                          }}
+                          className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
+                        >
+                          创建 item 并采纳
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid gap-3 xl:grid-cols-2">
                   <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
                     <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">

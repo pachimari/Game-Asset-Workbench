@@ -3,6 +3,7 @@ import {
   approveItemStep,
   backfillTaskGridSheet,
   cancelItemImage,
+  createItemFromGridSheetTile,
   createProvider,
   createTask,
   createTaskItem,
@@ -22,6 +23,8 @@ import {
   planTaskGridSheet,
   pollTaskGridSheet,
   pollItemImage,
+  promoteTaskGridSheetTile,
+  reviewTaskGridSheetTile,
   rollbackItemStep,
   runItemStep,
   runTaskPipeline,
@@ -445,6 +448,59 @@ export function useWorkbenchController() {
     }
   }
 
+  async function handleGridSheetTileAction(
+    action: 'pending' | 'rejected' | 'emergent' | 'promote' | 'create_item',
+    sheetId: string,
+    cellId: string,
+    options?: {
+      targetItemId?: string | null
+      title?: string
+      description?: string
+    },
+  ) {
+    if (!activeTaskId) return
+    setActionError(null)
+    setActionBusy(true)
+    try {
+      let response:
+        | { sheet: GridSheetSummary; task?: TaskSummary; items?: ItemSummary[] }
+        | undefined
+      if (action === 'promote') {
+        response = await promoteTaskGridSheetTile(activeTaskId, sheetId, cellId, {
+          target_item_id: options?.targetItemId ?? null,
+          starred: true,
+        })
+      } else if (action === 'create_item') {
+        response = await createItemFromGridSheetTile(activeTaskId, sheetId, cellId, {
+          title: options?.title?.trim() || `${cellId} 涌现图标`,
+          description: options?.description?.trim() || `从 ${sheetId} ${cellId} 采纳的涌现切片。`,
+          asset_type: 'skill_icon',
+          category: 'emergent',
+          starred: true,
+        })
+      } else {
+        response = await reviewTaskGridSheetTile(activeTaskId, sheetId, cellId, {
+          review_status: action,
+          target_item_id: options?.targetItemId ?? null,
+        })
+      }
+
+      if (response?.task && response.items) {
+        setActiveTask(response.task)
+        setItems(response.items)
+      }
+      await reloadTaskContext(activeTaskId, activeItemId)
+      await reloadTaskList(activeTaskId)
+      if (activeItemId) {
+        await reloadWorkspace(activeTaskId, activeItemId)
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : '更新切片审图状态失败')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   async function handleWorkspaceAction(
     action: 'run' | 'approve' | 'rollback' | 'poll' | 'cancel',
     step?: string,
@@ -828,6 +884,7 @@ export function useWorkbenchController() {
     handleRunBatchPipeline,
     handleExportStarredImages,
     handleGridSheetAction,
+    handleGridSheetTileAction,
     handleEditBrief,
     handleEditPrompt,
     handleUpdateItemModel,

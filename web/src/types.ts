@@ -137,9 +137,14 @@ export type SheetTile = {
   row: number
   col: number
   item_id: string
+  target_item_id?: string | null
   image_path: string | null
   image_url?: string | null
   status: string
+  review_status?: 'pending' | 'selected' | 'rejected' | 'emergent' | string
+  promoted_version?: string | null
+  starred?: boolean
+  created_item_id?: string | null
 }
 
 export type GridSheetSummary = {

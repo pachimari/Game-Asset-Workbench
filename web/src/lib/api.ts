@@ -104,6 +104,57 @@ export async function backfillTaskGridSheet(taskId: string, sheetId: string) {
   return sheetAction(taskId, `/sheets/${sheetId}/backfill`)
 }
 
+export async function reviewTaskGridSheetTile(
+  taskId: string,
+  sheetId: string,
+  cellId: string,
+  payload: { review_status: 'pending' | 'selected' | 'rejected' | 'emergent'; target_item_id?: string | null },
+) {
+  return request<{ sheet: GridSheetSummary }>(
+    `/tasks/${taskId}/sheets/${sheetId}/tiles/${cellId}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, source: 'web' }),
+    },
+  )
+}
+
+export async function promoteTaskGridSheetTile(
+  taskId: string,
+  sheetId: string,
+  cellId: string,
+  payload: { target_item_id?: string | null; starred?: boolean },
+) {
+  return request<{ sheet: GridSheetSummary; task?: TaskSummary; items?: ItemSummary[] }>(
+    `/tasks/${taskId}/sheets/${sheetId}/tiles/${cellId}/promote`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, source: 'web' }),
+    },
+  )
+}
+
+export async function createItemFromGridSheetTile(
+  taskId: string,
+  sheetId: string,
+  cellId: string,
+  payload: {
+    title: string
+    description?: string
+    asset_type?: string
+    category?: string
+    starred?: boolean
+  },
+) {
+  return request<{ sheet: GridSheetSummary; task?: TaskSummary; items?: ItemSummary[] }>(
+    `/tasks/${taskId}/sheets/${sheetId}/tiles/${cellId}/create-item`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, source: 'web' }),
+    },
+  )
+}
+
 export async function fetchTaskItem(
   taskId: string,
   itemId: string,

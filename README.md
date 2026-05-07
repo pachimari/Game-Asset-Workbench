@@ -287,7 +287,7 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet split task_001 sheet_v001 -
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet backfill task_001 sheet_v001 --json
 ```
 
-回填后，每个 tile 会成为对应 item 的候选图。最终视觉筛选、星标和采用仍然回到 Web UI。
+切图后应先回到 Web UI 做 Sheet Review：用系统真实切分线检查每个 tile，只把人工采纳的 tile 写入 item 候选池。被采纳的 tile 会自动成为对应 item 的星标候选图；废弃或待定 tile 不会污染候选池。
 
 ## Provider 支持
 

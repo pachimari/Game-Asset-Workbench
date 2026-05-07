@@ -79,7 +79,8 @@ task
 
 ```text
 一个 task 先把多个 item 打包成 sheet slots，一次生成网格大图。
-确认切分后，每个 tile 回填成对应 item 的候选图。
+确认切分后，tile 先进入 Sheet Review，不直接污染 item 候选池。
+只有人工采纳的 tile 才回填成对应 item 的候选图，并默认星标。
 最终采用仍然回到 item 维度。
 ```
 
@@ -172,9 +173,22 @@ tasks/task_001/
 }
 ```
 
-## Item Candidate Backfill
+## Sheet Review And Candidate Backfill
 
-切图完成后，tile 应该进入原有 item 候选池。
+切图完成后，tile 应该先进入 Sheet Review。Review 是 grid sheet 模式的人工筛选层，不是技术中间态。
+
+tile review 状态：
+
+- `pending`: 待审，默认状态，不进入 item 候选池。
+- `selected`: 已采纳，可以回填到目标 item。
+- `rejected`: 废弃，不进入 item 候选池。
+- `emergent`: 涌现好图，暂存在 sheet 层，后续可创建新 item 并采纳。
+
+采纳规则：
+
+- 绑定槽位：采纳后复制 tile 到对应 item 的 `images/`，写入 `image_generation` artifact，并加入该 item 的 `starred_image_versions`。
+- 重新绑定：采纳前可把 tile 绑定到另一个已有 item。
+- 涌现槽位：先标记为 `emergent`；命名后可创建新 item，再采纳并星标。
 
 建议先复用现有 `image_generation` artifact，但在 candidate 上增加来源字段：
 
@@ -191,8 +205,6 @@ tasks/task_001/
 ```
 
 这样 Web 的 item 工作台可以继续展示候选池，同时让用户知道这张图来自某个 sheet。
-
-第一版避免改动星标模型太深：仍然按 image generation version 选择当前候选。后续如果要在一个 version 下支持多个 tile 精准星标，再升级为 candidate-level reference。
 
 ## Prompt Strategy
 
@@ -304,10 +316,11 @@ gap
 
 - Sheet 列表
 - 当前 sheet 原图预览
-- 网格 overlay
+- 系统真实切分线 overlay
 - 切图参数调整
 - tile 预览
-- 回填到 item 候选池
+- tile 审图：采纳、废弃、重新绑定、创建 item、标记涌现好图
+- 采纳到 item 候选池并默认星标
 
 item 工作台只增加来源展示：
 
@@ -328,8 +341,8 @@ item 工作台只增加来源展示：
 3. **Pure split**
    不接 provider，先支持上传或指定已有 `source.png`，按 rows/cols 切出 tiles。
 
-4. **Backfill**
-   把 tiles 写入 item 的候选池，Web item 工作台能看到。
+4. **Sheet Review**
+   先在 Web UI 里显示真实切分线、tile 预览和审图状态，不默认全量回填。
 
 5. **Provider generation**
    用 `async_image` / APIMart 生成整张 sheet。
@@ -337,8 +350,8 @@ item 工作台只增加来源展示：
 6. **Prompt generation**
    新增 sheet prompt 模板与 packer。
 
-7. **Web sheet review**
-   做整张图预览、overlay、切图参数调整和 backfill 操作。
+7. **Candidate promotion**
+   只把人工采纳的 tile 写入 item 候选池，并默认星标。
 
 ## Implemented MVP
 
@@ -349,10 +362,13 @@ item 工作台只增加来源展示：
   - `submit_grid_sheet_generation`: 通过 `async_image` provider 提交整张 sheet 生成任务。
   - `poll_grid_sheet_generation`: 轮询异步任务，下载整张 source image。
   - `split_grid_sheet`: 按 rows/cols/padding/gap 等分切图。
-  - `backfill_grid_sheet`: 把每个 tile 复制进对应 item 的 `images/` 目录，并写入 `image_generation` artifact。
-- API 已提供 sheet list/show/plan/generate/poll/split/backfill。
+  - `review_grid_sheet_tile`: 更新 tile 的 pending/selected/rejected/emergent 审图状态。
+  - `promote_grid_sheet_tile`: 把单个 tile 复制进目标 item，并写入星标 `image_generation` artifact。
+  - `create_item_from_grid_sheet_tile`: 从涌现 tile 创建新 item 并采纳。
+  - `backfill_grid_sheet`: 仅批量回填已 `selected` 且尚未 promoted 的 tile。
+- API 已提供 sheet list/show/plan/generate/poll/split/backfill，以及 tile review/promote/create-item。
 - CLI 已提供 `sheet` 分组和等价 flat commands。
-- Web 批次页在 `grid_sheet` 模式下显示 sheet 工作区，支持规划、提交、轮询、切图、回填。
+- Web 批次页在 `grid_sheet` 模式下显示 sheet 工作区，支持规划、提交、轮询、切图、真实切分线 overlay、tile 审图和采纳入池。
 - Item 工作台会展示候选来源，如 `sheet_v001 · r01c01`。
 
 当前不自动调用视觉判断，tile 质量筛选仍然回到 Web UI。
@@ -376,11 +392,11 @@ item 工作台只增加来源展示：
 | --- | --- | --- |
 | 2026-05-06 | `grid_sheet` 第一版是批次级模式，不做 item 级混用。 | 混用会让生成入口、候选来源、星标/采用语义变得混乱。 |
 | 2026-05-06 | 保留现有 `single` 流程，不用 `grid_sheet` 替代。 | 原画、角色、大图仍需要逐 item 精修。 |
-| 2026-05-06 | tile 切分后回填到 item 候选池，最终采用仍回到 item 维度。 | Web UI 的人工审图和最终确认心智可以复用。 |
-| 2026-05-06 | 第一版不重构 candidate-level 星标。 | 避免把数据模型升级和 sheet MVP 绑在一起，降低首版风险。 |
+| 2026-05-07 | tile 切分后先进入 Sheet Review，不默认全量回填。 | grid sheet 经常出现语义或网格失败，必须先人工筛选，避免污染 item 候选池。 |
+| 2026-05-07 | 被采纳的 tile 进入 item 候选池时默认星标。 | 采纳本身就是一次人工视觉判断，应直接成为高优先级候选。 |
 | 2026-05-06 | V1 只处理前 `rows * cols` 个 item，超过容量的 item 留待下一张 sheet。 | 先保证一个 sheet 的端到端链路可验收，再做自动多 sheet 编排。 |
 | 2026-05-06 | `plan_grid_sheet` 优先读取已生成 brief，没有 brief 时使用 raw item。 | 兼容已有流程，同时允许导入 item 后直接规划 sheet。 |
-| 2026-05-06 | backfill 后自动把 tile 设为 item 当前 `image_generation` 版本。 | 回填的目标就是让 item 候选池马上可审图、星标和确认。 |
+| 2026-05-07 | `backfill_grid_sheet` 只处理已 `selected` 且未 promoted 的 tile。 | 保留 CLI 批量入口，但语义从“全量回填”改成“采纳选中”。 |
 | 2026-05-06 | tile 复制进 item `images/`，不只引用 sheet tile。 | 保持导出、预览和候选池文件访问路径与现有单图流程一致。 |
 
 ## Update Log
@@ -391,6 +407,7 @@ item 工作台只增加来源展示：
 | 2026-05-06 | 在 README、README_en、AGENTS 中加入 grid sheet 文档入口和维护提醒。 |
 | 2026-05-06 | 实施第一片 runtime config：批次级 `image_generation_mode` 与网格切图参数可保存和展示。 |
 | 2026-05-06 | 实施 grid sheet MVP：storage/API/CLI/Web 接线、专用 sheet prompt、等分切图、tile 回填候选池。 |
+| 2026-05-07 | 新增 Sheet Review：真实切分线 overlay、tile 审图状态、单 tile 采纳并星标、从 tile 创建 item。 |
 
 ## Open Questions
 

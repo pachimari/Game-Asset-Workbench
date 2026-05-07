@@ -41,10 +41,13 @@ from .settings import (
 )
 from .sheets import (
     backfill_grid_sheet,
+    create_item_from_grid_sheet_tile,
     list_sheets,
     load_sheet,
     plan_grid_sheet,
     poll_grid_sheet_generation,
+    promote_grid_sheet_tile,
+    review_grid_sheet_tile,
     sheet_dir,
     split_grid_sheet,
     submit_grid_sheet_generation,
@@ -210,6 +213,27 @@ class TaskPipelinePayload(BaseModel):
 
 
 class SheetActionPayload(BaseModel):
+    source: str = "web"
+
+
+class SheetTileReviewPayload(BaseModel):
+    review_status: str
+    target_item_id: Optional[str] = None
+    source: str = "web"
+
+
+class SheetTilePromotePayload(BaseModel):
+    target_item_id: Optional[str] = None
+    starred: bool = True
+    source: str = "web"
+
+
+class SheetTileCreateItemPayload(BaseModel):
+    title: str
+    description: str = ""
+    asset_type: str = "skill_icon"
+    category: str = "emergent"
+    starred: bool = True
     source: str = "web"
 
 
@@ -798,6 +822,80 @@ def create_app() -> FastAPI:
                 backfill_grid_sheet,
                 task_id,
                 sheet_id,
+                source=payload.source,
+            )
+            return {
+                "sheet": _sheet_payload(task_id, sheet),
+                "task": _task_payload(task_id),
+                "items": [_item_summary_payload(task_id, item) for item in list_items(task_id)],
+            }
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/review")
+    async def post_review_grid_sheet_tile(
+        task_id: str,
+        sheet_id: str,
+        cell_id: str,
+        payload: SheetTileReviewPayload,
+    ) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                review_grid_sheet_tile,
+                task_id,
+                sheet_id,
+                cell_id,
+                review_status=payload.review_status,
+                target_item_id=payload.target_item_id,
+                source=payload.source,
+            )
+            return {"sheet": _sheet_payload(task_id, sheet)}
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/promote")
+    async def post_promote_grid_sheet_tile(
+        task_id: str,
+        sheet_id: str,
+        cell_id: str,
+        payload: SheetTilePromotePayload,
+    ) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                promote_grid_sheet_tile,
+                task_id,
+                sheet_id,
+                cell_id,
+                target_item_id=payload.target_item_id,
+                starred=payload.starred,
+                source=payload.source,
+            )
+            return {
+                "sheet": _sheet_payload(task_id, sheet),
+                "task": _task_payload(task_id),
+                "items": [_item_summary_payload(task_id, item) for item in list_items(task_id)],
+            }
+        except Exception as exc:
+            raise _to_http_error(exc) from exc
+
+    @app.post("/tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/create-item")
+    async def post_create_item_from_grid_sheet_tile(
+        task_id: str,
+        sheet_id: str,
+        cell_id: str,
+        payload: SheetTileCreateItemPayload,
+    ) -> dict:
+        try:
+            sheet = await run_in_threadpool(
+                create_item_from_grid_sheet_tile,
+                task_id,
+                sheet_id,
+                cell_id,
+                title=payload.title,
+                description=payload.description,
+                asset_type=payload.asset_type,
+                category=payload.category,
+                starred=payload.starred,
                 source=payload.source,
             )
             return {

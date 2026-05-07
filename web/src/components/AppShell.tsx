@@ -96,6 +96,16 @@ type Props = {
     action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
     sheetId?: string,
   ) => Promise<void>
+  onGridSheetTileAction: (
+    action: 'pending' | 'rejected' | 'emergent' | 'promote' | 'create_item',
+    sheetId: string,
+    cellId: string,
+    options?: {
+      targetItemId?: string | null
+      title?: string
+      description?: string
+    },
+  ) => Promise<void>
   onEditBrief: (payload: {
     title?: string | null
     description?: string | null
@@ -184,6 +194,7 @@ export default function AppShell({
   onRunBatchPipeline,
   onExportStarredImages,
   onGridSheetAction,
+  onGridSheetTileAction,
   onEditBrief,
   onEditPrompt,
   onUpdateItemModel,
@@ -281,6 +292,7 @@ export default function AppShell({
                 onRunBatchPipeline={onRunBatchPipeline}
                 onExportStarredImages={onExportStarredImages}
                 onGridSheetAction={onGridSheetAction}
+                onGridSheetTileAction={onGridSheetTileAction}
                 onCreateItem={onCreateItem}
                 onCreateItemsBulk={onCreateItemsBulk}
                 actionBusy={actionBusy}

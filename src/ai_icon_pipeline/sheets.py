@@ -17,6 +17,7 @@ from .storage import (
     PENDING_ASYNC_STATUSES,
     append_event,
     append_item_event,
+    create_item,
     item_dir,
     list_items,
     load_artifact,
@@ -36,6 +37,7 @@ from .utils import ensure_dir, utc_now
 
 
 SHEET_ID_PATTERN = re.compile(r"^sheet_v(\d+)$")
+TILE_REVIEW_STATUSES = {"pending", "selected", "rejected", "emergent"}
 
 
 def sheets_dir(task_id: str) -> Path:
@@ -394,6 +396,7 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
     tile_root = sheet_dir(task_id, sheet_id) / "images" / "tiles"
     ensure_dir(tile_root)
 
+    existing_tiles = {tile.get("cell_id"): tile for tile in sheet.get("tiles", [])}
     tiles = []
     with Image.open(source_path) as image:
         width, height = image.size
@@ -423,8 +426,12 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
                         "row": row,
                         "col": col,
                         "item_id": slot["item_id"],
+                        "target_item_id": existing_tiles.get(cell_id, {}).get("target_item_id") or slot["item_id"],
                         "image_path": f"images/tiles/{cell_id}.png",
                         "status": "split",
+                        "review_status": existing_tiles.get(cell_id, {}).get("review_status", "pending"),
+                        "promoted_version": existing_tiles.get(cell_id, {}).get("promoted_version"),
+                        "starred": bool(existing_tiles.get(cell_id, {}).get("starred", False)),
                     }
                 )
 
@@ -450,6 +457,205 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
     return sheet
 
 
+def _find_tile(sheet: dict, cell_id: str) -> dict:
+    for tile in sheet.get("tiles") or []:
+        if tile.get("cell_id") == cell_id:
+            return tile
+    raise ValueError(f"Tile not found: {sheet.get('sheet_id')} {cell_id}")
+
+
+def review_grid_sheet_tile(
+    task_id: str,
+    sheet_id: str,
+    cell_id: str,
+    *,
+    review_status: str,
+    target_item_id: str | None = None,
+    source: str = "cli",
+) -> dict:
+    normalized_status = review_status.strip().lower()
+    if normalized_status not in TILE_REVIEW_STATUSES:
+        raise ValueError(f"Unsupported tile review status: {review_status}")
+    sheet = load_sheet(task_id, sheet_id)
+    tile = _find_tile(sheet, cell_id)
+    if target_item_id:
+        load_item(task_id, target_item_id)
+        tile["target_item_id"] = target_item_id
+    else:
+        tile.setdefault("target_item_id", tile.get("item_id"))
+    tile["review_status"] = normalized_status
+    save_sheet(task_id, sheet)
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "review_grid_sheet_tile",
+            "sheet_id": sheet_id,
+            "cell_id": cell_id,
+            "review_status": normalized_status,
+            "target_item_id": tile.get("target_item_id"),
+        },
+    )
+    return sheet
+
+
+def _promote_grid_sheet_tile(
+    task_id: str,
+    sheet: dict,
+    tile: dict,
+    *,
+    target_item_id: str | None = None,
+    starred: bool = True,
+    source: str = "cli",
+) -> dict | None:
+    sheet_id = sheet["sheet_id"]
+    resolved_item_id = target_item_id or tile.get("target_item_id") or tile.get("item_id")
+    if not resolved_item_id:
+        raise ValueError(f"Tile has no target item: {sheet_id} {tile.get('cell_id')}")
+    source_path = sheet_dir(task_id, sheet_id) / tile["image_path"]
+    if not source_path.exists():
+        return None
+    item = load_item(task_id, resolved_item_id)
+    destination_name = f"{sheet_id}_{tile['cell_id']}.png"
+    destination = item_dir(task_id, resolved_item_id) / "images" / destination_name
+    ensure_dir(destination.parent)
+    shutil.copyfile(source_path, destination)
+    payload = {
+        "step": STEP_IMAGE_GENERATION,
+        "provider": "grid_sheet",
+        "model": sheet.get("model"),
+        "created_at": utc_now(),
+        "input": {
+            "source": "grid_sheet",
+            "sheet_id": sheet_id,
+            "cell_id": tile["cell_id"],
+            "review_status": "selected",
+        },
+        "output": {
+            "candidates": [
+                {
+                    "candidate_id": f"{sheet_id}_{tile['cell_id']}",
+                    "image_path": destination_name,
+                    "source": "grid_sheet",
+                    "sheet_id": sheet_id,
+                    "cell_id": tile["cell_id"],
+                    "row": tile.get("row"),
+                    "col": tile.get("col"),
+                }
+            ]
+        },
+    }
+    version = write_artifact(task_id, resolved_item_id, STEP_IMAGE_GENERATION, payload)
+    item["current_versions"][STEP_IMAGE_GENERATION] = version
+    if starred:
+        starred_versions = list(dict.fromkeys(item.get("starred_image_versions", [])))
+        if version not in starred_versions:
+            starred_versions.append(version)
+        item["starred_image_versions"] = starred_versions
+    item["status"] = STATUS_IMAGE_GENERATED
+    save_item(task_id, item)
+    metrics = load_metrics(task_id, resolved_item_id)
+    metrics["status"] = STATUS_IMAGE_GENERATED
+    metrics["end_time"] = None
+    metrics["iterations"][STEP_IMAGE_GENERATION] += 1
+    save_metrics(task_id, resolved_item_id, metrics)
+    tile["review_status"] = "selected"
+    tile["target_item_id"] = resolved_item_id
+    tile["promoted_version"] = version
+    tile["starred"] = bool(starred)
+    append_item_event(
+        task_id,
+        resolved_item_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "promote_grid_sheet_tile",
+            "sheet_id": sheet_id,
+            "cell_id": tile["cell_id"],
+            "version": version,
+            "starred": bool(starred),
+            "to": STATUS_IMAGE_GENERATED,
+        },
+    )
+    return {"item_id": resolved_item_id, "cell_id": tile["cell_id"], "version": version, "starred": bool(starred)}
+
+
+def promote_grid_sheet_tile(
+    task_id: str,
+    sheet_id: str,
+    cell_id: str,
+    *,
+    target_item_id: str | None = None,
+    starred: bool = True,
+    source: str = "cli",
+) -> dict:
+    sheet = load_sheet(task_id, sheet_id)
+    tile = _find_tile(sheet, cell_id)
+    result = _promote_grid_sheet_tile(
+        task_id,
+        sheet,
+        tile,
+        target_item_id=target_item_id,
+        starred=starred,
+        source=source,
+    )
+    if not result:
+        raise ValueError(f"Tile image not found: {cell_id}")
+    sheet.setdefault("backfilled", [])
+    sheet["backfilled"].append(result)
+    sheet["status"] = "reviewing"
+    save_sheet(task_id, sheet)
+    refresh_task_summary(task_id)
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "promote_grid_sheet_tile",
+            "sheet_id": sheet_id,
+            "cell_id": cell_id,
+            "target_item_id": result["item_id"],
+            "version": result["version"],
+        },
+    )
+    return sheet
+
+
+def create_item_from_grid_sheet_tile(
+    task_id: str,
+    sheet_id: str,
+    cell_id: str,
+    *,
+    title: str,
+    description: str = "",
+    asset_type: str = "skill_icon",
+    category: str = "emergent",
+    starred: bool = True,
+    source: str = "cli",
+) -> dict:
+    item = create_item(
+        task_id,
+        asset_type=asset_type,
+        title=title,
+        description=description,
+        category=category,
+        extra_context=f"Created from grid sheet {sheet_id} {cell_id}",
+    )
+    sheet = promote_grid_sheet_tile(
+        task_id,
+        sheet_id,
+        cell_id,
+        target_item_id=item["item_id"],
+        starred=starred,
+        source=source,
+    )
+    tile = _find_tile(sheet, cell_id)
+    tile["created_item_id"] = item["item_id"]
+    save_sheet(task_id, sheet)
+    return sheet
+
+
 def backfill_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dict:
     sheet = load_sheet(task_id, sheet_id)
     tiles = sheet.get("tiles") or []
@@ -457,67 +663,16 @@ def backfill_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> 
         raise ValueError("当前 sheet 还没有可回填的 tile")
     backfilled = []
     for tile in tiles:
-        item_id = tile.get("item_id")
-        if not item_id:
+        if tile.get("review_status") != "selected" or tile.get("promoted_version"):
             continue
-        source_path = sheet_dir(task_id, sheet_id) / tile["image_path"]
-        if not source_path.exists():
-            continue
-        item = load_item(task_id, item_id)
-        destination_name = f"{sheet_id}_{tile['cell_id']}.png"
-        destination = item_dir(task_id, item_id) / "images" / destination_name
-        ensure_dir(destination.parent)
-        shutil.copyfile(source_path, destination)
-        payload = {
-            "step": STEP_IMAGE_GENERATION,
-            "provider": "grid_sheet",
-            "model": sheet.get("model"),
-            "created_at": utc_now(),
-            "input": {
-                "source": "grid_sheet",
-                "sheet_id": sheet_id,
-                "cell_id": tile["cell_id"],
-            },
-            "output": {
-                "candidates": [
-                    {
-                        "candidate_id": f"{sheet_id}_{tile['cell_id']}",
-                        "image_path": destination_name,
-                        "source": "grid_sheet",
-                        "sheet_id": sheet_id,
-                        "cell_id": tile["cell_id"],
-                        "row": tile.get("row"),
-                        "col": tile.get("col"),
-                    }
-                ]
-            },
-        }
-        version = write_artifact(task_id, item_id, STEP_IMAGE_GENERATION, payload)
-        item["current_versions"][STEP_IMAGE_GENERATION] = version
-        item["status"] = STATUS_IMAGE_GENERATED
-        save_item(task_id, item)
-        metrics = load_metrics(task_id, item_id)
-        metrics["status"] = STATUS_IMAGE_GENERATED
-        metrics["end_time"] = None
-        metrics["iterations"][STEP_IMAGE_GENERATION] += 1
-        save_metrics(task_id, item_id, metrics)
-        append_item_event(
-            task_id,
-            item_id,
-            {
-                "timestamp": utc_now(),
-                "source": source,
-                "action": "backfill_grid_sheet_tile",
-                "sheet_id": sheet_id,
-                "cell_id": tile["cell_id"],
-                "version": version,
-                "to": STATUS_IMAGE_GENERATED,
-            },
-        )
-        backfilled.append({"item_id": item_id, "cell_id": tile["cell_id"], "version": version})
+        result = _promote_grid_sheet_tile(task_id, sheet, tile, source=source)
+        if result:
+            backfilled.append(result)
 
+    if not backfilled:
+        raise ValueError("当前 sheet 没有已采纳且未回填的 tile")
     sheet["status"] = "backfilled"
-    sheet["backfilled"] = backfilled
+    sheet["backfilled"] = list(sheet.get("backfilled") or []) + backfilled
     save_sheet(task_id, sheet)
     refresh_task_summary(task_id)
     append_event(
