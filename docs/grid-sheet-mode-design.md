@@ -393,7 +393,7 @@ item 工作台只增加来源展示：
   - `backfill_grid_sheet`: 仅批量回填已 `selected` 且尚未 promoted 的 tile。
 - API 已提供 sheet list/show/plan/generate/poll/split/backfill，以及 tile review/promote/create-item。
 - CLI 已提供 `sheet` 分组和等价 flat commands。
-- Web 批次页在 `grid_sheet` 模式下显示 sheet 工作区，支持规划、提交、轮询、切图、真实切分线 overlay、tile 审图和采纳入池。
+- Web 批次页在 `grid_sheet` 模式下显示 Targets / Sheet Runs / Tile Review 三段式工作区，支持规划、提交、轮询、切图、真实切分线 overlay、tile 审图和采纳入池。
 - Item 工作台会展示候选来源，如 `sheet_v001 · r01c01`。
 
 当前不自动调用视觉判断，tile 质量筛选仍然回到 Web UI。
@@ -440,6 +440,7 @@ item 工作台只增加来源展示：
 | 2026-05-07 | grid sheet 规划改为 brief-first，并自动生成 emergent slots 填满 sheet 容量。 |
 | 2026-05-08 | grid sheet brief 补齐支持已有候选图 item，不再因 `image_generated` 状态阻断规划。 |
 | 2026-05-08 | 新增 [Grid Sheet Mode PRD](./grid-sheet-mode-prd.md)，用于指导下一阶段 UI 心智和验收标准。 |
+| 2026-05-08 | Web grid sheet 工作区改成 Targets / Sheet Runs / Tile Review 三列结构，减少 item 流程和 sheet 流程的心智混淆。 |
 
 ## Open Questions
 

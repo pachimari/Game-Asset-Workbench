@@ -233,6 +233,28 @@ export default function BatchDashboard({
     selectedSheet &&
       selectedSheet.tiles.some((tile) => tile.review_status === 'selected' && !tile.promoted_version),
   )
+  const sheetReviewCounts = selectedSheet
+    ? selectedSheet.tiles.reduce(
+        (counts, tile) => {
+          const status = tile.review_status || 'pending'
+          if (status === 'selected') counts.selected += 1
+          else if (status === 'rejected') counts.rejected += 1
+          else if (status === 'emergent') counts.emergent += 1
+          else counts.pending += 1
+          if (tile.promoted_version) counts.promoted += 1
+          return counts
+        },
+        { pending: 0, selected: 0, rejected: 0, emergent: 0, promoted: 0 },
+      )
+    : { pending: 0, selected: 0, rejected: 0, emergent: 0, promoted: 0 }
+  const selectedSheetBoundSlots = selectedSheet?.slots.filter((slot) => slot.kind !== 'emergent').length ?? 0
+  const selectedSheetEmergentSlots = selectedSheet?.slots.filter((slot) => slot.kind === 'emergent').length ?? 0
+  const selectedSheetBriefsReady =
+    selectedSheet?.brief_generation?.generated || selectedSheet?.brief_generation?.existing
+      ? (selectedSheet.brief_generation.generated ?? 0) + (selectedSheet.brief_generation.existing ?? 0)
+      : selectedSheetBoundSlots
+  const selectedTileSlot = selectedSheet?.slots.find((slot) => slot.cell_id === selectedTile?.cell_id)
+  const selectedTileLinkedItem = items.find((item) => item.item_id === selectedTileTarget)
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
   const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
@@ -681,41 +703,23 @@ export default function BatchDashboard({
 
       {gridSheetEnabled ? (
         <section className="mb-4 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
-          <div className="flex flex-col gap-3 border-b border-outline-variant/10 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Icon name="grid_view" className="text-[18px] text-primary" />
-                <span className="text-sm font-bold text-on-surface">网格切图</span>
-                <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
-                  {selectedSheet ? `${selectedSheet.sheet_id} · ${statusLabel(selectedSheet.status)}` : '未规划'}
-                </span>
-                <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
-                  {selectedSheetCells}
-                </span>
+          <div className="border-b border-outline-variant/10 px-4 py-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Icon name="grid_view" className="text-[18px] text-primary" />
+                  <span className="text-sm font-black text-on-surface">网格模式工作流</span>
+                  <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
+                    {selectedSheet ? `${selectedSheet.sheet_id} · ${statusLabel(selectedSheet.status)}` : '等待规划'}
+                  </span>
+                  <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
+                    {selectedSheetCells}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs leading-5 text-on-surface-variant">
+                  目标 item 先做意图识别，Sheet Run 负责整张图生成，Tile Review 决定哪些切片进入候选池。
+                </div>
               </div>
-              <div className="mt-1 text-xs text-on-surface-variant">
-                {selectedSheet
-                  ? `当前查看 ${selectedSheet.sheet_id}，目标 ${selectedSheet.input.item_count ?? 0} · 涌现 ${selectedSheet.input.emergent_item_count ?? 0} · 切片 ${selectedSheet.tiles.length} · 剩余 ${selectedSheet.input.remaining_item_count ?? 0}。新建规划会先补齐意图识别。`
-                  : `当前会按 ${gridRows * gridCols} 个槽位规划这一批次。`}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {sheets.length > 0 ? (
-                <select
-                  value={selectedSheet?.sheet_id ?? ''}
-                  onChange={(event) =>
-                    setSheetSelection({ taskId: task.task_id, sheetId: event.target.value || null })
-                  }
-                  className="rounded-xl border border-outline-variant/20 bg-surface-container px-3 py-2 text-xs font-bold text-on-surface outline-none transition-colors hover:bg-surface-container-high"
-                  aria-label="选择 Sheet 版本"
-                >
-                  {sheets.map((sheet) => (
-                    <option key={sheet.sheet_id} value={sheet.sheet_id}>
-                      {sheet.sheet_id} · {statusLabel(sheet.status)}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
               <button
                 type="button"
                 disabled={actionBusy || items.length === 0}
@@ -723,266 +727,495 @@ export default function BatchDashboard({
                 onClick={() => {
                   if (
                     sheets.length > 0 &&
-                    !window.confirm('这会新建一个 Sheet 规划版本，不会删除已有图片。继续吗？')
+                    !window.confirm('这会新建一个 Sheet Run，不会删除已有图片。继续吗？')
                   ) {
                     return
                   }
                   void onGridSheetAction('plan')
                 }}
-                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-black text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
               >
-                生成意图并规划
-              </button>
-              <button
-                type="button"
-                disabled={actionBusy || !selectedSheet || !canGenerateSheet}
-                onClick={() => selectedSheet && void onGridSheetAction('generate', selectedSheet.sheet_id)}
-                className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                提交出图
-              </button>
-              <button
-                type="button"
-                disabled={actionBusy || !selectedSheet || !canPollSheet}
-                onClick={() => selectedSheet && void onGridSheetAction('poll', selectedSheet.sheet_id)}
-                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                轮询结果
-              </button>
-              <button
-                type="button"
-                disabled={actionBusy || !selectedSheet || !canSplitSheet}
-                onClick={() => selectedSheet && void onGridSheetAction('split', selectedSheet.sheet_id)}
-                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                切图
-              </button>
-              <button
-                type="button"
-                disabled={actionBusy || !selectedSheet || !canBackfillSheet}
-                onClick={() => selectedSheet && void onGridSheetAction('backfill', selectedSheet.sheet_id)}
-                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                采纳选中
+                <Icon name="add" className="text-[16px]" />
+                生成意图并新建 Sheet Run
               </button>
             </div>
           </div>
 
-          {selectedSheet ? (
-            <div className="grid gap-0 lg:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.1fr)]">
-              <div className="border-b border-outline-variant/10 bg-surface-container px-4 py-4 lg:border-b-0 lg:border-r">
-                <div
-                  className="relative flex items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest"
-                  style={{ aspectRatio: sheetAspectRatio(selectedSheet.input.image_aspect_ratio) }}
-                >
-                  {selectedSheet.source_image_url ? (
-                    <>
-                      <img
-                        src={selectedSheet.source_image_url}
-                        alt={selectedSheet.sheet_id}
-                        className="h-full w-full object-contain"
-                      />
-                      <div
-                        className="absolute inset-0 grid"
-                        style={{
-                          gridTemplateColumns: `repeat(${selectedSheet.input.cols}, minmax(0, 1fr))`,
-                          gridTemplateRows: `repeat(${selectedSheet.input.rows}, minmax(0, 1fr))`,
-                        }}
+          <div className="grid gap-4 p-4 xl:grid-cols-[minmax(240px,0.52fr)_minmax(300px,0.64fr)_minmax(420px,1fr)]">
+              <section className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-primary">1 Targets</div>
+                    <h3 className="mt-1 text-base font-black text-on-surface">目标资产桶</h3>
+                  </div>
+                  <div className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
+                    {items.length} 个
+                  </div>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+                  这里不是逐张出图入口。每个目标会先被理解成 brief，再被放进 Sheet Run 的 bound slot。
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                    <div className="text-[11px] text-outline">目标数</div>
+                    <div className="text-lg font-black text-on-surface">{items.length}</div>
+                  </div>
+                  <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                    <div className="text-[11px] text-outline">本 Sheet brief</div>
+                    <div className="text-lg font-black text-on-surface">
+                      {selectedSheet ? `${selectedSheetBriefsReady}/${selectedSheetBoundSlots}` : '未规划'}
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                    <div className="text-[11px] text-outline">已出候选</div>
+                    <div className="text-lg font-black text-on-surface">{generatedItems}</div>
+                  </div>
+                  <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                    <div className="text-[11px] text-outline">星标图</div>
+                    <div className="text-lg font-black text-primary">{metrics?.starred_images ?? 0}</div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setModal('bulk')}
+                    className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high"
+                  >
+                    导入目标
+                  </button>
+                  <button
+                    onClick={() => {
+                      resetSingleDraft()
+                      setModal('single')
+                    }}
+                    className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high"
+                  >
+                    新增目标
+                  </button>
+                </div>
+                <div className="mt-3 grid max-h-64 gap-1.5 overflow-auto pr-1">
+                  {items.slice(0, 12).map((item) => (
+                    <button
+                      key={item.item_id}
+                      type="button"
+                      onClick={() => onSelectItem(item.item_id)}
+                      className={clsx(
+                        'grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-container-high',
+                        activeItemId === item.item_id ? 'bg-primary/12' : 'bg-surface-container-highest',
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-bold text-on-surface">
+                          {item.title || item.item_id}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] text-on-surface-variant">
+                          {item.description || item.extra_context || item.item_id}
+                        </span>
+                      </span>
+                      <span className={clsx('rounded-full border px-2 py-0.5 text-[10px] font-bold', statusBadge(item.status))}>
+                        {statusLabel(item.status)}
+                      </span>
+                    </button>
+                  ))}
+                  {items.length > 12 ? (
+                    <div className="px-2 py-1 text-[11px] text-on-surface-variant">
+                      还有 {items.length - 12} 个目标在下方条目概览中。
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-secondary">2 Sheet Runs</div>
+                    <h3 className="mt-1 text-base font-black text-on-surface">整张图实验</h3>
+                  </div>
+                  {sheets.length > 0 ? (
+                    <select
+                      value={selectedSheet?.sheet_id ?? ''}
+                      onChange={(event) =>
+                        setSheetSelection({ taskId: task.task_id, sheetId: event.target.value || null })
+                      }
+                      className="max-w-[190px] rounded-xl border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-xs font-bold text-on-surface outline-none"
+                      aria-label="选择 Sheet Run"
+                    >
+                      {sheets.map((sheet) => (
+                        <option key={sheet.sheet_id} value={sheet.sheet_id}>
+                          {sheet.sheet_id} · {statusLabel(sheet.status)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+                  Sheet Run 保存本轮 slot 规划、整图 prompt、provider 任务、source 图、切片和审图状态。
+                </p>
+                {selectedSheet ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-4 gap-2">
+                      <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                        <div className="text-[11px] text-outline">状态</div>
+                        <div className="truncate text-sm font-black text-on-surface">{statusLabel(selectedSheet.status)}</div>
+                      </div>
+                      <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                        <div className="text-[11px] text-outline">Bound</div>
+                        <div className="text-sm font-black text-on-surface">{selectedSheetBoundSlots}</div>
+                      </div>
+                      <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                        <div className="text-[11px] text-outline">涌现</div>
+                        <div className="text-sm font-black text-on-surface">{selectedSheetEmergentSlots}</div>
+                      </div>
+                      <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
+                        <div className="text-[11px] text-outline">剩余</div>
+                        <div className="text-sm font-black text-on-surface">{selectedSheet.input.remaining_item_count ?? 0}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={actionBusy || !canGenerateSheet}
+                        onClick={() => void onGridSheetAction('generate', selectedSheet.sheet_id)}
+                        className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
                       >
+                        提交出图
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionBusy || !canPollSheet}
+                        onClick={() => void onGridSheetAction('poll', selectedSheet.sheet_id)}
+                        className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        轮询结果
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionBusy || !canSplitSheet}
+                        onClick={() => void onGridSheetAction('split', selectedSheet.sheet_id)}
+                        className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        数学切图
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionBusy || !canBackfillSheet}
+                        onClick={() => void onGridSheetAction('backfill', selectedSheet.sheet_id)}
+                        className="rounded-xl border border-emerald-300/30 px-3 py-2 text-xs font-bold text-emerald-100 transition-colors hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        回填已采纳
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      <div className="min-w-0 rounded-lg bg-surface-container-highest px-3 py-3">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          Sheet Prompt
+                        </div>
+                        <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
+                          {selectedSheetPrompt || '尚未生成 prompt'}
+                        </pre>
+                      </div>
+                      <div className="min-w-0 rounded-lg bg-surface-container-highest px-3 py-3">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                          Slot Preview
+                        </div>
+                        <div className="mt-2 grid max-h-40 gap-1.5 overflow-auto">
+                          {selectedSheet.slots.slice(0, 16).map((slot) => (
+                            <div
+                              key={slot.cell_id}
+                              className="grid grid-cols-[74px_70px_minmax(0,1fr)] gap-2 rounded-lg bg-surface-container px-2 py-1.5 text-[11px]"
+                            >
+                              <span className="font-mono text-outline">{slot.cell_id}</span>
+                              <span className={slot.kind === 'emergent' ? 'text-amber-200' : 'text-primary'}>
+                                {slot.kind === 'emergent' ? 'emergent' : 'bound'}
+                              </span>
+                              <span className="truncate text-on-surface-variant">{slot.title || slot.item_id}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-3 rounded-lg bg-surface-container-highest px-3 py-4 text-sm leading-6 text-on-surface-variant">
+                    当前还没有 Sheet Run。先补齐批次目标，再点击上方按钮生成意图并规划第一张网格图。
+                  </div>
+                )}
+              </section>
+
+            <section className="min-w-0 rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
+              <div className="flex flex-col gap-3 border-b border-outline-variant/10 pb-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">3 Tile Review</div>
+                  <h3 className="mt-1 text-base font-black text-on-surface">切分审图层</h3>
+                  <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+                    蓝线是系统真实切分层。只有你采纳的 tile 会进入目标 item 候选池，并默认星标。
+                  </p>
+                </div>
+                {selectedSheet ? (
+                  <div className="grid grid-cols-5 gap-1.5 text-center text-[11px]">
+                    <div className="rounded-lg bg-surface-container-highest px-2 py-1.5">
+                      <div className="text-outline">待审</div>
+                      <div className="font-black text-on-surface">{sheetReviewCounts.pending}</div>
+                    </div>
+                    <div className="rounded-lg bg-surface-container-highest px-2 py-1.5">
+                      <div className="text-outline">采纳</div>
+                      <div className="font-black text-emerald-100">{sheetReviewCounts.selected}</div>
+                    </div>
+                    <div className="rounded-lg bg-surface-container-highest px-2 py-1.5">
+                      <div className="text-outline">废弃</div>
+                      <div className="font-black text-error">{sheetReviewCounts.rejected}</div>
+                    </div>
+                    <div className="rounded-lg bg-surface-container-highest px-2 py-1.5">
+                      <div className="text-outline">涌现</div>
+                      <div className="font-black text-amber-100">{sheetReviewCounts.emergent}</div>
+                    </div>
+                    <div className="rounded-lg bg-surface-container-highest px-2 py-1.5">
+                      <div className="text-outline">入池</div>
+                      <div className="font-black text-primary">{sheetReviewCounts.promoted}</div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {selectedSheet ? (
+                <div className="mt-3 grid gap-3 2xl:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)]">
+                  <div className="min-w-0">
+                    <div
+                      className="relative flex items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest"
+                      style={{ aspectRatio: sheetAspectRatio(selectedSheet.input.image_aspect_ratio) }}
+                    >
+                      {selectedSheet.source_image_url ? (
+                        <>
+                          <img
+                            src={selectedSheet.source_image_url}
+                            alt={selectedSheet.sheet_id}
+                            className="h-full w-full object-contain"
+                          />
+                          <div
+                            className="absolute inset-0 grid"
+                            style={{
+                              gridTemplateColumns: `repeat(${selectedSheet.input.cols}, minmax(0, 1fr))`,
+                              gridTemplateRows: `repeat(${selectedSheet.input.rows}, minmax(0, 1fr))`,
+                            }}
+                          >
+                            {selectedSheet.tiles.map((tile) => {
+                              const isActive = selectedTile?.cell_id === tile.cell_id
+                              return (
+                                <button
+                                  key={tile.cell_id}
+                                  type="button"
+                                  title={`${tile.cell_id} · ${reviewLabel(tile.review_status)}`}
+                                  onClick={() => setSelectedTileCellId(tile.cell_id)}
+                                  className={clsx(
+                                    'group relative border border-sky-300/70 bg-sky-300/0 transition-colors hover:bg-sky-300/12',
+                                    isActive && 'z-10 border-2 border-primary bg-primary/10',
+                                    tile.review_status === 'selected' && 'bg-emerald-300/12',
+                                    tile.review_status === 'rejected' && 'bg-error/16',
+                                    tile.review_status === 'emergent' && 'bg-amber-300/14',
+                                  )}
+                                >
+                                  <span
+                                    className={clsx(
+                                      'absolute left-1 top-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
+                                      reviewTone(tile.review_status),
+                                      isActive && 'opacity-100',
+                                    )}
+                                  >
+                                    {tile.cell_id}
+                                  </span>
+                                  {tile.promoted_version ? (
+                                    <span className="absolute right-1 top-1 rounded-full bg-emerald-300 px-1.5 py-0.5 text-[10px] font-black text-emerald-950">
+                                      ★
+                                    </span>
+                                  ) : null}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      ) : selectedSheetGenerating ? (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/25 bg-primary/10">
+                            <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-black text-on-surface">Sheet 正在生成中</div>
+                            <div className="mt-1 text-xs leading-5 text-on-surface-variant">
+                              已提交到 Provider，等待轮询结果。这里不展示假进度，只提示任务还在跑。
+                            </div>
+                          </div>
+                          {selectedSheet.async_job?.task_id ? (
+                            <div className="max-w-full truncate rounded-full border border-outline-variant/16 bg-surface-container px-2.5 py-1 font-mono text-[10px] text-outline">
+                              {selectedSheet.async_job.task_id}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-center">
+                          <Icon name="image" className="text-[34px] text-outline" />
+                          <div className="text-xs text-on-surface-variant">等待整张图生成</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedSheet.tiles.length > 0 ? (
+                      <div className="mt-3 grid max-h-64 grid-cols-6 gap-1.5 overflow-auto pr-1 md:grid-cols-8 xl:grid-cols-6 2xl:grid-cols-8">
                         {selectedSheet.tiles.map((tile) => {
-                          const isActive = selectedTile?.cell_id === tile.cell_id
+                          const toneDot =
+                            tile.review_status === 'selected'
+                              ? 'bg-emerald-300'
+                              : tile.review_status === 'rejected'
+                                ? 'bg-error'
+                                : tile.review_status === 'emergent'
+                                  ? 'bg-amber-300'
+                                  : 'bg-sky-300'
                           return (
                             <button
                               key={tile.cell_id}
                               type="button"
-                              title={`${tile.cell_id} · ${reviewLabel(tile.review_status)}`}
                               onClick={() => setSelectedTileCellId(tile.cell_id)}
                               className={clsx(
-                                'group relative border border-sky-300/70 bg-sky-300/0 transition-colors hover:bg-sky-300/12',
-                                isActive && 'z-10 border-2 border-primary bg-primary/10',
-                                tile.review_status === 'selected' && 'bg-emerald-300/12',
-                                tile.review_status === 'rejected' && 'bg-error/16',
-                                tile.review_status === 'emergent' && 'bg-amber-300/14',
+                                'group overflow-hidden rounded-lg border bg-surface-container-highest text-left transition-colors hover:border-primary/50',
+                                selectedTile?.cell_id === tile.cell_id ? 'border-primary' : 'border-outline-variant/12',
                               )}
+                              title={`${tile.cell_id} · ${reviewLabel(tile.review_status)}`}
                             >
-                              <span
-                                className={clsx(
-                                  'absolute left-1 top-1 rounded-full border px-1.5 py-0.5 text-[10px] font-bold opacity-0 shadow-sm transition-opacity group-hover:opacity-100',
-                                  reviewTone(tile.review_status),
-                                  isActive && 'opacity-100',
-                                )}
-                              >
-                                {tile.cell_id}
-                              </span>
-                              {tile.promoted_version ? (
-                                <span className="absolute right-1 top-1 rounded-full bg-emerald-300 px-1.5 py-0.5 text-[10px] font-black text-emerald-950">
-                                  ★
-                                </span>
-                              ) : null}
+                              {tile.image_url ? (
+                                <img src={tile.image_url} alt={tile.cell_id} className="aspect-square w-full object-cover" />
+                              ) : (
+                                <div className="flex aspect-square items-center justify-center">
+                                  <Icon name="image" className="text-[18px] text-outline" />
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between gap-1 px-1.5 py-1">
+                                <span className="truncate font-mono text-[10px] text-outline">{tile.cell_id}</span>
+                                <span className={clsx('h-2 w-2 rounded-full', toneDot)} />
+                              </div>
                             </button>
                           )
                         })}
                       </div>
-                    </>
-                  ) : selectedSheetGenerating ? (
-                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/25 bg-primary/10">
-                        <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-black text-on-surface">Sheet 正在生成中</div>
-                        <div className="mt-1 text-xs leading-5 text-on-surface-variant">
-                          已提交到 Provider，等待轮询结果。这里不展示假进度，只提示任务还在跑。
+                    ) : null}
+                  </div>
+
+                  <div className="min-w-0">
+                    {selectedTile ? (
+                      <div className="grid gap-3">
+                        <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+                          <div className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-highest">
+                            {selectedTile.image_url ? (
+                              <img src={selectedTile.image_url} alt={selectedTile.cell_id} className="aspect-square w-full object-cover" />
+                            ) : (
+                              <div className="flex aspect-square items-center justify-center">
+                                <Icon name="image" className="text-[28px] text-outline" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 rounded-xl bg-surface-container-highest px-3 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-sm font-black text-on-surface">{selectedTile.cell_id}</span>
+                              <span className={clsx('rounded-full border px-2 py-0.5 text-[11px] font-bold', reviewTone(selectedTile.review_status))}>
+                                {reviewLabel(selectedTile.review_status)}
+                              </span>
+                              <span className="rounded-full border border-outline-variant/16 px-2 py-0.5 text-[11px] text-on-surface-variant">
+                                {selectedTileSlot?.kind === 'emergent' ? 'emergent slot' : 'bound slot'}
+                              </span>
+                              {selectedTile.promoted_version ? (
+                                <span className="rounded-full border border-emerald-300/35 bg-emerald-300/12 px-2 py-0.5 text-[11px] font-bold text-emerald-100">
+                                  已入池并星标
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-3 text-xs leading-5 text-on-surface-variant">
+                              <div>规划标题：{selectedTileSlot?.title || selectedTile.item_id || '未命名槽位'}</div>
+                              <div>当前绑定：{selectedTileLinkedItem?.title || selectedTileTarget || '未绑定目标'}</div>
+                            </div>
+                            <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                              <select
+                                value={selectedTileTarget}
+                                onChange={(event) =>
+                                  setTileTargets((current) => ({ ...current, [selectedTile.cell_id]: event.target.value }))
+                                }
+                                className="min-w-0 rounded-xl border border-outline-variant/20 bg-surface-container px-3 py-2 text-xs font-bold text-on-surface outline-none"
+                              >
+                                <option value="">未绑定目标</option>
+                                {items.map((item) => (
+                                  <option key={item.item_id} value={item.item_id}>
+                                    {item.item_id} · {item.title || '未命名'}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                disabled={actionBusy || Boolean(selectedTile.promoted_version) || !selectedTileTarget}
+                                onClick={() =>
+                                  void onGridSheetTileAction('promote', selectedSheet.sheet_id, selectedTile.cell_id, {
+                                    targetItemId: selectedTileTarget,
+                                  })
+                                }
+                                className="rounded-xl bg-primary px-3 py-2 text-xs font-black text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                采纳并星标
+                              </button>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => void onGridSheetTileAction('pending', selectedSheet.sheet_id, selectedTile.cell_id)}
+                                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
+                              >
+                                退回待审
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => void onGridSheetTileAction('rejected', selectedSheet.sheet_id, selectedTile.cell_id)}
+                                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
+                              >
+                                废弃
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actionBusy}
+                                onClick={() => void onGridSheetTileAction('emergent', selectedSheet.sheet_id, selectedTile.cell_id)}
+                                className="rounded-xl border border-amber-300/30 px-3 py-2 text-xs font-bold text-amber-100 transition-colors hover:bg-amber-300/10 disabled:opacity-60"
+                              >
+                                标记涌现好图
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actionBusy || Boolean(selectedTile.promoted_version)}
+                                onClick={() => {
+                                  const suggested = `涌现图标 ${selectedTile.cell_id}`
+                                  const createdTitle = window.prompt('给这个涌现切片命名', suggested)
+                                  if (!createdTitle) return
+                                  void onGridSheetTileAction('create_item', selectedSheet.sheet_id, selectedTile.cell_id, {
+                                    title: createdTitle,
+                                    description: `从 ${selectedSheet.sheet_id} ${selectedTile.cell_id} 采纳的涌现技能图标。`,
+                                  })
+                                }}
+                                className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
+                              >
+                                创建目标并采纳
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      {selectedSheet.async_job?.task_id ? (
-                        <div className="max-w-full truncate rounded-full border border-outline-variant/16 bg-surface-container px-2.5 py-1 font-mono text-[10px] text-outline">
-                          {selectedSheet.async_job.task_id}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <Icon name="image" className="text-[34px] text-outline" />
-                  )}
-                </div>
-                <div className="mt-2 text-[11px] leading-5 text-on-surface-variant">
-                  蓝线是系统真实切分层，采纳时按这套边界切片入池。
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-lg bg-surface-container-highest px-2 py-2">
-                    <div className="text-[11px] text-outline">槽位</div>
-                    <div className="text-sm font-black text-on-surface">{selectedSheet.slots.length}</div>
-                  </div>
-                  <div className="rounded-lg bg-surface-container-highest px-2 py-2">
-                    <div className="text-[11px] text-outline">切片</div>
-                    <div className="text-sm font-black text-on-surface">{selectedSheet.tiles.length}</div>
-                  </div>
-                  <div className="rounded-lg bg-surface-container-highest px-2 py-2">
-                    <div className="text-[11px] text-outline">任务</div>
-                    <div className="text-sm font-black text-on-surface">
-                      {selectedSheetGenerating ? '运行中' : `${selectedSheet.async_job?.progress ?? 0}%`}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="min-w-0 px-4 py-4">
-                {selectedTile ? (
-                  <div className="mb-3 grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)]">
-                    <div className="overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container">
-                      {selectedTile.image_url ? (
-                        <img src={selectedTile.image_url} alt={selectedTile.cell_id} className="aspect-square w-full object-cover" />
-                      ) : (
-                        <div className="flex aspect-square items-center justify-center">
-                          <Icon name="image" className="text-[28px] text-outline" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-black text-on-surface">{selectedTile.cell_id}</span>
-                        <span className={clsx('rounded-full border px-2 py-0.5 text-[11px] font-bold', reviewTone(selectedTile.review_status))}>
-                          {reviewLabel(selectedTile.review_status)}
-                        </span>
-                        {selectedTile.promoted_version ? (
-                          <span className="rounded-full border border-emerald-300/35 bg-emerald-300/12 px-2 py-0.5 text-[11px] font-bold text-emerald-100">
-                            已入池并星标
-                          </span>
-                        ) : null}
+                    ) : (
+                      <div className="rounded-xl bg-surface-container-highest px-4 py-5 text-sm leading-6 text-on-surface-variant">
+                        切图后选择一个 tile，就能在这里做采纳、废弃、绑定目标或创建新目标。
                       </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-                        <select
-                          value={selectedTileTarget}
-                          onChange={(event) =>
-                            setTileTargets((current) => ({ ...current, [selectedTile.cell_id]: event.target.value }))
-                          }
-                          className="min-w-0 rounded-xl border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-xs font-bold text-on-surface outline-none"
-                        >
-                          <option value="">未绑定 item</option>
-                          {items.map((item) => (
-                            <option key={item.item_id} value={item.item_id}>
-                              {item.item_id} · {item.title || '未命名'}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={actionBusy || Boolean(selectedTile.promoted_version) || !selectedTileTarget}
-                          onClick={() =>
-                            void onGridSheetTileAction('promote', selectedSheet.sheet_id, selectedTile.cell_id, {
-                              targetItemId: selectedTileTarget,
-                            })
-                          }
-                          className="rounded-xl bg-primary px-3 py-2 text-xs font-black text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          采纳并星标
-                        </button>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={actionBusy}
-                          onClick={() => void onGridSheetTileAction('rejected', selectedSheet.sheet_id, selectedTile.cell_id)}
-                          className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
-                        >
-                          废弃
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actionBusy}
-                          onClick={() => void onGridSheetTileAction('emergent', selectedSheet.sheet_id, selectedTile.cell_id)}
-                          className="rounded-xl border border-amber-300/30 px-3 py-2 text-xs font-bold text-amber-100 transition-colors hover:bg-amber-300/10 disabled:opacity-60"
-                        >
-                          标记涌现好图
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actionBusy || Boolean(selectedTile.promoted_version)}
-                          onClick={() => {
-                            const suggested = `涌现图标 ${selectedTile.cell_id}`
-                            const createdTitle = window.prompt('给这个涌现切片命名', suggested)
-                            if (!createdTitle) return
-                            void onGridSheetTileAction('create_item', selectedSheet.sheet_id, selectedTile.cell_id, {
-                              title: createdTitle,
-                              description: `从 ${selectedSheet.sheet_id} ${selectedTile.cell_id} 采纳的涌现技能图标。`,
-                            })
-                          }}
-                          className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:opacity-60"
-                        >
-                          创建 item 并采纳
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                <div className="grid gap-3 xl:grid-cols-2">
-                  <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                      Sheet Prompt
-                    </div>
-                    <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
-                      {selectedSheetPrompt || '尚未生成 prompt'}
-                    </pre>
-                  </div>
-                  <div className="min-w-0 rounded-lg border border-outline-variant/12 bg-surface-container px-3 py-3">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                      最近槽位
-                    </div>
-                    <div className="mt-2 grid max-h-52 gap-1.5 overflow-auto">
-                      {selectedSheet.slots.slice(0, 12).map((slot) => (
-                        <div
-                          key={slot.cell_id}
-                          className="grid grid-cols-[74px_minmax(0,1fr)] gap-2 rounded-lg bg-surface-container-highest px-2 py-1.5 text-[11px]"
-                        >
-                          <span className="font-mono text-outline">{slot.cell_id}</span>
-                          <span className="truncate text-on-surface-variant">{slot.title || slot.item_id}</span>
-                        </div>
-                      ))}
-                    </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            </div>
-          ) : null}
+              ) : (
+                <div className="mt-3 rounded-xl bg-surface-container-highest px-4 py-8 text-center text-sm leading-6 text-on-surface-variant">
+                  还没有 Sheet Run。先在左侧确认目标，再生成意图并新建 Sheet Run。
+                </div>
+              )}
+            </section>
+          </div>
         </section>
       ) : null}
 
