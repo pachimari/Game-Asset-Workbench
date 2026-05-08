@@ -423,6 +423,8 @@ export function useWorkbenchController() {
         right: number
         bottom: number
       }
+      xLinesPercent?: number[]
+      yLinesPercent?: number[]
     },
   ) {
     if (!activeTaskId) return
@@ -441,6 +443,8 @@ export function useWorkbenchController() {
       } else if (sheetId && action === 'split') {
         response = await splitTaskGridSheet(activeTaskId, sheetId, {
           crop_box_percent: options?.cropBoxPercent,
+          x_lines_percent: options?.xLinesPercent,
+          y_lines_percent: options?.yLinesPercent,
         })
       } else if (sheetId && action === 'backfill') {
         response = await backfillTaskGridSheet(activeTaskId, sheetId)

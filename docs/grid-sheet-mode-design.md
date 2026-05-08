@@ -120,14 +120,14 @@ task
 - `grid_gap`: 格子间距像素，用于切图校准。
 - `grid_cell_count`: 派生值，等于 `grid_rows * grid_cols`，用于 UI 展示和 packer 规划。
 
-第一版可以只支持矩形等分切图。后续再支持非等距网格、自动检测分隔线、手动拖拽切线。
+第一版只支持矩形网格切图；后续再支持自动检测分隔线和非矩形网格。
 
 当前切图校准策略：
 
 - 默认按整张 source image 做 rows x cols 等分。
-- 如果模型画出的格子和系统蓝线不对齐，用户可以调整 crop box，再在该外框内等分重切。
+- 如果模型画出的格子和系统蓝线不对齐，用户可以拖动外框和中间每条 x/y 切线，再按当前切线重切。
 - `split_config` 需要保存 crop box、source image size、x/y line positions，保证同一次审图可复现。
-- V1 先做外框等距重切；自由逐条切线、自动边界检测后续再做。
+- crop box 由第一条和最后一条 x/y line 派生；中间 line 允许非等距，以处理模型输出的局部偏移。
 
 ## Storage Layout
 
@@ -453,6 +453,7 @@ item 工作台只增加来源展示：
 | 2026-05-08 | 后续产品心智按 Targets / Sheet Runs / Tile Review 三个区组织。 | item 是目标资产桶和最终候选池，sheet run 才承载整张网格生成、切分和审图中间态。 |
 | 2026-05-08 | sheet 容量不等于 item 数量；emergent slots 不预创建 item，涌现好图进入批次级涌现池。 | 用户可能只要 10 个明确图标，却用 6x6 生成 36 个槽位；把 26 个空余槽位膨胀成 item 会让产品心智失真。 |
 | 2026-05-08 | Sheet Review 需要支持 crop box 调整后等距重切。 | 图像模型经常画出“看起来像网格”的装饰边界，但它不保证和数学裁切线对齐；校准层比只靠 prompt 更可靠。 |
+| 2026-05-08 | Sheet Review 支持逐条拖动 x/y 切线，外框也作为可拖动切线保存。 | 只调外框无法修正某一行或某一列的局部偏移；真实切片必须以用户校准后的数学线为准。 |
 
 ## Update Log
 
@@ -470,16 +471,16 @@ item 工作台只增加来源展示：
 | 2026-05-08 | Web grid sheet 工作区改成 Targets / Sheet Runs / Tile Review 三列结构，减少 item 流程和 sheet 流程的心智混淆。 |
 | 2026-05-08 | 更新 PRD 和设计记录：固定目标 item 数量与 sheet 容量拆开，新增批次级涌现池作为涌现 tile 的归属。 |
 | 2026-05-08 | 新增切图校准要求：prompt 禁止装饰网格倾向，UI 支持 crop box 外框调整和重切。 |
+| 2026-05-08 | 切图校准从外框等距升级为完整 x/y line 调整：前端可拖动每条线，API/CLI/存储保存 `x_lines_percent` 与 `y_lines_percent`。 |
 
 ## Open Questions
 
 后续迭代再确认：
 
 1. 是否加入自动多 sheet 编排，一次覆盖超过 `rows * cols` 的整批 item。
-2. 是否加入 Web 上可拖拽的切线调整和 tile overlay。
+2. 是否加入自动识别模型边界并吸附切线，减少人工拖动成本。
 3. 是否加入 sheet 级 prompt 人工编辑 / 审批版本。
 4. 是否升级 candidate-level 星标，让同一 artifact 下多个 candidate 能独立星标。
 5. grid 模式 UI 是否把 `item` 展示为 `target`，以降低与旧单图流程的心智冲突。
 6. 涌现池是否作为 Tile Review 内的筛选面板，还是在批次页作为独立第四区。
 7. 涌现池条目需要哪些最小元数据，才能顺畅升级成正式 item。
-8. 是否需要在 crop box 之外继续支持逐条 x/y 线自由拖动。

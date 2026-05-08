@@ -409,7 +409,7 @@ COMMAND_SPECS = {
     "sheet-show": {
         "group": "sheet",
         "description": "Show one grid sheet payload",
-        "args": ["task_id", "sheet_id", "--crop-left-percent", "--crop-top-percent", "--crop-right-percent", "--crop-bottom-percent"],
+        "args": ["task_id", "sheet_id"],
         "supports_json": True,
         "output": {"type": "object"},
         "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
@@ -441,7 +441,16 @@ COMMAND_SPECS = {
     "sheet-split": {
         "group": "sheet",
         "description": "Split a generated grid sheet into item tiles",
-        "args": ["task_id", "sheet_id"],
+        "args": [
+            "task_id",
+            "sheet_id",
+            "--crop-left-percent",
+            "--crop-top-percent",
+            "--crop-right-percent",
+            "--crop-bottom-percent",
+            "--x-lines-percent",
+            "--y-lines-percent",
+        ],
         "supports_json": True,
         "output": {"type": "object", "keys": ["sheet_id", "status", "tiles"]},
         "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
@@ -527,6 +536,12 @@ def _sheet_crop_box_percent_from_args(args: argparse.Namespace) -> dict | None:
         "right": 100 if values["right"] is None else values["right"],
         "bottom": 100 if values["bottom"] is None else values["bottom"],
     }
+
+
+def _parse_percent_lines(raw_value: str | None) -> list[float] | None:
+    if not raw_value:
+        return None
+    return [float(value.strip()) for value in raw_value.split(",") if value.strip()]
 
 
 def _emit(data, *, as_json: bool) -> None:
@@ -1139,6 +1154,8 @@ def build_parser() -> argparse.ArgumentParser:
     sheet_split.add_argument("--crop-top-percent", type=float)
     sheet_split.add_argument("--crop-right-percent", type=float)
     sheet_split.add_argument("--crop-bottom-percent", type=float)
+    sheet_split.add_argument("--x-lines-percent", help="Comma-separated x line percentages, length cols+1")
+    sheet_split.add_argument("--y-lines-percent", help="Comma-separated y line percentages, length rows+1")
     sheet_backfill = subparsers.add_parser("sheet-backfill", help="Backfill split tiles into item candidate pools", parents=[common_parser])
     sheet_backfill.add_argument("task_id")
     sheet_backfill.add_argument("sheet_id")
@@ -1357,6 +1374,8 @@ def build_parser() -> argparse.ArgumentParser:
     sheet_split_group.add_argument("--crop-top-percent", type=float)
     sheet_split_group.add_argument("--crop-right-percent", type=float)
     sheet_split_group.add_argument("--crop-bottom-percent", type=float)
+    sheet_split_group.add_argument("--x-lines-percent", help="Comma-separated x line percentages, length cols+1")
+    sheet_split_group.add_argument("--y-lines-percent", help="Comma-separated y line percentages, length rows+1")
     sheet_backfill_group = sheet_subparsers.add_parser("backfill", help="Backfill split tiles into item candidate pools", parents=[common_parser])
     sheet_backfill_group.set_defaults(command="sheet-backfill")
     sheet_backfill_group.add_argument("task_id")
@@ -1794,6 +1813,8 @@ def main(argv: list[str] | None = None) -> int:
                     args.task_id,
                     args.sheet_id,
                     crop_box_percent=_sheet_crop_box_percent_from_args(args),
+                    x_lines_percent=_parse_percent_lines(getattr(args, "x_lines_percent", None)),
+                    y_lines_percent=_parse_percent_lines(getattr(args, "y_lines_percent", None)),
                 ),
                 as_json=args.json,
             )

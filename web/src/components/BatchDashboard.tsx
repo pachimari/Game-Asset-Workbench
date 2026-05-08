@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useState, type PointerEvent } from 'react'
 import type { GridSheetSummary, ItemSummary, TaskSummary } from '../types'
 import { buildImportTemplate, parseImportedItems } from '../lib/itemImport'
 import { statusLabel } from '../lib/display'
@@ -10,6 +10,11 @@ type CropBoxPercent = {
   top: number
   right: number
   bottom: number
+}
+
+type GridLinesPercent = {
+  x: number[]
+  y: number[]
 }
 
 function stageTone(status: string) {
@@ -117,6 +122,53 @@ function cropBoxStyle(box: CropBoxPercent) {
   }
 }
 
+function equalLines(count: number, start = 0, end = 100) {
+  return Array.from({ length: count + 1 }, (_, index) => start + ((end - start) * index) / count)
+}
+
+function clampLine(lines: number[], index: number, value: number) {
+  const next = [...lines]
+  const minGap = 0.2
+  const min = index === 0 ? 0 : next[index - 1] + minGap
+  const max = index === next.length - 1 ? 100 : next[index + 1] - minGap
+  next[index] = Math.min(Math.max(value, min), max)
+  return next
+}
+
+function linesFromSheet(sheet: GridSheetSummary | undefined): GridLinesPercent {
+  const crop = cropBoxFromSheet(sheet)
+  const cols = sheet?.input.cols ?? 1
+  const rows = sheet?.input.rows ?? 1
+  const savedX = sheet?.split_config?.x_lines_percent
+  const savedY = sheet?.split_config?.y_lines_percent
+  return {
+    x: savedX && savedX.length === cols + 1 ? savedX.map(Number) : equalLines(cols, crop.left, crop.right),
+    y: savedY && savedY.length === rows + 1 ? savedY.map(Number) : equalLines(rows, crop.top, crop.bottom),
+  }
+}
+
+function cropBoxFromLines(lines: GridLinesPercent): CropBoxPercent {
+  return clampCropBox({
+    left: lines.x[0] ?? 0,
+    top: lines.y[0] ?? 0,
+    right: lines.x[lines.x.length - 1] ?? 100,
+    bottom: lines.y[lines.y.length - 1] ?? 100,
+  })
+}
+
+function cellBoxStyle(lines: GridLinesPercent, row: number, col: number) {
+  const left = lines.x[col - 1] ?? 0
+  const right = lines.x[col] ?? left
+  const top = lines.y[row - 1] ?? 0
+  const bottom = lines.y[row] ?? top
+  return {
+    left: `${left}%`,
+    top: `${top}%`,
+    width: `${Math.max(0, right - left)}%`,
+    height: `${Math.max(0, bottom - top)}%`,
+  }
+}
+
 const IMAGE_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9']
 const IMAGE_RESOLUTION_OPTIONS = ['auto', '512', '1K', '2K', '4K']
 const ASSET_TYPE_OPTIONS = [
@@ -176,6 +228,8 @@ export default function BatchDashboard({
     sheetId?: string,
     options?: {
       cropBoxPercent?: CropBoxPercent
+      xLinesPercent?: number[]
+      yLinesPercent?: number[]
     },
   ) => Promise<void>
   onGridSheetTileAction: (
@@ -241,7 +295,12 @@ export default function BatchDashboard({
   }>({ taskId: task.task_id, sheetId: sheets[0]?.sheet_id ?? null })
   const [selectedTileCellId, setSelectedTileCellId] = useState<string | null>(null)
   const [tileTargets, setTileTargets] = useState<Record<string, string>>({})
-  const [cropDrafts, setCropDrafts] = useState<Record<string, CropBoxPercent>>({})
+  const [lineDrafts, setLineDrafts] = useState<Record<string, GridLinesPercent>>({})
+  const [dragLine, setDragLine] = useState<{
+    sheetId: string
+    axis: 'x' | 'y'
+    index: number
+  } | null>(null)
 
   const completed = task.items_summary?.completed ?? 0
   const inProgress = task.items_summary?.in_progress ?? 0
@@ -257,9 +316,10 @@ export default function BatchDashboard({
       ? sheetSelection.sheetId
       : sheets[0]?.sheet_id
   const selectedSheet = sheets.find((sheet) => sheet.sheet_id === selectedSheetId) ?? sheets[0]
-  const selectedSheetCrop = selectedSheet
-    ? (cropDrafts[selectedSheet.sheet_id] ?? cropBoxFromSheet(selectedSheet))
-    : { left: 0, top: 0, right: 100, bottom: 100 }
+  const selectedSheetLines = selectedSheet
+    ? (lineDrafts[selectedSheet.sheet_id] ?? linesFromSheet(selectedSheet))
+    : { x: [0, 100], y: [0, 100] }
+  const selectedSheetCrop = cropBoxFromLines(selectedSheetLines)
   const selectedTile =
     (selectedTileCellId && selectedSheet?.tiles.find((tile) => tile.cell_id === selectedTileCellId)) ||
     selectedSheet?.tiles[0] ||
@@ -299,15 +359,51 @@ export default function BatchDashboard({
       : selectedSheetBoundSlots
   const selectedTileSlot = selectedSheet?.slots.find((slot) => slot.cell_id === selectedTile?.cell_id)
   const selectedTileLinkedItem = items.find((item) => item.item_id === selectedTileTarget)
-  function updateSelectedSheetCrop(partial: Partial<CropBoxPercent>) {
+  function updateSelectedSheetLine(axis: 'x' | 'y', index: number, value: number) {
     if (!selectedSheet) return
-    setCropDrafts((current) => ({
+    setLineDrafts((current) => {
+      const currentLines = current[selectedSheet.sheet_id] ?? linesFromSheet(selectedSheet)
+      return {
+        ...current,
+        [selectedSheet.sheet_id]: {
+          x: axis === 'x' ? clampLine(currentLines.x, index, value) : currentLines.x,
+          y: axis === 'y' ? clampLine(currentLines.y, index, value) : currentLines.y,
+        },
+      }
+    })
+  }
+
+  function resetSelectedSheetLines() {
+    if (!selectedSheet) return
+    setLineDrafts((current) => ({
       ...current,
-      [selectedSheet.sheet_id]: clampCropBox({
-        ...selectedSheetCrop,
-        ...partial,
-      }),
+      [selectedSheet.sheet_id]: {
+        x: equalLines(selectedSheet.input.cols, 0, 100),
+        y: equalLines(selectedSheet.input.rows, 0, 100),
+      },
     }))
+  }
+
+  function handleCutLinePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!selectedSheet || !dragLine || dragLine.sheetId !== selectedSheet.sheet_id) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const value =
+      dragLine.axis === 'x'
+        ? ((event.clientX - rect.left) / rect.width) * 100
+        : ((event.clientY - rect.top) / rect.height) * 100
+    updateSelectedSheetLine(dragLine.axis, dragLine.index, value)
+  }
+
+  function handleCutLinePointerDown(
+    event: PointerEvent<HTMLButtonElement>,
+    axis: 'x' | 'y',
+    index: number,
+  ) {
+    if (!selectedSheet) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDragLine({ sheetId: selectedSheet.sheet_id, axis, index })
   }
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
@@ -947,6 +1043,8 @@ export default function BatchDashboard({
                         onClick={() =>
                           void onGridSheetAction('split', selectedSheet.sheet_id, {
                             cropBoxPercent: selectedSheetCrop,
+                            xLinesPercent: selectedSheetLines.x,
+                            yLinesPercent: selectedSheetLines.y,
                           })
                         }
                         className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
@@ -1045,52 +1143,63 @@ export default function BatchDashboard({
                               Cut Lines
                             </div>
                             <div className="mt-1 text-xs leading-5 text-on-surface-variant">
-                              调整蓝色外框，系统会在外框内等分 {selectedSheet.input.rows}×{selectedSheet.input.cols} 后重新切图。
+                              拖动图上的蓝色线可以校准外框和中间切线；下方滑杆用于精调外框。
                             </div>
                           </div>
                           <button
                             type="button"
                             disabled={actionBusy}
-                            onClick={() =>
-                              setCropDrafts((current) => ({
-                                ...current,
-                                [selectedSheet.sheet_id]: { left: 0, top: 0, right: 100, bottom: 100 },
-                              }))
-                            }
+                            onClick={resetSelectedSheetLines}
                             className="rounded-lg border border-outline-variant/20 px-2.5 py-1.5 text-[11px] font-bold text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
                           >
                             重置全图
                           </button>
                         </div>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                          {[
-                            ['left', '左边', 0, Math.min(95, selectedSheetCrop.right - 5)],
-                            ['right', '右边', Math.max(5, selectedSheetCrop.left + 5), 100],
-                            ['top', '上边', 0, Math.min(95, selectedSheetCrop.bottom - 5)],
-                            ['bottom', '下边', Math.max(5, selectedSheetCrop.top + 5), 100],
-                          ].map(([key, label, min, max]) => (
-                            <label key={key} className="grid gap-1 text-[11px] font-bold text-on-surface-variant">
-                              <span className="flex items-center justify-between">
-                                <span>{label}</span>
-                                <span className="font-mono text-outline">
-                                  {Math.round(selectedSheetCrop[key as keyof CropBoxPercent])}%
+                          {([
+                            ['x', 0, '左边', 0, Math.min(95, selectedSheetCrop.right - 5)],
+                            [
+                              'x',
+                              selectedSheetLines.x.length - 1,
+                              '右边',
+                              Math.max(5, selectedSheetCrop.left + 5),
+                              100,
+                            ],
+                            ['y', 0, '上边', 0, Math.min(95, selectedSheetCrop.bottom - 5)],
+                            [
+                              'y',
+                              selectedSheetLines.y.length - 1,
+                              '下边',
+                              Math.max(5, selectedSheetCrop.top + 5),
+                              100,
+                            ],
+                          ] as Array<['x' | 'y', number, string, number, number]>).map(([axis, index, label, min, max]) => {
+                            const value =
+                              axis === 'x'
+                                ? selectedSheetLines.x[index]
+                                : selectedSheetLines.y[index]
+                            return (
+                              <label key={`${axis}-${index}`} className="grid gap-1 text-[11px] font-bold text-on-surface-variant">
+                                <span className="flex items-center justify-between">
+                                  <span>{label}</span>
+                                  <span className="font-mono text-outline">
+                                    {Math.round(value)}%
+                                  </span>
                                 </span>
-                              </span>
-                              <input
-                                type="range"
-                                min={min as number}
-                                max={max as number}
-                                step={0.1}
-                                value={selectedSheetCrop[key as keyof CropBoxPercent]}
-                                onChange={(event) =>
-                                  updateSelectedSheetCrop({
-                                    [key]: Number(event.target.value),
-                                  } as Partial<CropBoxPercent>)
-                                }
-                                className="w-full accent-primary"
-                              />
-                            </label>
-                          ))}
+                                <input
+                                  type="range"
+                                  min={min}
+                                  max={max}
+                                  step={0.1}
+                                  value={value}
+                                  onChange={(event) =>
+                                    updateSelectedSheetLine(axis, index, Number(event.target.value))
+                                  }
+                                  className="w-full accent-primary"
+                                />
+                              </label>
+                            )
+                          })}
                         </div>
                       </div>
                     ) : null}
@@ -1106,13 +1215,15 @@ export default function BatchDashboard({
                             className="h-full w-full object-contain"
                           />
                           <div
-                            className="absolute grid border-2 border-sky-300/90 shadow-[0_0_0_9999px_rgba(2,132,199,0.12)]"
-                            style={{
-                              ...cropBoxStyle(selectedSheetCrop),
-                              gridTemplateColumns: `repeat(${selectedSheet.input.cols}, minmax(0, 1fr))`,
-                              gridTemplateRows: `repeat(${selectedSheet.input.rows}, minmax(0, 1fr))`,
-                            }}
+                            className="absolute inset-0 touch-none"
+                            onPointerMove={handleCutLinePointerMove}
+                            onPointerUp={() => setDragLine(null)}
+                            onPointerCancel={() => setDragLine(null)}
                           >
+                            <div
+                              className="pointer-events-none absolute border-2 border-sky-300/90 shadow-[0_0_0_9999px_rgba(2,132,199,0.12)]"
+                              style={cropBoxStyle(selectedSheetCrop)}
+                            />
                             {selectedSheet.tiles.map((tile) => {
                               const isActive = selectedTile?.cell_id === tile.cell_id
                               return (
@@ -1121,9 +1232,10 @@ export default function BatchDashboard({
                                   type="button"
                                   title={`${tile.cell_id} · ${reviewLabel(tile.review_status)}`}
                                   onClick={() => setSelectedTileCellId(tile.cell_id)}
+                                  style={cellBoxStyle(selectedSheetLines, tile.row, tile.col)}
                                   className={clsx(
-                                    'group relative border border-sky-300/70 bg-sky-300/0 transition-colors hover:bg-sky-300/12',
-                                    isActive && 'z-10 border-2 border-primary bg-primary/10',
+                                    'group absolute z-10 border border-sky-300/60 bg-sky-300/0 transition-colors hover:bg-sky-300/12',
+                                    isActive && 'z-20 border-2 border-primary bg-primary/10',
                                     tile.review_status === 'selected' && 'bg-emerald-300/12',
                                     tile.review_status === 'rejected' && 'bg-error/16',
                                     tile.review_status === 'emergent' && 'bg-amber-300/14',
@@ -1146,6 +1258,42 @@ export default function BatchDashboard({
                                 </button>
                               )
                             })}
+                            {selectedSheetLines.x.map((left, index) => (
+                              <button
+                                key={`x-${index}`}
+                                type="button"
+                                aria-label={`拖动第 ${index} 条纵向切线`}
+                                title={`纵向切线 ${index}: ${left.toFixed(1)}%`}
+                                onPointerDown={(event) => handleCutLinePointerDown(event, 'x', index)}
+                                className={clsx(
+                                  'absolute z-30 -translate-x-1/2 cursor-ew-resize rounded-full border border-sky-100/80 bg-sky-300/85 shadow-[0_0_12px_rgba(56,189,248,0.45)] transition-colors hover:bg-primary',
+                                  index === 0 || index === selectedSheetLines.x.length - 1 ? 'w-3' : 'w-2',
+                                )}
+                                style={{
+                                  left: `${left}%`,
+                                  top: `${selectedSheetCrop.top}%`,
+                                  height: `${selectedSheetCrop.bottom - selectedSheetCrop.top}%`,
+                                }}
+                              />
+                            ))}
+                            {selectedSheetLines.y.map((top, index) => (
+                              <button
+                                key={`y-${index}`}
+                                type="button"
+                                aria-label={`拖动第 ${index} 条横向切线`}
+                                title={`横向切线 ${index}: ${top.toFixed(1)}%`}
+                                onPointerDown={(event) => handleCutLinePointerDown(event, 'y', index)}
+                                className={clsx(
+                                  'absolute z-30 -translate-y-1/2 cursor-ns-resize rounded-full border border-sky-100/80 bg-sky-300/85 shadow-[0_0_12px_rgba(56,189,248,0.45)] transition-colors hover:bg-primary',
+                                  index === 0 || index === selectedSheetLines.y.length - 1 ? 'h-3' : 'h-2',
+                                )}
+                                style={{
+                                  top: `${top}%`,
+                                  left: `${selectedSheetCrop.left}%`,
+                                  width: `${selectedSheetCrop.right - selectedSheetCrop.left}%`,
+                                }}
+                              />
+                            ))}
                           </div>
                         </>
                       ) : selectedSheetGenerating ? (

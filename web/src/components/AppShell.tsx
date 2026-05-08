@@ -102,6 +102,8 @@ type Props = {
         right: number
         bottom: number
       }
+      xLinesPercent?: number[]
+      yLinesPercent?: number[]
     },
   ) => Promise<void>
   onGridSheetTileAction: (

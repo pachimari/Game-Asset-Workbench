@@ -106,6 +106,8 @@ export async function splitTaskGridSheet(
       right: number
       bottom: number
     }
+    x_lines_percent?: number[]
+    y_lines_percent?: number[]
   },
 ) {
   return request<{ sheet: GridSheetSummary }>(`/tasks/${taskId}/sheets/${sheetId}/split`, {

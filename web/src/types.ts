@@ -221,6 +221,8 @@ export type GridSheetSummary = {
     }
     x_lines?: number[]
     y_lines?: number[]
+    x_lines_percent?: number[]
+    y_lines_percent?: number[]
   }
   backfilled?: Array<Record<string, unknown>>
 }

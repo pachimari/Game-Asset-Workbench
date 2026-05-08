@@ -304,6 +304,29 @@ def _line_positions(start: int, end: int, count: int) -> list[int]:
     return [start + round(span * index / count) for index in range(count + 1)]
 
 
+def _percent_line_positions(lines_percent: object, *, size: int, count: int) -> list[int] | None:
+    if not isinstance(lines_percent, list) or len(lines_percent) != count + 1:
+        return None
+    min_gap = 0.1
+    values: list[float] = []
+    for index, raw_value in enumerate(lines_percent):
+        minimum = values[-1] + min_gap if values else 0.0
+        maximum = 100.0 - min_gap * (count - index)
+        value = _clamp_float(raw_value, minimum=minimum, maximum=maximum, default=minimum)
+        values.append(value)
+
+    positions: list[int] = []
+    for index, value in enumerate(values):
+        minimum = positions[-1] + 1 if positions else 0
+        maximum = size - (count - index)
+        positions.append(_clamp_int(size * value / 100.0, minimum=minimum, maximum=maximum, default=minimum))
+    return positions
+
+
+def _lines_percent(lines: list[int], *, size: int) -> list[float]:
+    return [round(value / size * 100, 3) for value in lines]
+
+
 def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) -> dict:
     rows = int(runtime.get("grid_rows", 8))
     cols = int(runtime.get("grid_cols", 8))
@@ -587,6 +610,8 @@ def split_grid_sheet(
     sheet_id: str,
     *,
     crop_box_percent: dict | None = None,
+    x_lines_percent: list | None = None,
+    y_lines_percent: list | None = None,
     source: str = "cli",
 ) -> dict:
     sheet = load_sheet(task_id, sheet_id)
@@ -623,12 +648,20 @@ def split_grid_sheet(
             height=height,
             fallback=legacy_crop_box,
         )
+        requested_x_lines = _percent_line_positions(x_lines_percent, size=width, count=cols)
+        requested_y_lines = _percent_line_positions(y_lines_percent, size=height, count=rows)
         usable_width = crop_box["right"] - crop_box["left"] - gap * (cols - 1)
         usable_height = crop_box["bottom"] - crop_box["top"] - gap * (rows - 1)
         if usable_width <= 0 or usable_height <= 0:
             raise ValueError("切图参数超过图片尺寸")
-        x_lines = _line_positions(crop_box["left"], crop_box["right"], cols)
-        y_lines = _line_positions(crop_box["top"], crop_box["bottom"], rows)
+        x_lines = requested_x_lines or _line_positions(crop_box["left"], crop_box["right"], cols)
+        y_lines = requested_y_lines or _line_positions(crop_box["top"], crop_box["bottom"], rows)
+        crop_box = {
+            "left": x_lines[0],
+            "top": y_lines[0],
+            "right": x_lines[-1],
+            "bottom": y_lines[-1],
+        }
         slot_by_cell = {slot["cell_id"]: slot for slot in sheet.get("slots", [])}
         for row in range(1, rows + 1):
             for col in range(1, cols + 1):
@@ -674,6 +707,8 @@ def split_grid_sheet(
         "source_image_size": {"width": width, "height": height},
         "x_lines": x_lines,
         "y_lines": y_lines,
+        "x_lines_percent": _lines_percent(x_lines, size=width),
+        "y_lines_percent": _lines_percent(y_lines, size=height),
     }
     sheet["tiles"] = tiles
     save_sheet(task_id, sheet)

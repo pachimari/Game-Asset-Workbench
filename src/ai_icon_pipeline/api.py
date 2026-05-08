@@ -220,6 +220,8 @@ class SheetActionPayload(BaseModel):
 
 class SheetSplitPayload(SheetActionPayload):
     crop_box_percent: Optional[dict[str, float]] = None
+    x_lines_percent: Optional[list[float]] = None
+    y_lines_percent: Optional[list[float]] = None
 
 
 class SheetTileReviewPayload(BaseModel):
@@ -820,6 +822,8 @@ def create_app() -> FastAPI:
                 task_id,
                 sheet_id,
                 crop_box_percent=payload.crop_box_percent,
+                x_lines_percent=payload.x_lines_percent,
+                y_lines_percent=payload.y_lines_percent,
                 source=payload.source,
             )
             return {"sheet": _sheet_payload(task_id, sheet)}
