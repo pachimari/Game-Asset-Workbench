@@ -29,6 +29,7 @@
 设计、决策记录和更新记录见：
 
 - [docs/grid-sheet-mode-design.md](./docs/grid-sheet-mode-design.md)
+- [docs/grid-sheet-mode-prd.md](./docs/grid-sheet-mode-prd.md)
 
 修改 grid sheet 相关能力前，先更新或确认该设计文档中的：
 

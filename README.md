@@ -49,6 +49,7 @@ Game Asset Workbench 用来把一批游戏资产需求，跑过一条完整的�
 设计细节、决策记录和更新记录见：
 
 - [docs/grid-sheet-mode-design.md](./docs/grid-sheet-mode-design.md)
+- [docs/grid-sheet-mode-prd.md](./docs/grid-sheet-mode-prd.md)
 
 ## 产品形态
 

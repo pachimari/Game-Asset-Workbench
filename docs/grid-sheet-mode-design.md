@@ -14,6 +14,7 @@
 - [README.md](../README.md)
 - [README_en.md](../README_en.md)
 - [AGENTS.md](../AGENTS.md)
+- [Grid Sheet Mode PRD](./grid-sheet-mode-prd.md)
 
 它的目标不是替换现有单图流程，而是在同一个工作台中支持两类资产生产方式：
 
@@ -424,6 +425,7 @@ item 工作台只增加来源展示：
 | 2026-05-06 | tile 复制进 item `images/`，不只引用 sheet tile。 | 保持导出、预览和候选池文件访问路径与现有单图流程一致。 |
 | 2026-05-07 | grid sheet 规划前自动为既定 item 补齐 brief；空余容量补 emergent slots。 | 网格出图也需要意图识别，但不需要逐 item 生成单图 prompt；涌现内容应该有明确 slot 语义。 |
 | 2026-05-08 | 已有候选图但缺少 brief 的 item，grid sheet 规划可补 sidecar brief，不重置 item 状态或候选图。 | 重新跑新 sheet 不应强迫用户回滚旧流程，brief 在这里服务新的 sheet 规划。 |
+| 2026-05-08 | 后续产品心智按 Targets / Sheet Runs / Tile Review 三个区组织。 | item 是目标资产桶和最终候选池，sheet run 才承载整张网格生成、切分和审图中间态。 |
 
 ## Update Log
 
@@ -437,6 +439,7 @@ item 工作台只增加来源展示：
 | 2026-05-07 | 将 grid sheet prompt 纳入全局模板页，新增 `grid_sheet_prompt_template` 和 `grid_sheet_negative_prompt`。 |
 | 2026-05-07 | grid sheet 规划改为 brief-first，并自动生成 emergent slots 填满 sheet 容量。 |
 | 2026-05-08 | grid sheet brief 补齐支持已有候选图 item，不再因 `image_generated` 状态阻断规划。 |
+| 2026-05-08 | 新增 [Grid Sheet Mode PRD](./grid-sheet-mode-prd.md)，用于指导下一阶段 UI 心智和验收标准。 |
 
 ## Open Questions
 
@@ -446,3 +449,4 @@ item 工作台只增加来源展示：
 2. 是否加入 Web 上可拖拽的切线调整和 tile overlay。
 3. 是否加入 sheet 级 prompt 人工编辑 / 审批版本。
 4. 是否升级 candidate-level 星标，让同一 artifact 下多个 candidate 能独立星标。
+5. grid 模式 UI 是否把 `item` 展示为 `target`，以降低与旧单图流程的心智冲突。
