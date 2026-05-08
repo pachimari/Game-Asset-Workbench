@@ -278,6 +278,50 @@ class StorageSafetyTests(unittest.TestCase):
             (storage.item_dir(task["task_id"], items[0]["item_id"]) / "images" / candidate["image_path"]).exists()
         )
 
+    def test_grid_sheet_plan_adds_brief_without_resetting_generated_item(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                    with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                        settings.set_global_default(
+                            "brief_generation",
+                            provider="mock",
+                            model="mock-brief-v1",
+                        )
+                        task = storage.create_task(task_name="Generated Item Grid")
+                        storage.update_runtime_config(
+                            task["task_id"],
+                            image_generation_mode="grid_sheet",
+                            grid_rows=1,
+                            grid_cols=1,
+                        )
+                        item = storage.create_item(task["task_id"], title="Old Candidate", description="already has image")
+                        image_version = storage.write_artifact(
+                            task["task_id"],
+                            item["item_id"],
+                            "image_generation",
+                            {
+                                "step": "image_generation",
+                                "provider": "grid_sheet",
+                                "model": "test",
+                                "created_at": "2026-05-08T00:00:00+00:00",
+                                "output": {"candidates": []},
+                            },
+                        )
+                        item["current_versions"]["image_generation"] = image_version
+                        item["status"] = "image_generated"
+                        storage.save_item(task["task_id"], item)
+
+                        sheet = sheets.plan_grid_sheet(task["task_id"])
+
+                        reloaded = storage.load_item(task["task_id"], item["item_id"])
+                        self.assertEqual(reloaded["status"], "image_generated")
+                        self.assertEqual(reloaded["current_versions"]["image_generation"], image_version)
+                        self.assertIsNotNone(reloaded["current_versions"]["brief_generation"])
+                        self.assertEqual(sheet["brief_generation"]["sidecar_generated"], 1)
+                        self.assertEqual(sheet["slots"][0]["brief"]["source"], "brief")
+
     def test_async_image_provider_normalizes_apimart_submit_and_poll_responses(self) -> None:
         provider = AsyncImageProvider(label="APIMart", base_url="https://api.apimart.ai/v1")
 

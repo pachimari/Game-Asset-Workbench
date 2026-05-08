@@ -423,6 +423,7 @@ item 工作台只增加来源展示：
 | 2026-05-07 | `backfill_grid_sheet` 只处理已 `selected` 且未 promoted 的 tile。 | 保留 CLI 批量入口，但语义从“全量回填”改成“采纳选中”。 |
 | 2026-05-06 | tile 复制进 item `images/`，不只引用 sheet tile。 | 保持导出、预览和候选池文件访问路径与现有单图流程一致。 |
 | 2026-05-07 | grid sheet 规划前自动为既定 item 补齐 brief；空余容量补 emergent slots。 | 网格出图也需要意图识别，但不需要逐 item 生成单图 prompt；涌现内容应该有明确 slot 语义。 |
+| 2026-05-08 | 已有候选图但缺少 brief 的 item，grid sheet 规划可补 sidecar brief，不重置 item 状态或候选图。 | 重新跑新 sheet 不应强迫用户回滚旧流程，brief 在这里服务新的 sheet 规划。 |
 
 ## Update Log
 
@@ -435,6 +436,7 @@ item 工作台只增加来源展示：
 | 2026-05-07 | 新增 Sheet Review：真实切分线 overlay、tile 审图状态、单 tile 采纳并星标、从 tile 创建 item。 |
 | 2026-05-07 | 将 grid sheet prompt 纳入全局模板页，新增 `grid_sheet_prompt_template` 和 `grid_sheet_negative_prompt`。 |
 | 2026-05-07 | grid sheet 规划改为 brief-first，并自动生成 emergent slots 填满 sheet 容量。 |
+| 2026-05-08 | grid sheet brief 补齐支持已有候选图 item，不再因 `image_generated` 状态阻断规划。 |
 
 ## Open Questions
 

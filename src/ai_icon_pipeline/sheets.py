@@ -15,6 +15,7 @@ from .config import (
     STEP_IMAGE_GENERATION,
 )
 from .pipeline import approve_step, run_step
+from .provider_runtime import generate_brief_output
 from .providers.registry import get_async_image_provider
 from .settings import DEFAULT_PROMPT_TEMPLATES, load_global_settings, provider_settings_for, resolve_stage_selection
 from .storage import (
@@ -132,9 +133,9 @@ def _ensure_grid_sheet_briefs(task_id: str, items: list[dict], *, source: str) -
             continue
 
         if current.get("status") not in {STATUS_DRAFT, STATUS_BRIEF_GENERATED, STATUS_FAILED}:
-            raise ValueError(
-                f"grid_sheet 规划需要先完成 brief，但 {item_id} 当前状态 {current.get('status')} 不能自动生成 brief"
-            )
+            version = _write_grid_sheet_brief_without_status_reset(task_id, item_id, source=source)
+            results.append({"item_id": item_id, "status": "sidecar_generated", "version": version})
+            continue
 
         if current.get("status") != STATUS_BRIEF_GENERATED:
             run_step(task_id, item_id, STEP_BRIEF_GENERATION, source=source)
@@ -146,9 +147,80 @@ def _ensure_grid_sheet_briefs(task_id: str, items: list[dict], *, source: str) -
     return {
         "required": len(items),
         "generated": sum(1 for row in results if row["status"] == "generated"),
+        "sidecar_generated": sum(1 for row in results if row["status"] == "sidecar_generated"),
         "existing": sum(1 for row in results if row["status"] == "exists"),
         "items": results,
     }
+
+
+def _write_grid_sheet_brief_without_status_reset(task_id: str, item_id: str, *, source: str) -> str:
+    task = load_task(task_id)
+    item = load_item(task_id, item_id)
+    global_settings = load_global_settings()
+    selected_runtime = resolve_stage_selection(task, item, global_settings, STEP_BRIEF_GENERATION)
+    provider_id = selected_runtime["provider"]
+    model_id = selected_runtime["model"]
+    provider_settings = provider_settings_for(global_settings, provider_id)
+    prompt_templates = global_settings.get("prompt_templates", {})
+    output = generate_brief_output(
+        provider_id=provider_id,
+        provider_config=provider_settings,
+        api_key=provider_settings.get("api_key", ""),
+        model=model_id,
+        asset_type=item["asset_type"],
+        title=item.get("title", ""),
+        description=item["description"],
+        category=item.get("category", ""),
+        project_background=task.get("project_background", task.get("project_context", "")),
+        style_requirements=task.get("style_requirements", ""),
+        extra_context=item.get("extra_context", ""),
+        system_prompt=prompt_templates.get("brief_system_prompt"),
+    )
+    payload = {
+        "step": STEP_BRIEF_GENERATION,
+        "provider": provider_id,
+        "model": model_id,
+        "created_at": utc_now(),
+        "input": {
+            "asset_type": item["asset_type"],
+            "title": item.get("title", ""),
+            "description": item["description"],
+            "category": item.get("category", ""),
+            "project_background": task.get("project_background", task.get("project_context", "")),
+            "style_requirements": task.get("style_requirements", ""),
+            "extra_context": item.get("extra_context", ""),
+            "selected_runtime": selected_runtime,
+            "purpose": "grid_sheet_planning",
+        },
+        "output": output,
+    }
+    version = write_artifact(task_id, item_id, STEP_BRIEF_GENERATION, payload)
+    item = load_item(task_id, item_id)
+    item["current_versions"][STEP_BRIEF_GENERATION] = version
+    save_item(task_id, item)
+    append_item_event(
+        task_id,
+        item_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "grid_sheet_brief_without_status_reset",
+            "version": version,
+            "status_preserved": item.get("status"),
+        },
+    )
+    append_event(
+        task_id,
+        {
+            "timestamp": utc_now(),
+            "source": source,
+            "action": "grid_sheet_brief_without_status_reset",
+            "item_id": item_id,
+            "version": version,
+            "status_preserved": item.get("status"),
+        },
+    )
+    return version
 
 
 def _emergent_brief(*, index: int, task: dict) -> dict:
