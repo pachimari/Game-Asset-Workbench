@@ -101,14 +101,16 @@ JSON 字段必须包含：
 Canvas and grid:
 - Exact grid: {{rows}} rows x {{cols}} columns, {{cell_count}} equal cells.
 - Fill cells in row-major order from left to right, top to bottom.
-- Keep each cell visually separated with clear empty space or subtle separators.
+- The grid occupies the full image canvas from edge to edge with no decorative outer frame or extra border margin.
+- Keep cells visually separated with clean empty gutters only. Do not draw ornate frames, card borders, labels, badges, or decorative grid art.
 - Each cell must contain exactly one independent asset subject.
 - Do not let any subject cross cell boundaries.
 - Do not add text, labels, numbering, watermarks, logos, signatures, captions, UI badges, or extra symbols.
 
 Cropping safety:
 - Assume the image will be split by a strict mathematical {{rows}} x {{cols}} overlay after generation.
-- Keep every subject centered inside its own cell with generous safe margin.
+- Align all cell boundaries to equal mathematical divisions of the full canvas.
+- Keep every subject centered inside its own cell with enough safe margin so no part of the subject touches or crosses the crop boundary.
 - Avoid merged cells, uneven cell sizes, panoramic compositions, shared backgrounds, or subjects spanning multiple cells.
 
 Style:

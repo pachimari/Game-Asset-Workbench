@@ -95,6 +95,14 @@ type Props = {
   onGridSheetAction: (
     action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
     sheetId?: string,
+    options?: {
+      cropBoxPercent?: {
+        left: number
+        top: number
+        right: number
+        bottom: number
+      }
+    },
   ) => Promise<void>
   onGridSheetTileAction: (
     action: 'pending' | 'rejected' | 'emergent' | 'promote' | 'create_item',

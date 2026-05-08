@@ -218,6 +218,10 @@ class SheetActionPayload(BaseModel):
     source: str = "web"
 
 
+class SheetSplitPayload(SheetActionPayload):
+    crop_box_percent: Optional[dict[str, float]] = None
+
+
 class SheetTileReviewPayload(BaseModel):
     review_status: str
     target_item_id: Optional[str] = None
@@ -809,12 +813,13 @@ def create_app() -> FastAPI:
             raise _to_http_error(exc) from exc
 
     @app.post("/tasks/{task_id}/sheets/{sheet_id}/split")
-    async def post_split_grid_sheet(task_id: str, sheet_id: str, payload: SheetActionPayload) -> dict:
+    async def post_split_grid_sheet(task_id: str, sheet_id: str, payload: SheetSplitPayload) -> dict:
         try:
             sheet = await run_in_threadpool(
                 split_grid_sheet,
                 task_id,
                 sheet_id,
+                crop_box_percent=payload.crop_box_percent,
                 source=payload.source,
             )
             return {"sheet": _sheet_payload(task_id, sheet)}

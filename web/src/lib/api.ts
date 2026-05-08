@@ -96,8 +96,22 @@ export async function pollTaskGridSheet(taskId: string, sheetId: string) {
   return sheetAction(taskId, `/sheets/${sheetId}/poll`)
 }
 
-export async function splitTaskGridSheet(taskId: string, sheetId: string) {
-  return sheetAction(taskId, `/sheets/${sheetId}/split`)
+export async function splitTaskGridSheet(
+  taskId: string,
+  sheetId: string,
+  payload?: {
+    crop_box_percent?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }
+  },
+) {
+  return request<{ sheet: GridSheetSummary }>(`/tasks/${taskId}/sheets/${sheetId}/split`, {
+    method: 'POST',
+    body: JSON.stringify({ ...(payload ?? {}), source: 'web' }),
+  })
 }
 
 export async function backfillTaskGridSheet(taskId: string, sheetId: string) {

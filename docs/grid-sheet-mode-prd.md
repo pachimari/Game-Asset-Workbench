@@ -211,6 +211,7 @@ Agent / CLI 应完成：
 - Planning does not destroy existing item status or existing candidate images.
 - Sheet prompt includes explicit slot assignments and emergent slot briefs.
 - Generated sheet can be displayed with a real overlay grid.
+- Sheet Review supports adjusting the crop box and re-splitting the sheet when the model-drawn grid does not match strict mathematical cuts.
 - Split tiles can be reviewed individually.
 - Review actions include accept, reject, bind to existing item, create new item, and mark emergent.
 - Backfill only promotes accepted tiles.
@@ -262,6 +263,7 @@ Grid sheet prompt must:
 - For emergent slots, provide varied lightweight directions generated during sheet planning.
 - Require one independent asset subject per cell.
 - Require safe margins for strict mathematical crop.
+- Avoid decorative frames, ornate card borders, and model-drawn grid art that can mislead the crop overlay.
 - Forbid text, labels, numbering, logos, watermarks, signatures, UI badges, and subjects crossing cell boundaries.
 
 ### Evaluation Strategy
@@ -455,6 +457,7 @@ Batch page in `grid_sheet` mode should show three primary zones, with the Emerge
 
 3. **Tile Review**
    - Source sheet preview with real overlay grid.
+   - Adjustable crop box for equal-grid re-splitting.
    - Tile grid.
    - Active tile detail.
    - Review actions: accept, reject, bind, create item, mark emergent.

@@ -122,6 +122,13 @@ task
 
 第一版可以只支持矩形等分切图。后续再支持非等距网格、自动检测分隔线、手动拖拽切线。
 
+当前切图校准策略：
+
+- 默认按整张 source image 做 rows x cols 等分。
+- 如果模型画出的格子和系统蓝线不对齐，用户可以调整 crop box，再在该外框内等分重切。
+- `split_config` 需要保存 crop box、source image size、x/y line positions，保证同一次审图可复现。
+- V1 先做外框等距重切；自由逐条切线、自动边界检测后续再做。
+
 ## Storage Layout
 
 建议新增 task 级目录：
@@ -256,6 +263,7 @@ Prompt 约束重点：
 - 若明确 item 少于 sheet 容量，`slot_lines` 应由固定目标行 + 多条有差异的涌现方向组成，而不是把空格都写成同一句“自由发挥”。
 - 每个格子只包含一个独立主体。
 - 格子之间要有清晰留白或分隔，便于切分。
+- 不鼓励模型绘制装饰性外框、卡片边框或复杂网格线；真实切线以系统 overlay 为准。
 - 禁止文字、编号、水印。
 - 统一风格、材质、光照和背景。
 - 不要让主体跨格。
@@ -444,6 +452,7 @@ item 工作台只增加来源展示：
 | 2026-05-08 | 已有候选图但缺少 brief 的 item，grid sheet 规划可补 sidecar brief，不重置 item 状态或候选图。 | 重新跑新 sheet 不应强迫用户回滚旧流程，brief 在这里服务新的 sheet 规划。 |
 | 2026-05-08 | 后续产品心智按 Targets / Sheet Runs / Tile Review 三个区组织。 | item 是目标资产桶和最终候选池，sheet run 才承载整张网格生成、切分和审图中间态。 |
 | 2026-05-08 | sheet 容量不等于 item 数量；emergent slots 不预创建 item，涌现好图进入批次级涌现池。 | 用户可能只要 10 个明确图标，却用 6x6 生成 36 个槽位；把 26 个空余槽位膨胀成 item 会让产品心智失真。 |
+| 2026-05-08 | Sheet Review 需要支持 crop box 调整后等距重切。 | 图像模型经常画出“看起来像网格”的装饰边界，但它不保证和数学裁切线对齐；校准层比只靠 prompt 更可靠。 |
 
 ## Update Log
 
@@ -460,6 +469,7 @@ item 工作台只增加来源展示：
 | 2026-05-08 | 新增 [Grid Sheet Mode PRD](./grid-sheet-mode-prd.md)，用于指导下一阶段 UI 心智和验收标准。 |
 | 2026-05-08 | Web grid sheet 工作区改成 Targets / Sheet Runs / Tile Review 三列结构，减少 item 流程和 sheet 流程的心智混淆。 |
 | 2026-05-08 | 更新 PRD 和设计记录：固定目标 item 数量与 sheet 容量拆开，新增批次级涌现池作为涌现 tile 的归属。 |
+| 2026-05-08 | 新增切图校准要求：prompt 禁止装饰网格倾向，UI 支持 crop box 外框调整和重切。 |
 
 ## Open Questions
 
@@ -472,3 +482,4 @@ item 工作台只增加来源展示：
 5. grid 模式 UI 是否把 `item` 展示为 `target`，以降低与旧单图流程的心智冲突。
 6. 涌现池是否作为 Tile Review 内的筛选面板，还是在批次页作为独立第四区。
 7. 涌现池条目需要哪些最小元数据，才能顺畅升级成正式 item。
+8. 是否需要在 crop box 之外继续支持逐条 x/y 线自由拖动。

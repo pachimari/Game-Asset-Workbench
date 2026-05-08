@@ -147,6 +147,12 @@ export type SheetTile = {
   promoted_version?: string | null
   starred?: boolean
   created_item_id?: string | null
+  crop_box?: {
+    left: number
+    top: number
+    right: number
+    bottom: number
+  }
 }
 
 export type GridSheetSummary = {
@@ -192,6 +198,30 @@ export type GridSheetSummary = {
   source_image_path?: string | null
   source_image_url?: string | null
   source_url?: string | null
+  split_config?: {
+    rows?: number
+    cols?: number
+    padding?: number
+    gap?: number
+    crop_box?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }
+    crop_box_percent?: {
+      left: number
+      top: number
+      right: number
+      bottom: number
+    }
+    source_image_size?: {
+      width: number
+      height: number
+    }
+    x_lines?: number[]
+    y_lines?: number[]
+  }
   backfilled?: Array<Record<string, unknown>>
 }
 

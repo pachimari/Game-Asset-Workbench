@@ -416,6 +416,14 @@ export function useWorkbenchController() {
   async function handleGridSheetAction(
     action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
     sheetId?: string,
+    options?: {
+      cropBoxPercent?: {
+        left: number
+        top: number
+        right: number
+        bottom: number
+      }
+    },
   ) {
     if (!activeTaskId) return
     setActionError(null)
@@ -431,7 +439,9 @@ export function useWorkbenchController() {
       } else if (sheetId && action === 'poll') {
         response = await pollTaskGridSheet(activeTaskId, sheetId)
       } else if (sheetId && action === 'split') {
-        response = await splitTaskGridSheet(activeTaskId, sheetId)
+        response = await splitTaskGridSheet(activeTaskId, sheetId, {
+          crop_box_percent: options?.cropBoxPercent,
+        })
       } else if (sheetId && action === 'backfill') {
         response = await backfillTaskGridSheet(activeTaskId, sheetId)
       }

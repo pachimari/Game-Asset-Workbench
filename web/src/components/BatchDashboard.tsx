@@ -5,6 +5,13 @@ import { buildImportTemplate, parseImportedItems } from '../lib/itemImport'
 import { statusLabel } from '../lib/display'
 import { Icon } from './Sidebar'
 
+type CropBoxPercent = {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 function stageTone(status: string) {
   if (status === 'completed') return 'text-primary'
   if (
@@ -80,6 +87,36 @@ function sheetAspectRatio(value: string | undefined) {
   return value.replace(':', ' / ')
 }
 
+function clampCropBox(box: CropBoxPercent): CropBoxPercent {
+  const left = Math.min(Math.max(box.left, 0), 95)
+  const top = Math.min(Math.max(box.top, 0), 95)
+  const right = Math.min(Math.max(box.right, left + 5), 100)
+  const bottom = Math.min(Math.max(box.bottom, top + 5), 100)
+  return { left, top, right, bottom }
+}
+
+function cropBoxFromSheet(sheet: GridSheetSummary | undefined): CropBoxPercent {
+  const saved = sheet?.split_config?.crop_box_percent
+  if (saved) {
+    return clampCropBox({
+      left: Number(saved.left),
+      top: Number(saved.top),
+      right: Number(saved.right),
+      bottom: Number(saved.bottom),
+    })
+  }
+  return { left: 0, top: 0, right: 100, bottom: 100 }
+}
+
+function cropBoxStyle(box: CropBoxPercent) {
+  return {
+    left: `${box.left}%`,
+    top: `${box.top}%`,
+    width: `${box.right - box.left}%`,
+    height: `${box.bottom - box.top}%`,
+  }
+}
+
 const IMAGE_ASPECT_RATIO_OPTIONS = ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9', '21:9']
 const IMAGE_RESOLUTION_OPTIONS = ['auto', '512', '1K', '2K', '4K']
 const ASSET_TYPE_OPTIONS = [
@@ -137,6 +174,9 @@ export default function BatchDashboard({
   onGridSheetAction: (
     action: 'plan' | 'generate' | 'poll' | 'split' | 'backfill',
     sheetId?: string,
+    options?: {
+      cropBoxPercent?: CropBoxPercent
+    },
   ) => Promise<void>
   onGridSheetTileAction: (
     action: 'pending' | 'rejected' | 'emergent' | 'promote' | 'create_item',
@@ -201,6 +241,7 @@ export default function BatchDashboard({
   }>({ taskId: task.task_id, sheetId: sheets[0]?.sheet_id ?? null })
   const [selectedTileCellId, setSelectedTileCellId] = useState<string | null>(null)
   const [tileTargets, setTileTargets] = useState<Record<string, string>>({})
+  const [cropDrafts, setCropDrafts] = useState<Record<string, CropBoxPercent>>({})
 
   const completed = task.items_summary?.completed ?? 0
   const inProgress = task.items_summary?.in_progress ?? 0
@@ -216,6 +257,9 @@ export default function BatchDashboard({
       ? sheetSelection.sheetId
       : sheets[0]?.sheet_id
   const selectedSheet = sheets.find((sheet) => sheet.sheet_id === selectedSheetId) ?? sheets[0]
+  const selectedSheetCrop = selectedSheet
+    ? (cropDrafts[selectedSheet.sheet_id] ?? cropBoxFromSheet(selectedSheet))
+    : { left: 0, top: 0, right: 100, bottom: 100 }
   const selectedTile =
     (selectedTileCellId && selectedSheet?.tiles.find((tile) => tile.cell_id === selectedTileCellId)) ||
     selectedSheet?.tiles[0] ||
@@ -255,6 +299,16 @@ export default function BatchDashboard({
       : selectedSheetBoundSlots
   const selectedTileSlot = selectedSheet?.slots.find((slot) => slot.cell_id === selectedTile?.cell_id)
   const selectedTileLinkedItem = items.find((item) => item.item_id === selectedTileTarget)
+  function updateSelectedSheetCrop(partial: Partial<CropBoxPercent>) {
+    if (!selectedSheet) return
+    setCropDrafts((current) => ({
+      ...current,
+      [selectedSheet.sheet_id]: clampCropBox({
+        ...selectedSheetCrop,
+        ...partial,
+      }),
+    }))
+  }
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
   const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
@@ -890,10 +944,14 @@ export default function BatchDashboard({
                       <button
                         type="button"
                         disabled={actionBusy || !canSplitSheet}
-                        onClick={() => void onGridSheetAction('split', selectedSheet.sheet_id)}
+                        onClick={() =>
+                          void onGridSheetAction('split', selectedSheet.sheet_id, {
+                            cropBoxPercent: selectedSheetCrop,
+                          })
+                        }
                         className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        数学切图
+                        按当前切线重切
                       </button>
                       <button
                         type="button"
@@ -979,6 +1037,63 @@ export default function BatchDashboard({
               {selectedSheet ? (
                 <div className="mt-3 grid gap-3 2xl:grid-cols-[minmax(360px,0.95fr)_minmax(0,1.05fr)]">
                   <div className="min-w-0">
+                    {selectedSheet.source_image_url ? (
+                      <div className="mb-3 rounded-xl border border-outline-variant/12 bg-surface-container-highest px-3 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-200">
+                              Cut Lines
+                            </div>
+                            <div className="mt-1 text-xs leading-5 text-on-surface-variant">
+                              调整蓝色外框，系统会在外框内等分 {selectedSheet.input.rows}×{selectedSheet.input.cols} 后重新切图。
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() =>
+                              setCropDrafts((current) => ({
+                                ...current,
+                                [selectedSheet.sheet_id]: { left: 0, top: 0, right: 100, bottom: 100 },
+                              }))
+                            }
+                            className="rounded-lg border border-outline-variant/20 px-2.5 py-1.5 text-[11px] font-bold text-on-surface transition-colors hover:bg-surface-container disabled:opacity-60"
+                          >
+                            重置全图
+                          </button>
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {[
+                            ['left', '左边', 0, Math.min(95, selectedSheetCrop.right - 5)],
+                            ['right', '右边', Math.max(5, selectedSheetCrop.left + 5), 100],
+                            ['top', '上边', 0, Math.min(95, selectedSheetCrop.bottom - 5)],
+                            ['bottom', '下边', Math.max(5, selectedSheetCrop.top + 5), 100],
+                          ].map(([key, label, min, max]) => (
+                            <label key={key} className="grid gap-1 text-[11px] font-bold text-on-surface-variant">
+                              <span className="flex items-center justify-between">
+                                <span>{label}</span>
+                                <span className="font-mono text-outline">
+                                  {Math.round(selectedSheetCrop[key as keyof CropBoxPercent])}%
+                                </span>
+                              </span>
+                              <input
+                                type="range"
+                                min={min as number}
+                                max={max as number}
+                                step={0.1}
+                                value={selectedSheetCrop[key as keyof CropBoxPercent]}
+                                onChange={(event) =>
+                                  updateSelectedSheetCrop({
+                                    [key]: Number(event.target.value),
+                                  } as Partial<CropBoxPercent>)
+                                }
+                                className="w-full accent-primary"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <div
                       className="relative flex items-center justify-center overflow-hidden rounded-xl border border-outline-variant/14 bg-surface-container-highest"
                       style={{ aspectRatio: sheetAspectRatio(selectedSheet.input.image_aspect_ratio) }}
@@ -991,8 +1106,9 @@ export default function BatchDashboard({
                             className="h-full w-full object-contain"
                           />
                           <div
-                            className="absolute inset-0 grid"
+                            className="absolute grid border-2 border-sky-300/90 shadow-[0_0_0_9999px_rgba(2,132,199,0.12)]"
                             style={{
+                              ...cropBoxStyle(selectedSheetCrop),
                               gridTemplateColumns: `repeat(${selectedSheet.input.cols}, minmax(0, 1fr))`,
                               gridTemplateRows: `repeat(${selectedSheet.input.rows}, minmax(0, 1fr))`,
                             }}

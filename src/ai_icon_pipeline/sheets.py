@@ -246,6 +246,64 @@ def _render_grid_sheet_template(template: str, values: dict[str, object]) -> str
     return rendered
 
 
+def _clamp_int(value: object, *, minimum: int, maximum: int, default: int) -> int:
+    try:
+        parsed = int(round(float(value)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def _clamp_float(value: object, *, minimum: float, maximum: float, default: float) -> float:
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def _crop_box_from_percent(crop_box_percent: dict | None, *, width: int, height: int) -> dict[str, int] | None:
+    if not isinstance(crop_box_percent, dict):
+        return None
+    left_percent = _clamp_float(crop_box_percent.get("left"), minimum=0.0, maximum=95.0, default=0.0)
+    top_percent = _clamp_float(crop_box_percent.get("top"), minimum=0.0, maximum=95.0, default=0.0)
+    right_percent = _clamp_float(crop_box_percent.get("right"), minimum=5.0, maximum=100.0, default=100.0)
+    bottom_percent = _clamp_float(crop_box_percent.get("bottom"), minimum=5.0, maximum=100.0, default=100.0)
+    if right_percent <= left_percent:
+        right_percent = min(100.0, left_percent + 5.0)
+    if bottom_percent <= top_percent:
+        bottom_percent = min(100.0, top_percent + 5.0)
+    return {
+        "left": _clamp_int(width * left_percent / 100.0, minimum=0, maximum=width - 1, default=0),
+        "top": _clamp_int(height * top_percent / 100.0, minimum=0, maximum=height - 1, default=0),
+        "right": _clamp_int(width * right_percent / 100.0, minimum=1, maximum=width, default=width),
+        "bottom": _clamp_int(height * bottom_percent / 100.0, minimum=1, maximum=height, default=height),
+    }
+
+
+def _normalize_crop_box(crop_box: dict | None, *, width: int, height: int, fallback: dict[str, int]) -> dict[str, int]:
+    raw = crop_box if isinstance(crop_box, dict) else fallback
+    left = _clamp_int(raw.get("left"), minimum=0, maximum=width - 1, default=fallback["left"])
+    top = _clamp_int(raw.get("top"), minimum=0, maximum=height - 1, default=fallback["top"])
+    right = _clamp_int(raw.get("right"), minimum=left + 1, maximum=width, default=fallback["right"])
+    bottom = _clamp_int(raw.get("bottom"), minimum=top + 1, maximum=height, default=fallback["bottom"])
+    return {"left": left, "top": top, "right": right, "bottom": bottom}
+
+
+def _crop_box_percent(crop_box: dict[str, int], *, width: int, height: int) -> dict[str, float]:
+    return {
+        "left": round(crop_box["left"] / width * 100, 3),
+        "top": round(crop_box["top"] / height * 100, 3),
+        "right": round(crop_box["right"] / width * 100, 3),
+        "bottom": round(crop_box["bottom"] / height * 100, 3),
+    }
+
+
+def _line_positions(start: int, end: int, count: int) -> list[int]:
+    span = end - start
+    return [start + round(span * index / count) for index in range(count + 1)]
+
+
 def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) -> dict:
     rows = int(runtime.get("grid_rows", 8))
     cols = int(runtime.get("grid_cols", 8))
@@ -524,7 +582,13 @@ def poll_grid_sheet_generation(task_id: str, sheet_id: str, *, source: str = "cl
     return sheet
 
 
-def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dict:
+def split_grid_sheet(
+    task_id: str,
+    sheet_id: str,
+    *,
+    crop_box_percent: dict | None = None,
+    source: str = "cli",
+) -> dict:
     sheet = load_sheet(task_id, sheet_id)
     source_image_path = sheet.get("source_image_path")
     if not source_image_path:
@@ -545,12 +609,26 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
     tiles = []
     with Image.open(source_path) as image:
         width, height = image.size
-        usable_width = width - padding * 2 - gap * (cols - 1)
-        usable_height = height - padding * 2 - gap * (rows - 1)
+        legacy_crop_box = {
+            "left": padding,
+            "top": padding,
+            "right": width - padding,
+            "bottom": height - padding,
+        }
+        current_split_config = sheet.get("split_config") if isinstance(sheet.get("split_config"), dict) else {}
+        requested_crop_box = _crop_box_from_percent(crop_box_percent, width=width, height=height)
+        crop_box = _normalize_crop_box(
+            requested_crop_box or current_split_config.get("crop_box"),
+            width=width,
+            height=height,
+            fallback=legacy_crop_box,
+        )
+        usable_width = crop_box["right"] - crop_box["left"] - gap * (cols - 1)
+        usable_height = crop_box["bottom"] - crop_box["top"] - gap * (rows - 1)
         if usable_width <= 0 or usable_height <= 0:
             raise ValueError("切图参数超过图片尺寸")
-        cell_width = usable_width // cols
-        cell_height = usable_height // rows
+        x_lines = _line_positions(crop_box["left"], crop_box["right"], cols)
+        y_lines = _line_positions(crop_box["top"], crop_box["bottom"], rows)
         slot_by_cell = {slot["cell_id"]: slot for slot in sheet.get("slots", [])}
         for row in range(1, rows + 1):
             for col in range(1, cols + 1):
@@ -558,10 +636,13 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
                 slot = slot_by_cell.get(cell_id)
                 if not slot:
                     continue
-                left = padding + (col - 1) * (cell_width + gap)
-                top = padding + (row - 1) * (cell_height + gap)
-                right = left + cell_width
-                bottom = top + cell_height
+                left = x_lines[col - 1]
+                top = y_lines[row - 1]
+                right = x_lines[col]
+                bottom = y_lines[row]
+                if gap > 0:
+                    right = max(left + 1, right - gap)
+                    bottom = max(top + 1, bottom - gap)
                 tile = image.crop((left, top, right, bottom))
                 tile_path = tile_root / f"{cell_id}.png"
                 tile.save(tile_path)
@@ -578,6 +659,7 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
                         "review_status": existing_tiles.get(cell_id, {}).get("review_status", "pending"),
                         "promoted_version": existing_tiles.get(cell_id, {}).get("promoted_version"),
                         "starred": bool(existing_tiles.get(cell_id, {}).get("starred", False)),
+                        "crop_box": {"left": left, "top": top, "right": right, "bottom": bottom},
                     }
                 )
 
@@ -587,6 +669,11 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
         "cols": cols,
         "padding": padding,
         "gap": gap,
+        "crop_box": crop_box,
+        "crop_box_percent": _crop_box_percent(crop_box, width=width, height=height),
+        "source_image_size": {"width": width, "height": height},
+        "x_lines": x_lines,
+        "y_lines": y_lines,
     }
     sheet["tiles"] = tiles
     save_sheet(task_id, sheet)
@@ -598,6 +685,7 @@ def split_grid_sheet(task_id: str, sheet_id: str, *, source: str = "cli") -> dic
             "action": "split_grid_sheet",
             "sheet_id": sheet_id,
             "tile_count": len(tiles),
+            "crop_box": crop_box,
         },
     )
     return sheet

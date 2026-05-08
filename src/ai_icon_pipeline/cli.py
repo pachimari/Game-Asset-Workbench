@@ -409,7 +409,7 @@ COMMAND_SPECS = {
     "sheet-show": {
         "group": "sheet",
         "description": "Show one grid sheet payload",
-        "args": ["task_id", "sheet_id"],
+        "args": ["task_id", "sheet_id", "--crop-left-percent", "--crop-top-percent", "--crop-right-percent", "--crop-bottom-percent"],
         "supports_json": True,
         "output": {"type": "object"},
         "errors": ["TASK_NOT_FOUND", "VALIDATION_ERROR"],
@@ -510,6 +510,23 @@ def _parse_keywords(raw_keywords: str | None) -> list[str] | None:
     if raw_keywords is None:
         return None
     return [keyword.strip() for keyword in raw_keywords.split(",") if keyword.strip()]
+
+
+def _sheet_crop_box_percent_from_args(args: argparse.Namespace) -> dict | None:
+    values = {
+        "left": getattr(args, "crop_left_percent", None),
+        "top": getattr(args, "crop_top_percent", None),
+        "right": getattr(args, "crop_right_percent", None),
+        "bottom": getattr(args, "crop_bottom_percent", None),
+    }
+    if all(value is None for value in values.values()):
+        return None
+    return {
+        "left": 0 if values["left"] is None else values["left"],
+        "top": 0 if values["top"] is None else values["top"],
+        "right": 100 if values["right"] is None else values["right"],
+        "bottom": 100 if values["bottom"] is None else values["bottom"],
+    }
 
 
 def _emit(data, *, as_json: bool) -> None:
@@ -1118,6 +1135,10 @@ def build_parser() -> argparse.ArgumentParser:
     sheet_split = subparsers.add_parser("sheet-split", help="Split a generated grid sheet", parents=[common_parser])
     sheet_split.add_argument("task_id")
     sheet_split.add_argument("sheet_id")
+    sheet_split.add_argument("--crop-left-percent", type=float)
+    sheet_split.add_argument("--crop-top-percent", type=float)
+    sheet_split.add_argument("--crop-right-percent", type=float)
+    sheet_split.add_argument("--crop-bottom-percent", type=float)
     sheet_backfill = subparsers.add_parser("sheet-backfill", help="Backfill split tiles into item candidate pools", parents=[common_parser])
     sheet_backfill.add_argument("task_id")
     sheet_backfill.add_argument("sheet_id")
@@ -1332,6 +1353,10 @@ def build_parser() -> argparse.ArgumentParser:
     sheet_split_group.set_defaults(command="sheet-split")
     sheet_split_group.add_argument("task_id")
     sheet_split_group.add_argument("sheet_id")
+    sheet_split_group.add_argument("--crop-left-percent", type=float)
+    sheet_split_group.add_argument("--crop-top-percent", type=float)
+    sheet_split_group.add_argument("--crop-right-percent", type=float)
+    sheet_split_group.add_argument("--crop-bottom-percent", type=float)
     sheet_backfill_group = sheet_subparsers.add_parser("backfill", help="Backfill split tiles into item candidate pools", parents=[common_parser])
     sheet_backfill_group.set_defaults(command="sheet-backfill")
     sheet_backfill_group.add_argument("task_id")
@@ -1764,7 +1789,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "sheet-split":
-            _emit(split_grid_sheet(args.task_id, args.sheet_id), as_json=args.json)
+            _emit(
+                split_grid_sheet(
+                    args.task_id,
+                    args.sheet_id,
+                    crop_box_percent=_sheet_crop_box_percent_from_args(args),
+                ),
+                as_json=args.json,
+            )
             return 0
 
         if args.command == "sheet-backfill":
