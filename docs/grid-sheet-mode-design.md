@@ -83,8 +83,16 @@ task
 容量内剩余格子会补成 emergent slots，一起生成网格大图。
 确认切分后，tile 先进入 Sheet Review，不直接污染 item 候选池。
 只有人工采纳的 tile 才回填成对应 item 的候选图，并默认星标。
+涌现好图先进入批次级涌现池，除非用户明确绑定或创建 item。
 最终采用仍然回到 item 维度。
 ```
+
+关键边界：
+
+- `rows * cols` 是 sheet 容量，不是 item 数量。
+- item 只代表用户明确指定的目标资产。
+- emergent slot 只是 sheet prompt 的空余槽位，不预创建 item 记录。
+- emergent pool 是批次级素材池，用来保存“好但尚未归属”的 tile。
 
 ## Runtime Config
 
@@ -184,13 +192,13 @@ tile review 状态：
 - `pending`: 待审，默认状态，不进入 item 候选池。
 - `selected`: 已采纳，可以回填到目标 item。
 - `rejected`: 废弃，不进入 item 候选池。
-- `emergent`: 涌现好图，暂存在 sheet 层，后续可创建新 item 并采纳。
+- `emergent`: 涌现好图，保存到批次级涌现池，后续可绑定已有 item 或创建新 item 并采纳。
 
 采纳规则：
 
 - 绑定槽位：采纳后复制 tile 到对应 item 的 `images/`，写入 `image_generation` artifact，并加入该 item 的 `starred_image_versions`。
 - 重新绑定：采纳前可把 tile 绑定到另一个已有 item。
-- 涌现槽位：先标记为 `emergent`；命名后可创建新 item，再采纳并星标。
+- 涌现槽位：先标记为 `emergent` 并保存到涌现池；命名后可创建新 item，再采纳并星标。
 
 建议先复用现有 `image_generation` artifact，但在 candidate 上增加来源字段：
 
@@ -212,7 +220,7 @@ tile review 状态：
 
 `grid_sheet` 不能复用单 item prompt，但仍然应该复用 brief / 意图识别。
 
-规划 sheet 时，既定目标 item 必须先生成 brief。sheet prompt 的输入是一组 slots：
+规划 sheet 时，既定目标 item 必须先生成 brief。sheet prompt 的输入是一组 slots，其中 bound slots 来自明确 item，emergent slots 只来自本轮 sheet 的空余容量：
 
 ```json
 {
@@ -232,8 +240,8 @@ tile review 状态：
     {
       "cell": "r01c02",
       "kind": "emergent",
-      "title": "涌现槽 01",
-      "description": "free invention under the same batch world and style"
+      "title": "涌现辅助技能 01",
+      "description": "same batch world and style, lightweight defensive or utility skill icon, do not duplicate bound slots"
     }
   ]
 }
@@ -244,7 +252,8 @@ Prompt 约束重点：
 - 生成一张完整网格 sheet。
 - 按 row-major 顺序放置每个资产。
 - bound slot 来自 item brief，不直接使用未理解的 raw item。
-- emergent slot 用来补足空余格子，要求同世界观、同风格、但不重复 bound slot 主题。
+- emergent slot 用来补足空余格子，要求同世界观、同风格、但不重复 bound slot 主题；它不是 item，不写入 item 状态机。
+- 若明确 item 少于 sheet 容量，`slot_lines` 应由固定目标行 + 多条有差异的涌现方向组成，而不是把空格都写成同一句“自由发挥”。
 - 每个格子只包含一个独立主体。
 - 格子之间要有清晰留白或分隔，便于切分。
 - 禁止文字、编号、水印。
@@ -300,6 +309,10 @@ POST /tasks/{task_id}/sheets/{sheet_id}/generate
 POST /tasks/{task_id}/sheets/{sheet_id}/poll
 POST /tasks/{task_id}/sheets/{sheet_id}/split
 POST /tasks/{task_id}/sheets/{sheet_id}/backfill
+GET  /tasks/{task_id}/emergent-pool
+POST /tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/save-emergent
+POST /tasks/{task_id}/emergent-pool/{pool_entry_id}/bind
+POST /tasks/{task_id}/emergent-pool/{pool_entry_id}/create-item
 ```
 
 其中：
@@ -321,6 +334,9 @@ sheet split task_001 sheet_v001
 sheet backfill task_001 sheet_v001
 sheet list task_001
 sheet show task_001 sheet_v001
+sheet emergent-list task_001
+sheet emergent-bind task_001 pool_001 item_011
+sheet emergent-create-item task_001 pool_001 "火球术"
 ```
 
 CLI 只负责流程推进和状态查询。视觉判断仍然回到 Web UI。
@@ -345,6 +361,7 @@ gap
 - 切图参数调整
 - tile 预览
 - tile 审图：采纳、废弃、重新绑定、创建 item、标记涌现好图
+- 涌现池：保存好但未归属的 tile，后续绑定到已有 item 或创建新 item
 - 采纳到 item 候选池并默认星标
 
 item 工作台只增加来源展示：
@@ -419,13 +436,14 @@ item 工作台只增加来源展示：
 | 2026-05-06 | 保留现有 `single` 流程，不用 `grid_sheet` 替代。 | 原画、角色、大图仍需要逐 item 精修。 |
 | 2026-05-07 | tile 切分后先进入 Sheet Review，不默认全量回填。 | grid sheet 经常出现语义或网格失败，必须先人工筛选，避免污染 item 候选池。 |
 | 2026-05-07 | 被采纳的 tile 进入 item 候选池时默认星标。 | 采纳本身就是一次人工视觉判断，应直接成为高优先级候选。 |
-| 2026-05-06 | V1 只处理前 `rows * cols` 个 item，超过容量的 item 留待下一张 sheet。 | 先保证一个 sheet 的端到端链路可验收，再做自动多 sheet 编排。 |
+| 2026-05-06 | V1 只处理前 `rows * cols` 个明确目标 item，超过容量的明确 item 留待下一张 sheet。 | 先保证一个 sheet 的端到端链路可验收，再做自动多 sheet 编排。 |
 | 2026-05-06 | `plan_grid_sheet` 优先读取已生成 brief，没有 brief 时使用 raw item。 | 兼容已有流程，同时允许导入 item 后直接规划 sheet。 |
 | 2026-05-07 | `backfill_grid_sheet` 只处理已 `selected` 且未 promoted 的 tile。 | 保留 CLI 批量入口，但语义从“全量回填”改成“采纳选中”。 |
 | 2026-05-06 | tile 复制进 item `images/`，不只引用 sheet tile。 | 保持导出、预览和候选池文件访问路径与现有单图流程一致。 |
 | 2026-05-07 | grid sheet 规划前自动为既定 item 补齐 brief；空余容量补 emergent slots。 | 网格出图也需要意图识别，但不需要逐 item 生成单图 prompt；涌现内容应该有明确 slot 语义。 |
 | 2026-05-08 | 已有候选图但缺少 brief 的 item，grid sheet 规划可补 sidecar brief，不重置 item 状态或候选图。 | 重新跑新 sheet 不应强迫用户回滚旧流程，brief 在这里服务新的 sheet 规划。 |
 | 2026-05-08 | 后续产品心智按 Targets / Sheet Runs / Tile Review 三个区组织。 | item 是目标资产桶和最终候选池，sheet run 才承载整张网格生成、切分和审图中间态。 |
+| 2026-05-08 | sheet 容量不等于 item 数量；emergent slots 不预创建 item，涌现好图进入批次级涌现池。 | 用户可能只要 10 个明确图标，却用 6x6 生成 36 个槽位；把 26 个空余槽位膨胀成 item 会让产品心智失真。 |
 
 ## Update Log
 
@@ -441,6 +459,7 @@ item 工作台只增加来源展示：
 | 2026-05-08 | grid sheet brief 补齐支持已有候选图 item，不再因 `image_generated` 状态阻断规划。 |
 | 2026-05-08 | 新增 [Grid Sheet Mode PRD](./grid-sheet-mode-prd.md)，用于指导下一阶段 UI 心智和验收标准。 |
 | 2026-05-08 | Web grid sheet 工作区改成 Targets / Sheet Runs / Tile Review 三列结构，减少 item 流程和 sheet 流程的心智混淆。 |
+| 2026-05-08 | 更新 PRD 和设计记录：固定目标 item 数量与 sheet 容量拆开，新增批次级涌现池作为涌现 tile 的归属。 |
 
 ## Open Questions
 
@@ -451,3 +470,5 @@ item 工作台只增加来源展示：
 3. 是否加入 sheet 级 prompt 人工编辑 / 审批版本。
 4. 是否升级 candidate-level 星标，让同一 artifact 下多个 candidate 能独立星标。
 5. grid 模式 UI 是否把 `item` 展示为 `target`，以降低与旧单图流程的心智冲突。
+6. 涌现池是否作为 Tile Review 内的筛选面板，还是在批次页作为独立第四区。
+7. 涌现池条目需要哪些最小元数据，才能顺畅升级成正式 item。

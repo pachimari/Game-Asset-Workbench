@@ -19,15 +19,16 @@
 
 ### Proposed Solution
 
-将 `grid_sheet` 明确为批次级 Sheet Run 工作流：既定 item 仍先做 brief / 意图识别，Agent 将 item briefs 与 emergent slots 汇总成整张 sheet prompt；图片模型只生成一张 sheet；人类在 Sheet Review 中基于真实切分线挑选 tile；被采纳的 tile 才回填到 item 候选池并默认星标。
+将 `grid_sheet` 明确为批次级 Sheet Run 工作流：item 只代表用户明确指定的目标资产，rows x cols 只代表本次 sheet 的出图容量。Agent 先为明确 item 做 brief / 意图识别，再把 bound slots 和剩余 emergent slots 汇总成整张 sheet prompt；人类在 Sheet Review 中基于真实切分线挑选 tile；被采纳的 bound tile 才回填到 item 候选池并默认星标，涌现好图先进入批次级涌现池。
 
 ### Success Criteria
 
 - 用户能在批次页一眼区分 `single` 与 `grid_sheet` 两种生产模式，并知道当前批次处在哪个阶段。
 - 一个 6x6 sheet 从规划、生成、切分、人工采纳到候选池回填，可以在 Web UI 中端到端完成，不需要手动改本地文件。
+- 一个 6x6 sheet 的容量是 36 个槽位，但如果用户只指定 10 个目标资产，批次仍只有 10 个 item，其余 26 个槽位是 emergent slots，不预创建成 item。
 - `grid_sheet` 规划前，所有既定 item 都有 brief 快照；sheet prompt 中每个 bound slot 都能追溯到对应 item brief。
 - 只有人工采纳的 tile 才进入 item 候选池，默认星标，且候选来源显示 `sheet_id + cell_id`。
-- 用户可以把涌现好图保留、绑定到已有 item，或创建新 item；这些操作不会污染未采纳 item 的候选池。
+- 用户可以把涌现好图保存到涌现池、绑定到已有 item，或创建新 item；这些操作不会污染未采纳 item 的候选池。
 
 ---
 
@@ -46,10 +47,23 @@ single:
   item -> brief -> single image prompt -> candidate images -> human picks
 
 grid_sheet:
-  batch targets -> item briefs -> sheet plan -> one sheet image -> tile review -> selected tiles become item candidates
+  fixed item targets + emergent pool policy
+    -> item briefs
+    -> sheet plan = bound slots + emergent slots
+    -> one sheet image
+    -> tile review
+    -> selected bound tiles become item candidates
+    -> useful emergent tiles enter emergent pool or become new items
 ```
 
-`grid_sheet` 模式下，item 不再承担 sheet 的中间状态。item 只是“目标资产桶”和“最终候选池”；sheet run 才承担本轮网格生成、切分和审图记录。
+`grid_sheet` 模式下，item 不再承担 sheet 的中间状态，也不等于 sheet 格子数。item 只是“明确目标资产桶”和“最终候选池”；sheet run 才承担本轮网格生成、切分和审图记录；涌现池承接“好但尚未命名 / 尚未绑定”的额外 tile。
+
+关键心智：
+
+- `rows * cols` 是本轮 sheet 的出图容量，不是 item 数量。
+- 固定目标 item 数量由用户控制，可以小于、等于或大于单张 sheet 容量。
+- emergent slot 是 prompt 里的空余槽位，不是预创建 item。
+- emergent pool 是批次级素材暂存区，不参与 item 状态机。
 
 ### Detailed Workflow
 
@@ -60,7 +74,7 @@ grid_sheet:
 - 选择出图模式为 `grid_sheet`。
 - 设置网格参数，例如 6x6、8x8。
 - 设置批次背景：项目世界观、资产用途、整体风格、禁忌项。
-- 新增既定目标 item，例如 10 个技能图标。
+- 新增明确目标 item，例如 10 个技能图标。即使 sheet 是 6x6，系统也不应因此自动生成 36 个 item。
 - 设置是否允许涌现内容，以及涌现槽位的默认策略。
 
 系统应完成：
@@ -77,6 +91,7 @@ Agent 应完成：
 - brief 输入包含 item 原始描述、批次背景、统一风格要求。
 - brief 输出聚焦“这个资产格子要画什么”，不生成单图 prompt。
 - 对已有候选图但缺少 brief 的 item，允许补 sidecar brief，不重置 item 状态。
+- 只对明确 item 做 item brief；emergent slots 可以在 sheet planning 阶段生成轻量方向，但不创建 item brief artifact。
 
 系统应完成：
 
@@ -88,15 +103,16 @@ Agent 应完成：
 Agent 应完成：
 
 - 根据 rows x cols 计算总槽位。
-- 将既定 item briefs 放入 bound slots。
-- 若槽位多于 item 数量，用 emergent slots 补齐。
-- emergent slots 必须生成明确 brief，例如“同风格但未指定的辅助技能图标”，而不是让模型完全自由发挥。
+- 将明确 item briefs 放入 bound slots。默认 row-major 先放固定目标，也可后续支持人工排序。
+- 若槽位多于明确 item 数量，用 emergent slots 补齐。例如 6x6 + 10 个明确 item = 10 个 bound slots + 26 个 emergent slots。
+- emergent slots 必须生成明确但轻量的方向，例如“同风格的辅助技能图标：防御 / 位移 / 控制 / 回复 / 陷阱 / 召唤”等，而不是让模型完全自由发挥，也不是重复同一句泛化描述。
 - 输出 row-major 顺序的 `slot_lines`。
 
 系统应完成：
 
 - 新建 `sheet_vXXX`。
 - 保存 slots、slot kind、item 绑定关系、brief snapshot 和 prompt 输入。
+- 对 emergent slots 保存 `emergent_direction` / suggested title，但 `item_id` 为空。
 - 允许后续新建多个 Sheet Run，而不会删除旧 sheet。
 
 #### 4. Compose Sheet Prompt
@@ -108,6 +124,8 @@ Agent 应完成：
 - 填充 `{{project_background}}` 和 `{{style_requirements}}`。
 - 填充 `{{slot_lines}}`。
 - 追加 `grid_sheet_negative_prompt`。
+- 对 bound slots，`slot_lines` 使用 item brief 的视觉语义。
+- 对 emergent slots，`slot_lines` 使用本轮规划生成的涌现方向，并明确它们是可自由发明但需同世界观、同风格、不重复已绑定目标的槽位。
 
 系统应完成：
 
@@ -149,14 +167,14 @@ Agent / CLI 应完成：
 
 - 对每个 tile 选择：采纳、废弃、绑定到已有 item、创建新 item、标记为涌现好图。
 - 对 bound slot，如果 tile 质量好但语义更适合另一个 item，可以重新绑定。
-- 对 emergent slot，如果是好图但暂不进入 item，可以只标记为涌现好图。
+- 对 emergent slot，如果是好图但暂不进入 item，可以保存到涌现池。
 
 系统应完成：
 
 - `pending`: 默认待审，不进入候选池。
 - `selected`: 已采纳，允许回填到目标 item。
 - `rejected`: 废弃，留在 sheet 历史。
-- `emergent`: 涌现好图，留在 sheet 层等待命名、绑定或创建 item。
+- `emergent`: 涌现好图，进入批次级涌现池，等待命名、绑定或创建 item。
 
 #### 8. Promote Selected Tiles
 
@@ -166,6 +184,7 @@ Agent / CLI 应完成：
 - 回填时将 tile 复制到对应 item 的 `images/`。
 - 写入 `image_generation` artifact，并记录来源 `grid_sheet`、`sheet_id`、`cell_id`、row、col。
 - 默认星标该候选。
+- `emergent` tile 不会自动进入任何 item；只有用户执行“绑定到已有 item”或“创建新 item 并采纳”后，才进入 item 候选池。
 - item 工作台中显示候选来源。
 
 人类应完成：
@@ -176,6 +195,7 @@ Agent / CLI 应完成：
 
 - As a human reviewer, I want to see the real split overlay on the generated sheet so that I can judge whether the sheet can be safely cropped.
 - As a human reviewer, I want to click a tile and decide whether it is accepted, rejected, rebound, or emergent so that only useful tiles enter item candidates.
+- As a human reviewer, I want to create 10 fixed targets in a 6x6 batch without seeing 36 item rows so that the sheet capacity does not become fake product work.
 - As an agent operator, I want a single command/API flow for plan/generate/poll/split/backfill so that I can run large asset batches without manual file work.
 - As a prompt maintainer, I want separate single-image and grid-sheet templates so that grid sheet prompts can optimize for cell separation, row-major assignment, and cropping safety.
 - As a project maintainer, I want provider integrations grouped by protocol so that APIMart GPT-Image-2 can reuse `async_image` instead of becoming a site-specific provider type.
@@ -184,13 +204,17 @@ Agent / CLI 应完成：
 
 - A `grid_sheet` batch creation flow includes mode, rows, cols, project background, style requirements, and asset domain.
 - A user can add or import item targets before sheet planning.
+- Item count remains the count of explicit user targets; sheet capacity and emergent slot count are displayed separately.
+- Adding a new target item after a previous sheet run increases future bound slot count, but does not mutate old sheet slots.
 - Planning a sheet auto-generates missing item briefs for bound slots.
+- Planning does not create item records for emergent slots.
 - Planning does not destroy existing item status or existing candidate images.
 - Sheet prompt includes explicit slot assignments and emergent slot briefs.
 - Generated sheet can be displayed with a real overlay grid.
 - Split tiles can be reviewed individually.
 - Review actions include accept, reject, bind to existing item, create new item, and mark emergent.
 - Backfill only promotes accepted tiles.
+- Emergent tiles can be saved to a batch-level emergent pool without being promoted.
 - Promoted tiles are visible in item candidate pool and starred by default.
 - Item candidate source displays sheet and cell metadata.
 - CLI and Web APIs expose equivalent flow controls.
@@ -233,7 +257,9 @@ Grid sheet prompt must:
 - Explicitly declare exact rows and columns.
 - Define row-major order.
 - Include one slot line per cell.
-- Separate bound slots from emergent slots.
+- Separate bound slots from emergent slots, while preserving a single row-major `slot_lines` list for model execution.
+- For bound slots, carry over item brief semantics.
+- For emergent slots, provide varied lightweight directions generated during sheet planning.
 - Require one independent asset subject per cell.
 - Require safe margins for strict mathematical crop.
 - Forbid text, labels, numbering, logos, watermarks, signatures, UI badges, and subjects crossing cell boundaries.
@@ -246,12 +272,14 @@ Manual evaluation is required in V1:
 - **Crop safety**: selected tiles should remain readable after strict crop.
 - **Style consistency**: selected tiles should share camera angle, material, lighting, background, and icon scale.
 - **Emergent usefulness**: emergent tiles should be relevant enough to become future items or reserve candidates.
+- **Mental model clarity**: users should be able to explain that 6x6 is capacity, not item count.
 
 Suggested batch-level metrics:
 
 - Accepted tile rate per sheet.
 - Bound slot success rate.
 - Emergent useful tile rate.
+- Emergent pool save-to-use rate.
 - Re-generation rate caused by sheet-level layout failure.
 - Average accepted candidates per item after N sheet runs.
 
@@ -264,7 +292,8 @@ Suggested batch-level metrics:
 ```text
 Task
   mode: grid_sheet
-  items: target asset buckets
+  items: explicit target asset buckets
+  emergent_pool: useful unbound tiles
   sheets/
     sheet_v001/
       slots: bound + emergent slot plan
@@ -282,7 +311,7 @@ Task
 
 #### Item
 
-Represents a target asset bucket and final candidate pool.
+Represents an explicit target asset bucket and final candidate pool. It does not represent a sheet cell.
 
 Required in grid mode:
 
@@ -311,6 +340,22 @@ Required:
 - `source_image_path`
 - `tiles`
 
+#### Emergent Pool Entry
+
+Represents a useful tile that the user wants to keep, but has not yet bound to a target item.
+
+Required:
+
+- `pool_entry_id`
+- `source_sheet_id`
+- `source_cell_id`
+- `image_path`
+- `suggested_title`
+- `suggested_tags`
+- `review_note`
+- `created_item_id`: optional, set only after creating a new item from the pool entry
+- `target_item_id`: optional, set only after binding the pool entry to an existing item
+
 #### Slot
 
 Represents a planned cell before generation.
@@ -321,9 +366,10 @@ Required:
 - `row`
 - `col`
 - `kind`: `bound` or `emergent`
-- `item_id`: optional for emergent
+- `item_id`: required for bound, empty for emergent
 - `title`
-- `brief_snapshot`
+- `brief_snapshot`: required for bound
+- `emergent_direction`: required for emergent
 
 #### Tile
 
@@ -338,6 +384,7 @@ Required:
 - `review_status`
 - `target_item_id`
 - `promoted_image_version`
+- `emergent_pool_entry_id`
 
 ### API Requirements
 
@@ -361,6 +408,15 @@ POST /tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/promote
 POST /tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/create-item
 ```
 
+Emergent pool APIs:
+
+```text
+GET  /tasks/{task_id}/emergent-pool
+POST /tasks/{task_id}/sheets/{sheet_id}/tiles/{cell_id}/save-emergent
+POST /tasks/{task_id}/emergent-pool/{pool_entry_id}/bind
+POST /tasks/{task_id}/emergent-pool/{pool_entry_id}/create-item
+```
+
 ### CLI Requirements
 
 ```text
@@ -373,19 +429,23 @@ sheet split TASK_ID SHEET_ID
 sheet review TASK_ID SHEET_ID CELL_ID STATUS
 sheet promote TASK_ID SHEET_ID CELL_ID ITEM_ID
 sheet backfill TASK_ID SHEET_ID
+sheet emergent-list TASK_ID
+sheet emergent-bind TASK_ID POOL_ENTRY_ID ITEM_ID
+sheet emergent-create-item TASK_ID POOL_ENTRY_ID TITLE
 ```
 
 CLI should report state and file paths, but visual judgment should remain in Web UI.
 
 ### UI Requirements
 
-Batch page in `grid_sheet` mode should show three explicit zones:
+Batch page in `grid_sheet` mode should show three primary zones, with the Emergent Pool visible inside Tile Review or as an adjacent fourth panel:
 
 1. **Targets**
-   - Existing item list.
-   - Add/import item.
+   - Explicit item target list only.
+   - Add/import item. Adding an item changes future bound slot count, not old sheet runs.
    - Brief status per item.
    - Candidate count and starred count.
+   - Sheet capacity, bound slot count, and emergent slot count shown as separate numbers.
 
 2. **Sheet Runs**
    - Sheet version list.
@@ -399,6 +459,7 @@ Batch page in `grid_sheet` mode should show three explicit zones:
    - Active tile detail.
    - Review actions: accept, reject, bind, create item, mark emergent.
    - Promotion status.
+   - Emergent Pool panel: saved emergent tiles, rename, bind to existing item, create item from saved tile.
 
 Item workspace should remain focused on final candidate review:
 
@@ -438,11 +499,13 @@ Item workspace should remain focused on final candidate review:
 
 #### v1.1: Product Mindset Cleanup
 
-- Refactor UI into Targets / Sheet Runs / Tile Review zones.
+- Treat item count as explicit target count only; do not pre-create item records for emergent slots.
+- Add batch-level Emergent Pool and save/reuse actions.
+- Refine UI into Targets / Sheet Runs / Tile Review / Emergent Pool zones where needed.
 - Add sheet-level prompt preview and optional approval.
 - Make emergent slot planning visible before generation.
 - Improve copy so users know planning does not delete old sheets.
-- Add review summary: accepted, rejected, emergent, unreviewed.
+- Add review summary: accepted, rejected, saved emergent, unreviewed.
 
 #### v1.2: Better Review Ergonomics
 
@@ -451,6 +514,7 @@ Item workspace should remain focused on final candidate review:
 - Rebind dropdown with search.
 - Create item from emergent tile with naming flow.
 - Filter tiles by pending / selected / rejected / emergent.
+- Lightweight emergent slot direction editor before generation.
 
 #### v2.0: Advanced Automation
 
@@ -463,8 +527,8 @@ Item workspace should remain focused on final candidate review:
 ### Open Questions
 
 - Should item be renamed to target in grid mode UI, while keeping storage as item?
-- Should emergent slots be generated by brief model during planning, or remain template-only with broad rules?
+- How much metadata should an emergent pool entry require before it can become a formal item?
 - Should sheet prompt require human approval before generation, or be visible but auto-approved?
 - Should accepted tiles instantly promote, or should there be a separate “apply selected tiles” confirmation?
 - Should multiple accepted tiles for the same item from different sheets be ranked by sheet/run metadata?
-
+- Should emergent pool entries be exportable independently from item-approved assets?
