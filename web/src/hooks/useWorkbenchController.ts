@@ -57,6 +57,10 @@ function itemHasBackgroundWork(item: ItemSummary) {
   )
 }
 
+function sheetHasBackgroundWork(sheet: GridSheetSummary) {
+  return sheet.status === 'generating'
+}
+
 export function useWorkbenchController() {
   const dashboardScrollRef = useRef<HTMLDivElement | null>(null)
   const dashboardScrollTopRef = useRef(0)
@@ -822,27 +826,38 @@ export function useWorkbenchController() {
 
   const pollDashboardTask = useEffectEvent(() => {
     if (!activeTaskId || dashboardPollInFlightRef.current) return
+    const taskId = activeTaskId
+    const generatingSheets = sheets.filter(sheetHasBackgroundWork)
     dashboardPollInFlightRef.current = true
-    void reloadTaskContext(activeTaskId, activeItemIdRef.current)
-      .then(() => reloadTaskList(activeTaskId))
+    void Promise.allSettled(
+      generatingSheets.map((sheet) => pollTaskGridSheet(taskId, sheet.sheet_id)),
+    )
+      .then(() => reloadTaskContext(taskId, activeItemIdRef.current))
+      .then(() => reloadTaskList(taskId))
       .finally(() => {
         dashboardPollInFlightRef.current = false
       })
   })
 
   useEffect(() => {
-    const hasBackgroundWork = items.some(itemHasBackgroundWork)
+    const hasBackgroundWork = items.some(itemHasBackgroundWork) || sheets.some(sheetHasBackgroundWork)
     if (!activeTaskId || !hasBackgroundWork) return
     const timer = window.setInterval(() => {
       pollDashboardTask()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [activeTaskId, items])
+  }, [activeTaskId, items, sheets])
 
   useEffect(() => {
-    if (view !== 'dashboard' || !activeTaskId || !items.some(itemHasBackgroundWork)) return
+    if (
+      view !== 'dashboard' ||
+      !activeTaskId ||
+      (!items.some(itemHasBackgroundWork) && !sheets.some(sheetHasBackgroundWork))
+    ) {
+      return
+    }
     pollDashboardTask()
-  }, [view, activeTaskId, items])
+  }, [view, activeTaskId, items, sheets])
 
   useEffect(() => {
     if (view !== 'dashboard') return
