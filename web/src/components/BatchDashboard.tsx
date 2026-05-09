@@ -407,6 +407,14 @@ export default function BatchDashboard({
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragLine({ sheetId: selectedSheet.sheet_id, axis, index })
   }
+
+  function handleCreateSheetRun() {
+    if (sheets.length > 0 && !window.confirm('这会新建一张 Sheet 规划，不会删除已有图片。继续吗？')) {
+      return
+    }
+    setSheetSelection({ taskId: task.task_id, sheetId: null })
+    void onGridSheetAction('plan')
+  }
   const generatedItems = metrics?.generated_items ?? 0
   const completionRate = formatPercent(generatedItems, task.item_count || 0)
   const starredCoverage = formatPercent(metrics?.items_with_starred ?? 0, task.item_count || 0)
@@ -875,20 +883,12 @@ export default function BatchDashboard({
               <button
                 type="button"
                 disabled={actionBusy || items.length === 0}
-                title="先为缺失的目标 item 生成 brief，再按当前批次设置创建一个新的 sheet_vXXX 规划，不会删除已有图片。"
-                onClick={() => {
-                  if (
-                    sheets.length > 0 &&
-                    !window.confirm('这会新建一个 Sheet Run，不会删除已有图片。继续吗？')
-                  ) {
-                    return
-                  }
-                  void onGridSheetAction('plan')
-                }}
+                title="按当前目标和批次设置，新建一张 sheet_vXXX 规划。不会删除旧 sheet。"
+                onClick={handleCreateSheetRun}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-black text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Icon name="add" className="text-[16px]" />
-                生成意图并新建 Sheet Run
+                新建一张 Sheet 规划
               </button>
             </div>
           </div>
@@ -1000,8 +1000,19 @@ export default function BatchDashboard({
                   ) : null}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-on-surface-variant">
-                  Sheet Run 保存本轮 slot 规划、整图 prompt、provider 任务、source 图、切片和审图状态。
+                  先新建 Sheet 规划，再提交当前规划出图。想再跑一张，就再新建一张 Sheet；旧图和旧审图不会被删除。
                 </p>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    disabled={actionBusy || items.length === 0}
+                    onClick={handleCreateSheetRun}
+                    className="inline-flex items-center gap-2 rounded-xl border border-primary/35 px-3 py-2 text-xs font-black text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Icon name="add" className="text-[16px]" />
+                    新建下一张 Sheet
+                  </button>
+                </div>
                 {selectedSheet ? (
                   <>
                     <div className="mt-3 grid grid-cols-4 gap-2">
@@ -1029,7 +1040,7 @@ export default function BatchDashboard({
                         onClick={() => void onGridSheetAction('generate', selectedSheet.sheet_id)}
                         className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        提交出图
+                        提交当前 Sheet 出图
                       </button>
                       <button
                         type="button"
@@ -1058,8 +1069,9 @@ export default function BatchDashboard({
                         disabled={actionBusy || !canBackfillSheet}
                         onClick={() => void onGridSheetAction('backfill', selectedSheet.sheet_id)}
                         className="rounded-xl border border-emerald-300/30 px-3 py-2 text-xs font-bold text-emerald-100 transition-colors hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        title="把当前 sheet 里已经标记为采纳的 tile 复制进对应 item 的候选池，并默认星标。"
                       >
-                        回填已采纳
+                        入池已采纳 tile
                       </button>
                     </div>
                     <div className="mt-3 grid gap-3">
