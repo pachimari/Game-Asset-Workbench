@@ -339,9 +339,10 @@ def _mask_api_key(key: str) -> str:
     return key[:4] + "\u2022" * (len(key) - 8) + key[-4:]
 
 
-def _file_url(path: Path) -> str:
+def _file_url(path: Path, *, version: str | None = None) -> str:
     relative = path.relative_to(TASKS_DIR)
-    return f"/files/{relative.as_posix()}"
+    url = f"/files/{relative.as_posix()}"
+    return f"{url}?v={quote(version)}" if version else url
 
 
 def _safe_file_response_path(file_path: str) -> Path:
@@ -557,13 +558,14 @@ def _task_payload(task_id: str) -> dict:
 def _sheet_payload(task_id: str, sheet: dict) -> dict:
     payload = dict(sheet)
     root = sheet_dir(task_id, sheet["sheet_id"])
+    version = str(payload.get("updated_at") or "")
     source_image_path = payload.get("source_image_path")
-    payload["source_image_url"] = _file_url(root / source_image_path) if source_image_path else None
+    payload["source_image_url"] = _file_url(root / source_image_path, version=version) if source_image_path else None
     tiles = []
     for tile in payload.get("tiles", []):
         row = dict(tile)
         image_path = row.get("image_path")
-        row["image_url"] = _file_url(root / image_path) if image_path else None
+        row["image_url"] = _file_url(root / image_path, version=version) if image_path else None
         tiles.append(row)
     payload["tiles"] = tiles
     return payload

@@ -332,7 +332,9 @@ export default function BatchDashboard({
   const selectedSheetGenerating = selectedSheet?.status === 'generating'
   const canGenerateSheet = Boolean(selectedSheet && ['planned', 'failed'].includes(selectedSheet.status))
   const canPollSheet = Boolean(selectedSheet && ['generating'].includes(selectedSheet.status))
-  const canSplitSheet = Boolean(selectedSheet && ['generated', 'split'].includes(selectedSheet.status))
+  const canSplitSheet = Boolean(
+    selectedSheet?.source_image_url && !['planned', 'generating'].includes(selectedSheet.status),
+  )
   const canBackfillSheet = Boolean(
     selectedSheet &&
       selectedSheet.tiles.some((tile) => tile.review_status === 'selected' && !tile.promoted_version),
