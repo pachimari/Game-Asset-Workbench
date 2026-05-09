@@ -174,7 +174,7 @@ const IMAGE_RESOLUTION_OPTIONS = ['auto', '512', '1K', '2K', '4K']
 const ASSET_TYPE_OPTIONS = [
   { value: 'skill_icon', label: '技能图标', description: '最常见。用于技能、法术、被动、效果图标。' },
   { value: 'item_icon', label: '道具图标', description: '装备、材料、消耗品、宝物。' },
-  { value: 'buff_icon', label: '状态图标', description: 'Buff、Debuff、状态效果。' },
+  { value: 'buff_icon', label: '状态图标', description: '增益、减益、状态效果。' },
   { value: 'generic_icon', label: '通用图标', description: '先不细分时用它，后面也能再调整。' },
   { value: '__custom__', label: '自定义类型', description: '如果你的项目有自己的类型命名，可以手动填。' },
 ] as const
@@ -409,7 +409,7 @@ export default function BatchDashboard({
   }
 
   function handleCreateSheetRun() {
-    if (sheets.length > 0 && !window.confirm('这会新建一张 Sheet 规划，不会删除已有图片。继续吗？')) {
+    if (sheets.length > 0 && !window.confirm('这会新建一张整图规划，不会删除已有图片。继续吗？')) {
       return
     }
     setSheetSelection({ taskId: task.task_id, sheetId: null })
@@ -528,7 +528,7 @@ export default function BatchDashboard({
 
           <div className="grid grid-cols-4 gap-2 lg:min-w-[420px]">
             <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">条目总数</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">目标总数</div>
               <div className="mt-1 text-2xl font-black text-on-surface">{task.item_count}</div>
             </div>
             <div className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
@@ -821,7 +821,7 @@ export default function BatchDashboard({
                     value={projectBackground}
                     onChange={(event) => setProjectBackground(event.target.value)}
                     className="min-h-28 w-full rounded-xl bg-surface-container-lowest px-3 py-2 text-sm leading-6 text-on-surface outline-none ring-1 ring-transparent focus:ring-primary/35"
-                    placeholder="低权重背景信息，用于帮助所有条目保持同一世界观。"
+                    placeholder="低权重背景信息，用于帮助所有目标保持同一世界观。"
                   />
                 </label>
                 <label className="block">
@@ -868,7 +868,7 @@ export default function BatchDashboard({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Icon name="grid_view" className="text-[18px] text-primary" />
-                  <span className="text-sm font-black text-on-surface">网格模式工作流</span>
+                  <span className="text-sm font-black text-on-surface">网格整图工作流</span>
                   <span className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
                     {selectedSheet ? `${selectedSheet.sheet_id} · ${statusLabel(selectedSheet.status)}` : '等待规划'}
                   </span>
@@ -877,18 +877,18 @@ export default function BatchDashboard({
                   </span>
                 </div>
                 <div className="mt-1 text-xs leading-5 text-on-surface-variant">
-                  目标 item 先做意图识别，Sheet Run 负责整张图生成，Tile Review 决定哪些切片进入候选池。
+                  目标资产先做意图识别；每张整图负责一次批量生成；切片审图决定哪些小图进入候选池。
                 </div>
               </div>
               <button
                 type="button"
                 disabled={actionBusy || items.length === 0}
-                title="按当前目标和批次设置，新建一张 sheet_vXXX 规划。不会删除旧 sheet。"
+                title="按当前目标和批次设置，新建一张整图规划。不会删除旧图。"
                 onClick={handleCreateSheetRun}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-black text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Icon name="add" className="text-[16px]" />
-                新建一张 Sheet 规划
+                新建整图规划
               </button>
             </div>
           </div>
@@ -897,7 +897,7 @@ export default function BatchDashboard({
               <section className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-primary">1 Targets</div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-primary">1 目标</div>
                     <h3 className="mt-1 text-base font-black text-on-surface">目标资产桶</h3>
                   </div>
                   <div className="rounded-full border border-outline-variant/16 bg-surface-container-highest px-2 py-0.5 text-[11px] text-on-surface-variant">
@@ -905,7 +905,7 @@ export default function BatchDashboard({
                   </div>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-on-surface-variant">
-                  这里不是逐张出图入口。每个目标会先被理解成 brief，再被放进 Sheet Run 的 bound slot。
+                  这里不是逐张出图入口。每个目标会先被理解成意图说明，再放进整图规划的固定格位。
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
@@ -913,7 +913,7 @@ export default function BatchDashboard({
                     <div className="text-lg font-black text-on-surface">{items.length}</div>
                   </div>
                   <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
-                    <div className="text-[11px] text-outline">本 Sheet brief</div>
+                    <div className="text-[11px] text-outline">意图说明</div>
                     <div className="text-lg font-black text-on-surface">
                       {selectedSheet ? `${selectedSheetBriefsReady}/${selectedSheetBoundSlots}` : '未规划'}
                     </div>
@@ -970,7 +970,7 @@ export default function BatchDashboard({
                   ))}
                   {items.length > 12 ? (
                     <div className="px-2 py-1 text-[11px] text-on-surface-variant">
-                      还有 {items.length - 12} 个目标在下方条目概览中。
+                      还有 {items.length - 12} 个目标在下方目标概览中。
                     </div>
                   ) : null}
                 </div>
@@ -979,8 +979,8 @@ export default function BatchDashboard({
               <section className="rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-secondary">2 Sheet Runs</div>
-                    <h3 className="mt-1 text-base font-black text-on-surface">整张图实验</h3>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-secondary">2 整图记录</div>
+                    <h3 className="mt-1 text-base font-black text-on-surface">整图生成</h3>
                   </div>
                   {sheets.length > 0 ? (
                     <select
@@ -989,7 +989,7 @@ export default function BatchDashboard({
                         setSheetSelection({ taskId: task.task_id, sheetId: event.target.value || null })
                       }
                       className="max-w-[190px] rounded-xl border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-xs font-bold text-on-surface outline-none"
-                      aria-label="选择 Sheet Run"
+                      aria-label="选择整图记录"
                     >
                       {sheets.map((sheet) => (
                         <option key={sheet.sheet_id} value={sheet.sheet_id}>
@@ -1000,7 +1000,7 @@ export default function BatchDashboard({
                   ) : null}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-on-surface-variant">
-                  先新建 Sheet 规划，再提交当前规划出图。想再跑一张，就再新建一张 Sheet；旧图和旧审图不会被删除。
+                  先新建整图规划，再提交当前规划出图。想再跑一张，就再新建一张整图；旧图和旧审图不会被删除。
                 </p>
                 <div className="mt-3">
                   <button
@@ -1010,7 +1010,7 @@ export default function BatchDashboard({
                     className="inline-flex items-center gap-2 rounded-xl border border-primary/35 px-3 py-2 text-xs font-black text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Icon name="add" className="text-[16px]" />
-                    新建下一张 Sheet
+                    新建下一张整图
                   </button>
                 </div>
                 {selectedSheet ? (
@@ -1021,7 +1021,7 @@ export default function BatchDashboard({
                         <div className="truncate text-sm font-black text-on-surface">{statusLabel(selectedSheet.status)}</div>
                       </div>
                       <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
-                        <div className="text-[11px] text-outline">Bound</div>
+                        <div className="text-[11px] text-outline">固定目标</div>
                         <div className="text-sm font-black text-on-surface">{selectedSheetBoundSlots}</div>
                       </div>
                       <div className="rounded-lg bg-surface-container-highest px-2.5 py-2">
@@ -1040,7 +1040,7 @@ export default function BatchDashboard({
                         onClick={() => void onGridSheetAction('generate', selectedSheet.sheet_id)}
                         className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        提交当前 Sheet 出图
+                        提交当前整图出图
                       </button>
                       <button
                         type="button"
@@ -1048,7 +1048,7 @@ export default function BatchDashboard({
                         onClick={() => void onGridSheetAction('poll', selectedSheet.sheet_id)}
                         className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        轮询结果
+                        检查生成结果
                       </button>
                       <button
                         type="button"
@@ -1069,23 +1069,23 @@ export default function BatchDashboard({
                         disabled={actionBusy || !canBackfillSheet}
                         onClick={() => void onGridSheetAction('backfill', selectedSheet.sheet_id)}
                         className="rounded-xl border border-emerald-300/30 px-3 py-2 text-xs font-bold text-emerald-100 transition-colors hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        title="把当前 sheet 里已经标记为采纳的 tile 复制进对应 item 的候选池，并默认星标。"
+                        title="把当前整图里已经标记为采纳的切片复制进对应目标的候选池，并默认星标。"
                       >
-                        入池已采纳 tile
+                        入池已采纳切片
                       </button>
                     </div>
                     <div className="mt-3 grid gap-3">
                       <div className="min-w-0 rounded-lg bg-surface-container-highest px-3 py-3">
                         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                          Sheet Prompt
+                          整图提示词
                         </div>
                         <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
-                          {selectedSheetPrompt || '尚未生成 prompt'}
+                          {selectedSheetPrompt || '尚未生成提示词'}
                         </pre>
                       </div>
                       <div className="min-w-0 rounded-lg bg-surface-container-highest px-3 py-3">
                         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                          Slot Preview
+                          格位预览
                         </div>
                         <div className="mt-2 grid max-h-40 gap-1.5 overflow-auto">
                           {selectedSheet.slots.slice(0, 16).map((slot) => (
@@ -1095,7 +1095,7 @@ export default function BatchDashboard({
                             >
                               <span className="font-mono text-outline">{slot.cell_id}</span>
                               <span className={slot.kind === 'emergent' ? 'text-amber-200' : 'text-primary'}>
-                                {slot.kind === 'emergent' ? 'emergent' : 'bound'}
+                                {slot.kind === 'emergent' ? '涌现' : '固定'}
                               </span>
                               <span className="truncate text-on-surface-variant">{slot.title || slot.item_id}</span>
                             </div>
@@ -1106,7 +1106,7 @@ export default function BatchDashboard({
                   </>
                 ) : (
                   <div className="mt-3 rounded-lg bg-surface-container-highest px-3 py-4 text-sm leading-6 text-on-surface-variant">
-                    当前还没有 Sheet Run。先补齐批次目标，再点击上方按钮生成意图并规划第一张网格图。
+                    当前还没有整图记录。先补齐批次目标，再点击上方按钮新建第一张整图规划。
                   </div>
                 )}
               </section>
@@ -1114,10 +1114,10 @@ export default function BatchDashboard({
             <section className="min-w-0 rounded-xl border border-outline-variant/12 bg-surface-container px-3 py-3">
               <div className="flex flex-col gap-3 border-b border-outline-variant/10 pb-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <div className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">3 Tile Review</div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">3 切片审图</div>
                   <h3 className="mt-1 text-base font-black text-on-surface">切分审图层</h3>
                   <p className="mt-1 text-xs leading-5 text-on-surface-variant">
-                    蓝线是系统真实切分层。只有你采纳的 tile 会进入目标 item 候选池，并默认星标。
+                    蓝线是系统真实切分层。只有你采纳的切片会进入目标候选池，并默认星标。
                   </p>
                 </div>
                 {selectedSheet ? (
@@ -1154,7 +1154,7 @@ export default function BatchDashboard({
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <div className="text-[11px] font-black uppercase tracking-[0.16em] text-sky-200">
-                              Cut Lines
+                              切线校准
                             </div>
                             <div className="mt-1 text-xs leading-5 text-on-surface-variant">
                               拖动图上的蓝色线可以校准外框和中间切线；下方滑杆用于精调外框。
@@ -1316,9 +1316,9 @@ export default function BatchDashboard({
                             <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                           </div>
                           <div>
-                            <div className="text-sm font-black text-on-surface">Sheet 正在生成中</div>
+                            <div className="text-sm font-black text-on-surface">整图正在生成中</div>
                             <div className="mt-1 text-xs leading-5 text-on-surface-variant">
-                              已提交到 Provider，等待轮询结果。这里不展示假进度，只提示任务还在跑。
+                              已提交到图片服务，等待生成结果。这里不展示假进度，只提示任务还在跑。
                             </div>
                           </div>
                           {selectedSheet.async_job?.task_id ? (
@@ -1395,7 +1395,7 @@ export default function BatchDashboard({
                                 {reviewLabel(selectedTile.review_status)}
                               </span>
                               <span className="rounded-full border border-outline-variant/16 px-2 py-0.5 text-[11px] text-on-surface-variant">
-                                {selectedTileSlot?.kind === 'emergent' ? 'emergent slot' : 'bound slot'}
+                                {selectedTileSlot?.kind === 'emergent' ? '涌现格位' : '固定目标格位'}
                               </span>
                               {selectedTile.promoted_version ? (
                                 <span className="rounded-full border border-emerald-300/35 bg-emerald-300/12 px-2 py-0.5 text-[11px] font-bold text-emerald-100">
@@ -1482,14 +1482,14 @@ export default function BatchDashboard({
                       </div>
                     ) : (
                       <div className="rounded-xl bg-surface-container-highest px-4 py-5 text-sm leading-6 text-on-surface-variant">
-                        切图后选择一个 tile，就能在这里做采纳、废弃、绑定目标或创建新目标。
+                        切图后选择一个切片，就能在这里做采纳、废弃、绑定目标或创建新目标。
                       </div>
                     )}
                   </div>
                 </div>
               ) : (
                 <div className="mt-3 rounded-xl bg-surface-container-highest px-4 py-8 text-center text-sm leading-6 text-on-surface-variant">
-                  还没有 Sheet Run。先在左侧确认目标，再生成意图并新建 Sheet Run。
+                  还没有整图记录。先在左侧确认目标，再新建第一张整图规划。
                 </div>
               )}
             </section>
@@ -1501,7 +1501,7 @@ export default function BatchDashboard({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
           <div className="flex items-center gap-2">
             <Icon name="view_list" className="text-[18px] text-primary" />
-            <span className="text-sm font-bold text-on-surface">条目概览</span>
+            <span className="text-sm font-bold text-on-surface">目标概览</span>
             <span className="text-xs text-on-surface-variant">在一个屏幕里快速浏览状态和版本</span>
           </div>
 
@@ -1510,7 +1510,7 @@ export default function BatchDashboard({
               onClick={() => setModal('bulk')}
               className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container"
             >
-              CSV / 表格导入
+              批量导入
             </button>
             <button
               onClick={() => {
@@ -1520,7 +1520,7 @@ export default function BatchDashboard({
               className="flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim"
             >
               <Icon name="add" className="text-[16px]" />
-              新增条目
+              新增目标
             </button>
           </div>
         </div>
@@ -1540,7 +1540,7 @@ export default function BatchDashboard({
               onClick={() => void onExportStarredImages()}
               className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {actionBusy ? '处理中…' : '导出星标 ZIP'}
+              {actionBusy ? '处理中…' : '导出星标压缩包'}
             </button>
             <button
               type="button"
@@ -1556,7 +1556,7 @@ export default function BatchDashboard({
               onClick={() => void onRunBatchPipeline({ autoApprove: true })}
               className="rounded-xl bg-primary px-3 py-2 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {actionBusy ? '执行中…' : '一键跑完整个批次'}
+              {actionBusy ? '执行中…' : '自动跑完整批次'}
             </button>
           </div>
         </div>
@@ -1578,7 +1578,7 @@ export default function BatchDashboard({
             <thead>
               <tr className="border-b border-outline-variant/10 bg-surface-container-lowest/20 text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
                 <th className="px-4 py-2.5">预览</th>
-                <th className="px-4 py-2.5">条目</th>
+                <th className="px-4 py-2.5">目标</th>
                 <th className="px-4 py-2.5">状态</th>
                 <th className="px-4 py-2.5">当前版本</th>
               </tr>
@@ -1685,8 +1685,8 @@ export default function BatchDashboard({
         {items.length === 0 ? (
           <div className="flex min-h-[180px] flex-col items-center justify-center p-8 text-center">
             <Icon name="inbox" className="mb-3 text-3xl text-outline" />
-            <p className="text-sm text-on-surface-variant">当前批次还没有条目</p>
-            <p className="mt-2 text-xs text-outline">可以先新增条目，也可以一次性导入 CSV 或表格数据。</p>
+            <p className="text-sm text-on-surface-variant">当前批次还没有目标</p>
+            <p className="mt-2 text-xs text-outline">可以先新增目标，也可以一次性导入 CSV 或表格数据。</p>
           </div>
         ) : null}
       </section>
@@ -1696,7 +1696,7 @@ export default function BatchDashboard({
           <button
             type="button"
             className="absolute inset-0"
-            aria-label="关闭新增条目"
+            aria-label="关闭新增目标"
             onClick={() => {
               setModal(null)
               resetSingleDraft()
@@ -1721,13 +1721,13 @@ export default function BatchDashboard({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-outline">
-                    Create Item
+                    新增目标
                   </div>
                   <h3 className="mt-2 text-[1.7rem] font-black tracking-tight text-on-surface">
-                    新增条目
+                    新增目标
                   </h3>
                   <p className="mt-2 max-w-xl text-sm leading-6 text-on-surface-variant">
-                    一个条目就是一个具体要做的 icon。先把名称和需求说清楚，再决定它属于什么类型。
+                    一个目标就是一个具体要做的图标。先把名称和需求说清楚，再决定它属于什么类型。
                   </p>
                 </div>
                 <button
@@ -1752,11 +1752,11 @@ export default function BatchDashboard({
                   </div>
                   <div className="space-y-3 text-sm text-on-surface-variant">
                     <div className="rounded-xl bg-surface-container-low px-3 py-3">
-                      <div className="text-xs font-bold text-on-surface">条目名称</div>
-                      <div className="mt-1 leading-6">这个 icon 的名字，例如“雷暴”“治疗术”“火球”。</div>
+                      <div className="text-xs font-bold text-on-surface">目标名称</div>
+                      <div className="mt-1 leading-6">这个图标的名字，例如“雷暴”“治疗术”“火球”。</div>
                     </div>
                     <div className="rounded-xl bg-surface-container-low px-3 py-3">
-                      <div className="text-xs font-bold text-on-surface">条目类型</div>
+                      <div className="text-xs font-bold text-on-surface">资产类型</div>
                       <div className="mt-1 leading-6">更偏技术上的归类，主要帮助后面统一管理和扩展。</div>
                     </div>
                     <div className="rounded-xl bg-surface-container-low px-3 py-3">
@@ -1764,7 +1764,7 @@ export default function BatchDashboard({
                       <div className="mt-1 leading-6">更偏业务上的分组，比如战斗、辅助、资源。后面筛选会用到。</div>
                     </div>
                     <div className="rounded-xl bg-surface-container-low px-3 py-3">
-                      <div className="text-xs font-bold text-on-surface">条目描述</div>
+                      <div className="text-xs font-bold text-on-surface">目标描述</div>
                       <div className="mt-1 leading-6">直接写用户需求，越具体越好。</div>
                     </div>
                   </div>
@@ -1775,7 +1775,7 @@ export default function BatchDashboard({
                 <div className="space-y-4">
                   <label className="block">
                     <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                      条目名称
+                      目标名称
                     </span>
                     <input
                       value={title}
@@ -1790,7 +1790,7 @@ export default function BatchDashboard({
                     <label className="block">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                          条目类型
+                          资产类型
                         </span>
                         <span className="text-[11px] text-outline">偏技术归类</span>
                       </div>
@@ -1813,7 +1813,7 @@ export default function BatchDashboard({
                           value={customAssetType}
                           onChange={(event) => setCustomAssetType(event.target.value)}
                           className="mt-2 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
-                          placeholder="输入你自己的条目类型，例如 hero_icon"
+                          placeholder="输入你自己的资产类型，例如 hero_icon"
                         />
                       ) : null}
                     </label>
@@ -1853,7 +1853,7 @@ export default function BatchDashboard({
                   <label className="block">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                        条目描述
+                        目标描述
                       </span>
                       <span className="text-[11px] text-outline">真正的用户需求</span>
                     </div>
@@ -1861,7 +1861,7 @@ export default function BatchDashboard({
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
                       className="min-h-28 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
-                      placeholder="直接写这个 icon 要表达什么、长什么样、重点突出什么。"
+                      placeholder="直接写这个图标要表达什么、长什么样、重点突出什么。"
                     />
                   </label>
 
@@ -1876,14 +1876,14 @@ export default function BatchDashboard({
                       value={extraContext}
                       onChange={(event) => setExtraContext(event.target.value)}
                       className="min-h-20 w-full rounded-2xl border border-outline-variant/12 bg-surface-container-high px-4 py-3 text-sm leading-6 text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary/35"
-                      placeholder="比如颜色偏好、参考元素、禁用元素、和同批次其他 icon 的关系。"
+                      placeholder="比如颜色偏好、参考元素、禁用元素、和同批次其他图标的关系。"
                     />
                   </label>
                 </div>
 
                 <div className="mt-6 flex items-center justify-between gap-3">
                   <div className="text-xs text-on-surface-variant">
-                    创建后可以继续编辑，也可以批量再导入更多条目。
+                    创建后可以继续编辑，也可以批量再导入更多目标。
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -1901,7 +1901,7 @@ export default function BatchDashboard({
                       disabled={actionBusy}
                       className="rounded-2xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {actionBusy ? '创建中…' : '创建条目'}
+                      {actionBusy ? '创建中…' : '创建目标'}
                     </button>
                   </div>
                 </div>
@@ -1916,7 +1916,7 @@ export default function BatchDashboard({
           <div className="w-full max-w-3xl rounded-xl bg-surface-container-low p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-on-surface">批量导入条目</h3>
+                <h3 className="text-lg font-bold text-on-surface">批量导入目标</h3>
                 <p className="mt-1 text-sm text-on-surface-variant">
                   支持 CSV、TSV 或直接粘贴表格。常见表头：名称、需求描述、资产类型、分类、额外上下文。
                 </p>
@@ -1953,10 +1953,10 @@ export default function BatchDashboard({
                   下载 CSV 模板
                 </button>
                 <div className="mt-3 text-xs leading-5 text-on-surface-variant">
-                  CSV 是逗号分隔；TSV 是 Tab 分隔，更适合直接从 Excel / 飞书表格复制粘贴。
+                  CSV 是逗号分隔；TSV 是制表符分隔，更适合直接从 Excel 或飞书表格复制粘贴。
                 </div>
                 <div className="mt-2 text-xs leading-5 text-outline">
-                  推荐先下载模板填充，再导入；也可以直接把 Excel / 飞书表格内容复制后粘贴到右侧文本框。
+                  推荐先下载模板填充，再导入；也可以直接把 Excel 或飞书表格内容复制后粘贴到右侧文本框。
                 </div>
               </div>
 
@@ -1992,7 +1992,7 @@ export default function BatchDashboard({
                 onClick={() => void submitBulkImport()}
                 className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-primary-fixed disabled:opacity-50"
               >
-                {actionBusy ? '导入中…' : '导入条目'}
+                {actionBusy ? '导入中…' : '导入目标'}
               </button>
             </div>
           </div>

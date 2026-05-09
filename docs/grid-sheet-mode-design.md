@@ -473,6 +473,7 @@ item 工作台只增加来源展示：
 | 2026-05-08 | 新增切图校准要求：prompt 禁止装饰网格倾向，UI 支持 crop box 外框调整和重切。 |
 | 2026-05-08 | 切图校准从外框等距升级为完整 x/y line 调整：前端可拖动每条线，API/CLI/存储保存 `x_lines_percent` 与 `y_lines_percent`。 |
 | 2026-05-09 | 明确 Sheet Run 操作语义：新建规划会自动切到最新 sheet；提交出图只作用于当前 sheet；“回填”改文案为“入池已采纳 tile”。 |
+| 2026-05-09 | 统一前端产品语言：用户界面尽量使用“目标、整图、切片、格位、模型服务、提示词”，减少 Sheet/Tile/Provider/Prompt/brief 等工程词外露。 |
 
 ## Open Questions
 

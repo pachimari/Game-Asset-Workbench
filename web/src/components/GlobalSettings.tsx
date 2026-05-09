@@ -34,8 +34,8 @@ const settingsTabs: Array<{
 }> = [
   {
     id: 'providers',
-    label: 'Provider',
-    caption: '接入与实例',
+    label: '模型服务',
+    caption: '接入管理',
     icon: 'api',
   },
   {
@@ -46,8 +46,8 @@ const settingsTabs: Array<{
   },
   {
     id: 'templates',
-    label: '模板',
-    caption: 'Prompt 配置',
+    label: '提示词模板',
+    caption: '生成规则',
     icon: 'edit_note',
   },
 ]
@@ -67,7 +67,7 @@ const PROVIDER_TYPE_META: Record<
   },
   async_image: {
     label: '异步图片',
-    hint: '适合需要提交任务并轮询结果的图片服务。',
+    hint: '适合需要提交任务并检查生成结果的图片服务。',
     badge: '图片',
   },
   gemini_native: {
@@ -79,23 +79,23 @@ const PROVIDER_TYPE_META: Record<
 
 const providerPresets: ProviderPreset[] = [
   {
-    title: '通用第三方 API',
+    title: '通用第三方接口',
     provider_type: 'openai_compatible',
-    suggestedLabel: '新的 OpenAI 兼容 API',
+    suggestedLabel: '新的 OpenAI 兼容接口',
     suggestedBaseUrl: 'https://your-provider.com/v1',
     description: 'OpenRouter、SiliconFlow、DeepInfra、火山方舟等大多都选这个。',
   },
   {
     title: '异步图片服务',
     provider_type: 'async_image',
-    suggestedLabel: '新的异步图片 API',
+    suggestedLabel: '新的异步图片接口',
     suggestedBaseUrl: 'https://your-async-image-provider.com/v1',
     description: '用于候选图阶段的排队式异步图片生成。',
   },
   {
     title: 'Gemini 官方',
     provider_type: 'gemini_native',
-    suggestedLabel: 'Gemini Official',
+    suggestedLabel: 'Gemini 官方服务',
     suggestedBaseUrl: 'https://generativelanguage.googleapis.com',
     description: '官方 Gemini 原生接入。',
   },
@@ -103,11 +103,11 @@ const providerPresets: ProviderPreset[] = [
 
 const asyncImageQuickPresets: ProviderPreset[] = [
   {
-    title: 'APIMart GPT-Image-2',
+    title: 'APIMart 图片服务',
     provider_type: 'async_image',
     suggestedLabel: 'APIMart GPT-Image-2',
     suggestedBaseUrl: 'https://api.apimart.ai/v1',
-    description: '异步图片服务预设：预填 APIMart Base URL，模型使用 gpt-image-2。',
+    description: '异步图片服务预设：预填 APIMart 接口地址，默认模型使用 gpt-image-2。',
   },
 ]
 
@@ -355,7 +355,7 @@ export default function GlobalSettings({
             className="inline-flex items-center gap-2 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-high"
           >
             <Icon name="arrow_back" className="text-base" />
-            返回 Provider 列表
+            返回模型服务列表
           </button>
           <div className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
             {editingProviderId ? '编辑模式' : '新增模式'}
@@ -366,13 +366,13 @@ export default function GlobalSettings({
           <section className="space-y-4">
             <div className="rounded-xl border border-primary/15 bg-primary/8 p-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
-                {editingProviderId ? '编辑第三方 API' : '新增第三方 API'}
+                {editingProviderId ? '编辑第三方接口' : '新增第三方接口'}
               </div>
               <h4 className="mt-2 text-2xl font-black tracking-tight text-on-surface">
-                {editingProviderId ? providerDraft.label || '编辑 Provider' : '添加新的 Provider'}
+                {editingProviderId ? providerDraft.label || '编辑模型服务' : '添加新的模型服务'}
               </h4>
               <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                这里是一个独立的二级视图。配置完成后保存，再回到 Provider 列表统一查看。
+                这里是一个独立的二级视图。配置完成后保存，再回到模型服务列表统一查看。
               </p>
             </div>
 
@@ -411,7 +411,7 @@ export default function GlobalSettings({
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
-                  显示名称
+                  服务名称
                 </label>
                 <input
                   value={providerDraft.label}
@@ -454,14 +454,14 @@ export default function GlobalSettings({
                   {providerDraft.provider_type === 'openai_compatible'
                     ? '如果是第三方聚合平台，通常就选这个。'
                     : providerDraft.provider_type === 'async_image'
-                      ? '适合需要提交任务并轮询结果的图片服务，包括 APIMart GPT-Image-2。'
+                      ? '适合需要提交任务并检查生成结果的图片服务，包括 APIMart GPT-Image-2。'
                       : '适合 Gemini 官方原生模型能力。'}
                 </div>
               </div>
 
               <div className="md:col-span-2">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
-                  Base URL
+                  接口地址
                 </label>
                 <input
                   value={providerDraft.base_url}
@@ -488,7 +488,7 @@ export default function GlobalSettings({
                     <div>
                       <div className="text-xs font-bold text-on-surface">异步图片快捷预设</div>
                       <div className="mt-1 text-xs leading-5 text-on-surface-variant">
-                        APIMart 属于异步图片服务，这里只预填 Base URL 和显示名称，不改变协议类型。
+                        APIMart 属于异步图片服务，这里只预填接口地址和服务名称，不改变协议类型。
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -509,7 +509,7 @@ export default function GlobalSettings({
 
               <div className="md:col-span-2">
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
-                  API Key
+                  密钥
                 </label>
                 <input
                   value={providerDraft.api_key}
@@ -520,7 +520,7 @@ export default function GlobalSettings({
                     }))
                   }
                   className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3.5 py-3 font-mono text-sm text-on-surface outline-none transition-colors focus:border-primary/40"
-                  placeholder={editingProviderId ? '留空则保留当前 API Key' : '粘贴新的 API Key'}
+                  placeholder={editingProviderId ? '留空则保留当前密钥' : '粘贴新的密钥'}
                 />
               </div>
 
@@ -542,7 +542,7 @@ export default function GlobalSettings({
                   placeholder="留空则默认 1"
                 />
                 <div className="mt-2 text-xs leading-5 text-on-surface-variant">
-                  控制同一个 Provider 在候选图阶段最多同时提交多少个任务。新接入的服务建议先从 1 开始。
+                  控制同一个模型服务在候选图阶段最多同时提交多少个任务。新接入的服务建议先从 1 开始。
                 </div>
               </div>
             </div>
@@ -566,7 +566,7 @@ export default function GlobalSettings({
                 onClick={() => void handleProviderSubmit()}
                 className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary-fixed disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving ? '保存中…' : editingProviderId ? '保存修改' : '新增 Provider'}
+                {saving ? '保存中…' : editingProviderId ? '保存修改' : '新增模型服务'}
               </button>
             </div>
           </section>
@@ -581,7 +581,7 @@ export default function GlobalSettings({
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-outline-variant/15 bg-surface-container px-4 py-3">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
-              总 Provider
+              模型服务总数
             </div>
             <div className="mt-1 text-2xl font-black text-on-surface">
               {builtinProviders.length + customProviders.length}
@@ -608,18 +608,18 @@ export default function GlobalSettings({
         <div className="rounded-xl border border-primary/15 bg-primary/8 px-4 py-3 text-sm leading-6 text-on-surface-variant">
           大多数第三方平台都可以按
           <span className="mx-1 font-bold text-primary">OpenAI 兼容协议</span>
-          接进来。只有 OpenAI、Anthropic、Gemini 官方原生协议，以及特殊异步图片服务，才需要单独 provider 类型。
+          接进来。只有 OpenAI、Anthropic、Gemini 官方原生协议，以及特殊异步图片服务，才需要单独协议类型。
         </div>
 
         {renderProviderSection(
-          '系统内置 Provider',
+          '系统内置服务',
           builtinProviders,
-          '默认提供的官方或开发用 provider。',
+          '默认提供的官方或开发用服务。',
         )}
         {renderProviderSection(
           '自定义实例',
           customProviders,
-          '你后面加的各种第三方 API 都会出现在这里。',
+          '你后面加的各种第三方接口都会出现在这里。',
         )}
       </div>
     )
@@ -638,22 +638,22 @@ export default function GlobalSettings({
               onClick={() => openCreateProvider()}
               className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-on-primary-fixed transition-colors hover:bg-primary-dim"
             >
-              新增第三方 API
+              新增第三方接口
             </button>
           ) : null}
         </div>
 
         <div className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container">
           <div className="hidden grid-cols-[minmax(0,2fr)_1fr_1.6fr_72px_140px] gap-3 border-b border-outline-variant/10 bg-surface-container-high/60 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-outline lg:grid">
-            <div>Provider</div>
+            <div>服务</div>
             <div>协议</div>
-            <div>Base URL</div>
+            <div>接口地址</div>
             <div>模型</div>
             <div className="text-right">操作</div>
           </div>
 
           {providers.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-on-surface-variant">{title === '自定义实例' ? '还没有自定义 Provider。' : '暂无内容。'}</div>
+            <div className="px-4 py-6 text-sm text-on-surface-variant">{title === '自定义实例' ? '还没有自定义模型服务。' : '暂无内容。'}</div>
           ) : (
             <div className="divide-y divide-outline-variant/10">
               {providers.map((provider) => {
@@ -687,7 +687,7 @@ export default function GlobalSettings({
                       </div>
 
                       <div className="text-xs text-on-surface">
-                        <div className="font-mono">{provider.provider_type}</div>
+                        <div className="font-bold">{meta.label}</div>
                         <div className="mt-1 text-[11px] text-on-surface-variant">{meta.hint}</div>
                       </div>
 
@@ -750,7 +750,7 @@ export default function GlobalSettings({
         <aside className="hidden w-56 shrink-0 border-r border-outline-variant/10 bg-surface-container px-4 py-5 lg:flex lg:flex-col">
           <div className="mb-6">
             <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-primary">
-              Settings
+              设置
             </div>
             <h2 className="mt-2 text-xl font-black tracking-tight text-on-surface">全局设置</h2>
             <p className="mt-2 text-xs leading-5 text-on-surface-variant">
@@ -816,20 +816,20 @@ export default function GlobalSettings({
                 {activeTab === 'providers'
                   ? providerEditorOpen
                     ? editingProviderId
-                      ? '编辑 Provider'
-                      : '新增第三方 API'
-                    : 'Provider 与接入实例'
+                      ? '编辑模型服务'
+                      : '新增第三方接口'
+                    : '模型服务与接入实例'
                   : activeTab === 'defaults'
                     ? '默认模型继承'
-                    : 'Prompt 模板'}
+                    : '提示词模板'}
               </h3>
               <p className="mt-1 text-xs leading-5 text-on-surface-variant md:text-sm">
                 {activeTab === 'providers'
                   ? providerEditorOpen
-                    ? '你现在处于 Provider 的二级编辑视图，保存后会返回列表。'
-                    : 'Provider 放在最上层，新增第三方 API 作为二级操作进入。'
+                    ? '你现在处于模型服务的二级编辑视图，保存后会返回列表。'
+                    : '模型服务放在最上层，新增第三方接口作为二级操作进入。'
                   : activeTab === 'defaults'
-                    ? '按阶段配置默认 provider 和模型。'
+                    ? '按阶段配置默认模型服务和模型。'
                     : '管理设计说明与出图指令的底层模板。'}
               </p>
             </div>
@@ -849,7 +849,7 @@ export default function GlobalSettings({
             {activeTab === 'defaults' ? (
               <div className="space-y-5">
                 <div className="rounded-xl border border-outline-variant/15 bg-surface-container px-4 py-3 text-sm leading-6 text-on-surface-variant">
-                  这里是全局默认模型。条目没有单独覆盖时，会从这里继承。
+                  这里是全局默认模型。目标没有单独覆盖时，会从这里继承。
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-3">
@@ -876,7 +876,7 @@ export default function GlobalSettings({
                           }
                           className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3.5 py-2.5 text-sm text-on-surface outline-none transition-colors focus:border-primary/40"
                         >
-                          <option value="">请选择 provider</option>
+                          <option value="">请选择模型服务</option>
                           {providerOptions.map((provider) => (
                             <option key={provider.id} value={provider.id}>
                               {provider.label}
@@ -940,7 +940,7 @@ export default function GlobalSettings({
             {activeTab === 'templates' ? (
               <div className="space-y-5">
                 <div className="rounded-xl border border-outline-variant/15 bg-surface-container px-4 py-3 text-sm leading-6 text-on-surface-variant">
-                  这里管理系统提示词，不和 Provider 或默认模型混在一起。网格切图模板支持变量：
+                  这里管理系统提示词，不和模型服务或默认模型混在一起。网格切图模板支持变量：
                   <span className="font-mono"> {'{{rows}} {{cols}} {{cell_count}} {{project_background}} {{style_requirements}} {{slot_lines}}'}</span>
                 </div>
 

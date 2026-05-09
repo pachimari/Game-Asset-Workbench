@@ -29,7 +29,7 @@ export default function TopBar({
           />
           <input
             className="w-52 rounded-lg bg-surface-container-highest py-1.5 pl-9 pr-3 text-xs text-on-surface outline-none placeholder:text-outline transition-all focus:ring-1 focus:ring-primary/40"
-            placeholder="搜索条目"
+            placeholder="搜索目标"
           />
         </div>
         <button className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-bright">

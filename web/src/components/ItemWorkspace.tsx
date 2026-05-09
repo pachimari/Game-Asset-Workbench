@@ -184,7 +184,7 @@ function CandidateCard({
   const firstImage = firstCandidate?.image_url
   const sourceLabel =
     firstCandidate?.source === 'grid_sheet'
-      ? `${firstCandidate.sheet_id ?? 'sheet'} · ${firstCandidate.cell_id ?? ''}`.trim()
+      ? `整图 ${firstCandidate.sheet_id ?? ''} · 切片 ${firstCandidate.cell_id ?? ''}`.trim()
       : null
   const asyncStatus = version.async_job?.status
   const progress = Number(version.async_job?.progress ?? 0)
@@ -451,8 +451,8 @@ export default function ItemWorkspace({
   const resolvedAspectRatio = item.runtime_overrides.image_aspect_ratio || task?.runtime_config?.image_aspect_ratio || '1:1'
   const resolvedResolution = item.runtime_overrides.image_resolution || task?.runtime_config?.image_resolution || '1K'
   const runtimeSource = {
-    aspectRatio: item.runtime_overrides.image_aspect_ratio ? '条目覆盖' : '跟随批次',
-    resolution: item.runtime_overrides.image_resolution ? '条目覆盖' : '跟随批次',
+    aspectRatio: item.runtime_overrides.image_aspect_ratio ? '目标覆盖' : '跟随批次',
+    resolution: item.runtime_overrides.image_resolution ? '目标覆盖' : '跟随批次',
   }
   const recentEvents = workspace.events.slice().reverse().slice(0, 5)
 
@@ -465,7 +465,7 @@ export default function ItemWorkspace({
       return {
         model: modelLabel(itemOverride.model || taskOverride?.model || globalDefault?.model || null),
         provider: itemOverride.provider || taskOverride?.provider || globalDefault?.provider || '未配置',
-        source: '条目覆盖',
+        source: '目标覆盖',
       }
     }
     if (taskOverride?.model || taskOverride?.provider) {
@@ -707,7 +707,7 @@ export default function ItemWorkspace({
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-on-surface">原始输入</h3>
-                <p className="mt-1 text-xs text-on-surface-variant">这是用户最初给这条 item 的信息。</p>
+                <p className="mt-1 text-xs text-on-surface-variant">这是用户最初给这个目标的信息。</p>
               </div>
               <button
                 type="button"
@@ -734,7 +734,7 @@ export default function ItemWorkspace({
                 }}
               >
                 <label className="block">
-                  <span className="mb-1.5 block text-xs text-on-surface-variant">条目名称</span>
+                  <span className="mb-1.5 block text-xs text-on-surface-variant">目标名称</span>
                   <input
                     value={inputDraft.title}
                     onChange={(event) => setInputDraft((current) => ({ ...current, title: event.target.value }))}
@@ -825,7 +825,7 @@ export default function ItemWorkspace({
               <div className="space-y-4">
                 <div>
                   <label className="mb-1 block text-[11px] uppercase tracking-[0.14em] text-on-surface-variant">
-                    条目名称
+                    目标名称
                   </label>
                   <p className="text-lg font-bold text-on-surface">{item.title}</p>
                 </div>
@@ -1285,7 +1285,7 @@ export default function ItemWorkspace({
                     }}
                   >
                     <label className="block">
-                      <span className="mb-1.5 block text-xs text-on-surface-variant">Prompt</span>
+                      <span className="mb-1.5 block text-xs text-on-surface-variant">正向提示词</span>
                       <textarea
                         value={promptDraft.prompt}
                         onChange={(event) =>
@@ -1295,7 +1295,7 @@ export default function ItemWorkspace({
                       />
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-xs text-on-surface-variant">Negative Prompt</span>
+                      <span className="mb-1.5 block text-xs text-on-surface-variant">负向提示词</span>
                       <textarea
                         value={promptDraft.negativePrompt}
                         onChange={(event) =>
@@ -1328,21 +1328,21 @@ export default function ItemWorkspace({
                         <Icon name="progress_activity" className="animate-spin text-3xl text-primary" />
                         <p className="mt-3 text-sm font-semibold text-on-surface">正在生成出图指令</p>
                         <p className="mt-1 text-xs text-on-surface-variant">
-                          模型会结合设计说明和批次上下文整理新的 prompt。
+                          模型会结合设计说明和批次上下文整理新的提示词。
                         </p>
                       </div>
                     ) : null}
                     <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-4">
                       <p className="mb-2 flex items-center gap-2 text-xs text-on-surface-variant">
                         <Icon name="terminal" className="text-sm" />
-                        Prompt
+                        正向提示词
                       </p>
                       <p className="font-mono text-sm leading-7 text-on-surface/90">
                         {String(promptOutput.prompt ?? '暂无出图指令')}
                       </p>
                     </div>
                     <div className="rounded-xl border border-outline-variant/10 bg-surface-container p-4">
-                      <p className="mb-2 text-xs text-on-surface-variant">Negative Prompt</p>
+                      <p className="mb-2 text-xs text-on-surface-variant">负向提示词</p>
                       <p className="font-mono text-sm leading-7 text-on-surface/90">
                         {String(promptOutput.negative_prompt ?? '暂无')}
                       </p>

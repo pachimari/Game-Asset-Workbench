@@ -150,7 +150,7 @@ export default function Sidebar({
                     {task.task_name}
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[11px] text-outline">
-                    <span>{task.item_count} 条</span>
+                    <span>{task.item_count} 个目标</span>
                     <span>{task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '进行中' : '待开始'}</span>
                   </div>
                 </button>
@@ -211,13 +211,13 @@ export default function Sidebar({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-outline">
-                    Create Batch
+                    新建批次
                   </div>
                   <h3 className="mt-2 text-[1.8rem] font-black tracking-tight text-on-surface">
                     新建批次
                   </h3>
                   <p className="mt-2 max-w-xl text-sm leading-6 text-on-surface-variant">
-                    先定义这个批次的共同背景和风格要求，后面新增的 item 默认都会在这套上下文里工作。
+                    先定义这个批次的共同背景和风格要求，后面新增的目标默认都会在这套上下文里工作。
                   </p>
                 </div>
                 <button
@@ -296,7 +296,7 @@ export default function Sidebar({
                       <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
                         统一风格要求
                       </span>
-                      <span className="text-[11px] text-outline">后面所有 item 默认参考它</span>
+                      <span className="text-[11px] text-outline">后面所有目标默认参考它</span>
                     </div>
                     <textarea
                       value={styleRequirements}
@@ -347,7 +347,7 @@ export default function Sidebar({
                           <Icon name="image" className="text-[18px]" />
                           单图模式
                         </div>
-                        <div className="mt-1 text-xs leading-5">每个 item 独立出候选图。</div>
+                        <div className="mt-1 text-xs leading-5">每个目标独立生成候选图。</div>
                       </button>
                       <button
                         type="button"
@@ -363,7 +363,7 @@ export default function Sidebar({
                           <Icon name="grid_view" className="text-[18px]" />
                           网格切图模式
                         </div>
-                        <div className="mt-1 text-xs leading-5">整批先出 sheet，再切成 tiles 回填。</div>
+                        <div className="mt-1 text-xs leading-5">整批先生成一张整图，再切成小图进入候选池。</div>
                       </button>
                     </div>
 
@@ -465,7 +465,7 @@ export default function Sidebar({
                   <div className="text-xs text-on-surface-variant">
                     {imageGenerationMode === 'grid_sheet'
                       ? '创建后会在批次页出现网格切图工作区。'
-                      : '创建后就可以往这个批次里继续加 item。'}
+                      : '创建后就可以往这个批次里继续加目标。'}
                   </div>
                   <div className="flex gap-2">
                     <button
