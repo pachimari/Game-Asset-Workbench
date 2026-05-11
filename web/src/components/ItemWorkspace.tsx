@@ -93,7 +93,7 @@ function stageSummary(status: string) {
     },
     prompt_generating: {
       title: '出图指令生成中',
-      detail: '正在整理新的 prompt',
+      detail: '正在整理新的出图指令',
       tone: 'border-sky-400/25 bg-sky-400/10 text-sky-200',
     },
     prompt_generated: {
@@ -103,7 +103,7 @@ function stageSummary(status: string) {
     },
     prompt_approved: {
       title: '可生成候选图',
-      detail: 'prompt 已确认',
+      detail: '出图指令已确认',
       tone: 'border-sky-400/25 bg-sky-400/10 text-sky-200',
     },
     image_generating: {
@@ -302,7 +302,7 @@ function BatchContextPanel({
         <div>
           <p className="text-xs font-semibold text-on-surface">批次继承上下文</p>
           <p className="mt-1 text-[11px] leading-5 text-on-surface-variant">
-            这两部分由批次设定注入，会进入后续设计说明和出图 prompt。
+            这两部分由批次设定注入，会进入后续设计说明和出图提示词。
           </p>
         </div>
         <button
@@ -650,7 +650,7 @@ export default function ItemWorkspace({
       : stageInfo.title
   const stageDetail =
     promptGenerating
-      ? '正在基于设计说明整理 prompt，稍后会自动进入下一步。'
+      ? '正在基于设计说明整理出图指令，稍后会自动进入下一步。'
       : briefGenerating
         ? '正在整理设计说明，请稍候。'
         : pendingGenerationCount > 0

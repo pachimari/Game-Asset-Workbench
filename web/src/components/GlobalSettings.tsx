@@ -714,6 +714,8 @@ export default function GlobalSettings({
                         </button>
                         <button
                           onClick={() => openEditProvider(provider)}
+                          aria-label={`编辑 ${provider.label}`}
+                          title={`编辑 ${provider.label}`}
                           className="rounded-lg border border-outline-variant/20 p-1.5 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
                         >
                           <Icon name="edit" className="text-sm" />
@@ -721,6 +723,8 @@ export default function GlobalSettings({
                         {!provider.builtin ? (
                           <button
                             onClick={() => void onDeleteProvider(provider.id)}
+                            aria-label={`删除 ${provider.label}`}
+                            title={`删除 ${provider.label}`}
                             className="rounded-lg border border-error/20 p-1.5 text-error transition-colors hover:bg-error/10"
                           >
                             <Icon name="delete" className="text-sm" />
@@ -949,7 +953,7 @@ export default function GlobalSettings({
                     <div className="border-b border-outline-variant/10 px-4 py-3">
                       <div className="text-sm font-bold text-on-surface">设计说明模板</div>
                       <div className="mt-1 font-mono text-[11px] text-on-surface-variant">
-                        brief_system_prompt
+                        用于设计说明生成
                       </div>
                     </div>
                     <textarea
@@ -968,7 +972,7 @@ export default function GlobalSettings({
                     <div className="border-b border-outline-variant/10 px-4 py-3">
                       <div className="text-sm font-bold text-on-surface">出图指令模板</div>
                       <div className="mt-1 font-mono text-[11px] text-on-surface-variant">
-                        prompt_system_prompt
+                        用于单图出图指令
                       </div>
                     </div>
                     <textarea
@@ -987,7 +991,7 @@ export default function GlobalSettings({
                     <div className="border-b border-outline-variant/10 px-4 py-3">
                       <div className="text-sm font-bold text-on-surface">网格切图模板</div>
                       <div className="mt-1 font-mono text-[11px] text-on-surface-variant">
-                        grid_sheet_prompt_template
+                        用于整图提示词
                       </div>
                     </div>
                     <textarea
@@ -1006,7 +1010,7 @@ export default function GlobalSettings({
                     <div className="border-b border-outline-variant/10 px-4 py-3">
                       <div className="text-sm font-bold text-on-surface">网格切图负向模板</div>
                       <div className="mt-1 font-mono text-[11px] text-on-surface-variant">
-                        grid_sheet_negative_prompt
+                        用于网格负向提示词
                       </div>
                     </div>
                     <textarea

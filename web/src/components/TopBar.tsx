@@ -32,7 +32,12 @@ export default function TopBar({
             placeholder="搜索目标"
           />
         </div>
-        <button className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-bright">
+        <button
+          type="button"
+          aria-label="通知"
+          title="通知"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-bright"
+        >
           <Icon name="notifications" className="text-[18px]" />
         </button>
       </div>

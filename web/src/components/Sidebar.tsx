@@ -226,6 +226,8 @@ export default function Sidebar({
                     setCreating(false)
                     resetCreateDraft()
                   }}
+                  aria-label="关闭新建批次"
+                  title="关闭新建批次"
                   className="rounded-xl border border-outline-variant/14 bg-surface-container/60 p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
                 >
                   <Icon name="close" className="text-[18px]" />

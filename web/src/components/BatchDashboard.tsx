@@ -1076,12 +1076,17 @@ export default function BatchDashboard({
                     </div>
                     <div className="mt-3 grid gap-3">
                       <div className="min-w-0 rounded-lg bg-surface-container-highest px-3 py-3">
-                        <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
-                          整图提示词
-                        </div>
-                        <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
-                          {selectedSheetPrompt || '尚未生成提示词'}
-                        </pre>
+                        <details className="group">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
+                            <span>整图提示词</span>
+                            <span className="rounded-full border border-outline-variant/16 px-2 py-0.5 text-[10px] normal-case tracking-normal text-on-surface-variant">
+                              {selectedSheetPrompt ? '查看完整内容' : '尚未生成'}
+                            </span>
+                          </summary>
+                          <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-on-surface-variant">
+                            {selectedSheetPrompt || '尚未生成提示词'}
+                          </pre>
+                        </details>
                       </div>
                       <div className="min-w-0 rounded-lg bg-surface-container-highest px-3 py-3">
                         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-outline">
@@ -1736,6 +1741,8 @@ export default function BatchDashboard({
                     setModal(null)
                     resetSingleDraft()
                   }}
+                  aria-label="关闭新增目标"
+                  title="关闭新增目标"
                   className="rounded-xl border border-outline-variant/14 bg-surface-container/60 p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
                 >
                   <Icon name="close" className="text-[18px]" />
@@ -1924,6 +1931,8 @@ export default function BatchDashboard({
               <button
                 type="button"
                 onClick={() => setModal(null)}
+                aria-label="关闭批量导入"
+                title="关闭批量导入"
                 className="rounded p-1 text-on-surface-variant hover:bg-surface-container"
               >
                 <Icon name="close" className="text-base" />
