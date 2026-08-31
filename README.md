@@ -158,6 +158,28 @@ Windows：
 - 双击 `start_local.bat`
 - 用 `stop_local.bat` 停止
 
+### Windows 首次部署
+
+先安装：
+
+- Git
+- Python 3.9 或更高版本，并确保 `python` 命令可用
+- Node.js `20.19+` 或 `22.12+`（推荐当前 Node.js LTS），并确保 `npm` 命令可用
+
+然后在 PowerShell 或命令提示符中运行：
+
+```bat
+git clone https://github.com/pachimari/Game-Asset-Workbench.git
+cd Game-Asset-Workbench
+python -m pip install -r requirements.txt
+cd web
+npm ci
+cd ..
+start_local.bat
+```
+
+启动后打开 `http://127.0.0.1:5173/`。任务数据、Provider 配置和生成图片保存在本机，不包含在 Git 仓库中；迁移旧电脑上的工作记录时，需要另行复制被 `.gitignore` 排除的 `tasks/` 与 `.local/` 数据。
+
 ### 手动方式
 
 后端：
