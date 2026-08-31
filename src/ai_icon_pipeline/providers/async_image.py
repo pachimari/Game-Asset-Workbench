@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 from pathlib import Path
+from uuid import uuid4
 from urllib import error, parse, request
 
 from .openai_compatible import ProviderRequestError
@@ -53,6 +55,7 @@ class AsyncImageProvider:
         prompt: str,
         aspect_ratio: str,
         resolution: str,
+        image_urls: list[str] | None = None,
     ) -> dict:
         normalized_resolution = {
             "auto": "1K",
@@ -74,6 +77,8 @@ class AsyncImageProvider:
                 "resolution": normalized_resolution,
             },
         }
+        if image_urls:
+            payload["image_urls"] = list(image_urls)
         response = self._request_json(
             method="POST",
             path="/images/generations",
@@ -93,6 +98,47 @@ class AsyncImageProvider:
             "progress": first_data.get("progress", response.get("progress", 0)),
             "raw": response,
         }
+
+    def upload_image(self, *, api_key: str, image_path: Path) -> dict:
+        if not self.base_url:
+            raise ProviderRequestError(f"{self.label} 未配置 base_url")
+        if not image_path.is_file():
+            raise ProviderRequestError(f"Reference image not found: {image_path}")
+        content_type = mimetypes.guess_type(image_path.name)[0] or "application/octet-stream"
+        boundary = f"ai-icon-pipeline-{uuid4().hex}"
+        prefix = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{image_path.name}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode("utf-8")
+        body = prefix + image_path.read_bytes() + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        req = request.Request(
+            f"{self.base_url}/uploads/images",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Accept": "application/json",
+                "User-Agent": "ai-icon-pipeline/0.1",
+            },
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=120) as response:
+                response_body = response.read().decode("utf-8")
+                payload = json.loads(response_body) if response_body else {}
+        except error.HTTPError as exc:
+            response_body = exc.read().decode("utf-8", errors="ignore")
+            raise ProviderRequestError(
+                f"{self.label} upload failed: {exc.code} {response_body or exc.reason}"
+            ) from exc
+        except error.URLError as exc:
+            raise ProviderRequestError(f"{self.label} upload failed: {exc.reason}") from exc
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        image_url = data.get("url") if isinstance(data, dict) else None
+        if not image_url:
+            raise ProviderRequestError(f"{self.label} upload did not return an image URL")
+        return {"url": str(image_url), "raw": payload}
 
     def list_models(self, *, api_key: str) -> list[dict]:
         payload = self._request_json(

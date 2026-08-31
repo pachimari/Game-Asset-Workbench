@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 import re
 import shutil
@@ -16,7 +18,7 @@ from .config import (
 )
 from .pipeline import approve_step, run_step
 from .provider_runtime import generate_brief_output
-from .providers.registry import get_async_image_provider
+from .providers.registry import get_async_image_provider, get_provider
 from .settings import DEFAULT_PROMPT_TEMPLATES, load_global_settings, provider_settings_for, resolve_stage_selection
 from .storage import (
     PENDING_ASYNC_STATUSES,
@@ -45,6 +47,14 @@ SHEET_ID_PATTERN = re.compile(r"^sheet_v(\d+)$")
 TILE_REVIEW_STATUSES = {"pending", "selected", "rejected", "emergent"}
 DEFAULT_GRID_SHEET_TEMPLATE = DEFAULT_PROMPT_TEMPLATES["grid_sheet_prompt_template"]
 DEFAULT_GRID_SHEET_NEGATIVE_PROMPT = DEFAULT_PROMPT_TEMPLATES["grid_sheet_negative_prompt"]
+VARIANT_PLANNER_SYSTEM_PROMPT = """You are the product planner for a game asset grid-sheet workflow.
+Plan multiple visual candidates for one and only one target asset.
+All candidates must preserve the same asset identity, gameplay use, subject category, camera/view, and overall style.
+Vary only visual treatment dimensions that help a human select the best candidate, such as silhouette treatment, material emphasis, palette balance, theme-decoration combination, lighting, and restrained effect intensity.
+Keep thematic decoration natural and coherent with the asset. Decorations must follow believable structural support, hanging, mounting, scale, and placement logic. Avoid repeated clutter and isolated pasted-on motifs.
+Do not invent different products, characters, scenes, labels, or readable text.
+Do not repeat one optional decorative motif across every candidate.
+Return valid JSON only with a `variants` array. Every entry must contain `variant_direction` and `visual_focus` strings."""
 
 
 def sheets_dir(task_id: str) -> Path:
@@ -239,6 +249,86 @@ def _emergent_brief(*, index: int, task: dict) -> dict:
     }
 
 
+def _plan_single_target_variants(
+    *,
+    task: dict,
+    item: dict,
+    brief: dict,
+    capacity: int,
+) -> tuple[list[dict], dict]:
+    global_settings = load_global_settings()
+    selected_runtime = resolve_stage_selection(
+        task,
+        item,
+        global_settings,
+        STEP_BRIEF_GENERATION,
+    )
+    provider_id = selected_runtime["provider"]
+    model_id = selected_runtime["model"]
+    if provider_id == "mock":
+        raise ValueError("single_target_variants 需要可生成结构化规划的 brief provider")
+    provider_settings = provider_settings_for(global_settings, provider_id)
+    provider = get_provider(provider_id, provider_settings)
+    raw = provider.generate_json(
+        api_key=provider_settings.get("api_key", ""),
+        model=model_id,
+        system_prompt=VARIANT_PLANNER_SYSTEM_PROMPT,
+        user_prompt=json.dumps(
+            {
+                "target_item": {
+                    "item_id": item["item_id"],
+                    "title": brief.get("title") or item.get("title", ""),
+                    "description": brief.get("description") or item.get("description", ""),
+                    "icon_subject": brief.get("icon_subject") or item.get("title", ""),
+                    "visual_focus": brief.get("visual_focus", ""),
+                },
+                "project_background": task.get("project_background", ""),
+                "style_requirements": task.get("style_requirements", ""),
+                "candidate_count": capacity,
+                "requirements": [
+                    "all entries are variants of the same target asset",
+                    "produce exactly candidate_count entries",
+                    "make each variant meaningfully distinguishable at thumbnail size",
+                    "keep thematic decoration natural and coherent with believable structural support and placement",
+                    "avoid repeated clutter, isolated pasted-on motifs, and one arbitrary trinket per candidate",
+                    "avoid repeating one optional decorative motif in every entry",
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    variants = raw.get("variants") if isinstance(raw, dict) else None
+    if not isinstance(variants, list) or len(variants) != capacity:
+        raise ValueError(f"variant planner 必须返回 {capacity} 个候选方向")
+    normalized: list[dict] = []
+    seen: set[str] = set()
+    for index, row in enumerate(variants, start=1):
+        if not isinstance(row, dict):
+            raise ValueError(f"variant planner 第 {index} 项不是对象")
+        direction = str(row.get("variant_direction") or "").strip()
+        visual_focus = str(row.get("visual_focus") or "").strip()
+        if not direction or not visual_focus:
+            raise ValueError(f"variant planner 第 {index} 项缺少方向或视觉重点")
+        signature = re.sub(r"\s+", "", direction).lower()
+        if signature in seen:
+            raise ValueError(f"variant planner 返回重复候选方向: {direction}")
+        seen.add(signature)
+        normalized.append(
+            {
+                "variant_index": index,
+                "variant_direction": direction,
+                "visual_focus": visual_focus,
+            }
+        )
+    return normalized, {
+        "provider": provider_id,
+        "model": model_id,
+        "source": selected_runtime.get("source"),
+        "strategy": "single_target_variants",
+    }
+
+
 def _render_grid_sheet_template(template: str, values: dict[str, object]) -> str:
     rendered = template
     for key, value in values.items():
@@ -372,12 +462,26 @@ def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) ->
             "slot_lines": "\n".join(slot_lines),
         },
     )
+    slot_strategy = runtime.get("grid_slot_strategy", "targets_then_emergent")
+    if slot_strategy == "single_target_variants":
+        prompt += """
+
+Single-target candidate policy:
+- Every cell is a candidate for the same target asset, not a different product and not an emergent asset.
+- Preserve the same subject identity, asset type, gameplay use, camera/view, scale, and core Three Kingdoms city-avatar language in all cells.
+- Apply only the product-planned visual variation direction assigned to each cell.
+- Make the alternatives visibly different enough for human selection without changing the target into another asset.
+"""
     negative_prompt = prompt_templates.get("grid_sheet_negative_prompt", "")
     if not negative_prompt:
         negative_prompt = DEFAULT_GRID_SHEET_NEGATIVE_PROMPT
     return {
         "mode": "grid_sheet",
-        "brief_strategy": "slot briefs use approved item brief when available, otherwise raw item input",
+        "brief_strategy": (
+            "product-planned candidates for one target item"
+            if slot_strategy == "single_target_variants"
+            else "slot briefs use approved item brief when available, otherwise raw item input"
+        ),
         "template": "grid_sheet_prompt_template",
         "slot_briefs": slot_briefs,
         "prompt": prompt.strip(),
@@ -389,6 +493,7 @@ def _build_grid_sheet_prompt(*, task: dict, runtime: dict, slots: list[dict]) ->
             "text_allowed": False,
             "one_subject_per_cell": True,
             "no_cross_cell_subjects": True,
+            "grid_slot_strategy": slot_strategy,
         },
     }
 
@@ -405,6 +510,94 @@ def plan_grid_sheet(task_id: str, *, source: str = "cli") -> dict:
     items = list_items(task_id)
     if not items:
         raise ValueError("当前批次没有可规划的 item")
+
+    slot_strategy = runtime.get("grid_slot_strategy", "targets_then_emergent")
+    if slot_strategy == "single_target_variants":
+        if len(items) != 1:
+            raise ValueError("single_target_variants 批次必须且只能包含 1 个目标 item")
+        selected_items = [items[0]]
+        brief_summary = _ensure_grid_sheet_briefs(task_id, selected_items, source=source)
+        item = load_item(task_id, selected_items[0]["item_id"])
+        target_brief = _brief_for_item(task_id, item)
+        variants, planner_provenance = _plan_single_target_variants(
+            task=task,
+            item=item,
+            brief=target_brief,
+            capacity=capacity,
+        )
+        sheet_id = next_sheet_id(task_id)
+        root = sheet_dir(task_id, sheet_id)
+        ensure_dir(root / "images" / "tiles")
+        slots = []
+        for offset, variant in enumerate(variants):
+            row = offset // cols + 1
+            col = offset % cols + 1
+            cell_id = f"r{row:02d}c{col:02d}"
+            variant_title = f"{item.get('title', '')}候选 {offset + 1:02d}"
+            slots.append(
+                {
+                    "cell_id": cell_id,
+                    "row": row,
+                    "col": col,
+                    "kind": "variant",
+                    "item_id": item["item_id"],
+                    "title": variant_title,
+                    "variant_index": offset + 1,
+                    "variant_direction": variant["variant_direction"],
+                    "brief": {
+                        "source": "variant_planner",
+                        "title": variant_title,
+                        "description": (
+                            f"同一目标资产：{target_brief.get('description', '')} "
+                            f"本格差异方向：{variant['variant_direction']}"
+                        ).strip(),
+                        "icon_subject": target_brief.get("icon_subject") or item.get("title", ""),
+                        "visual_focus": variant["visual_focus"],
+                        "keywords": list(target_brief.get("keywords") or []) + ["same_target_variant"],
+                    },
+                }
+            )
+        prompt = _build_grid_sheet_prompt(task=task, runtime=runtime, slots=slots)
+        now = utc_now()
+        sheet = {
+            "sheet_id": sheet_id,
+            "status": "planned",
+            "created_at": now,
+            "updated_at": now,
+            "input": {
+                "rows": rows,
+                "cols": cols,
+                "grid_padding": runtime.get("grid_padding", 0),
+                "grid_gap": runtime.get("grid_gap", 0),
+                "image_aspect_ratio": runtime.get("image_aspect_ratio", "1:1"),
+                "image_resolution": runtime.get("image_resolution", "1K"),
+                "item_count": 1,
+                "variant_count": capacity,
+                "emergent_item_count": 0,
+                "remaining_item_count": 0,
+                "grid_slot_strategy": slot_strategy,
+                "reference_images": list(runtime.get("sheet_reference_images") or []),
+            },
+            "brief_generation": brief_summary,
+            "variant_planner": planner_provenance,
+            "prompt": prompt,
+            "slots": slots,
+            "tiles": [],
+        }
+        save_sheet(task_id, sheet)
+        append_event(
+            task_id,
+            {
+                "timestamp": now,
+                "source": source,
+                "action": "plan_grid_sheet",
+                "sheet_id": sheet_id,
+                "item_count": 1,
+                "variant_count": capacity,
+                "grid_slot_strategy": slot_strategy,
+            },
+        )
+        return sheet
 
     selected_items = items[:capacity]
     brief_summary = _ensure_grid_sheet_briefs(task_id, selected_items, source=source)
@@ -464,6 +657,8 @@ def plan_grid_sheet(task_id: str, *, source: str = "cli") -> dict:
             "item_count": len(selected_items),
             "emergent_item_count": max(0, capacity - len(selected_items)),
             "remaining_item_count": max(0, len(items) - len(selected_items)),
+            "grid_slot_strategy": slot_strategy,
+            "reference_images": list(runtime.get("sheet_reference_images") or []),
         },
         "brief_generation": brief_summary,
         "prompt": prompt,
@@ -507,12 +702,29 @@ def submit_grid_sheet_generation(task_id: str, sheet_id: str, *, source: str = "
     negative_prompt = sheet.get("prompt", {}).get("negative_prompt", "")
     if negative_prompt:
         prompt = f"{prompt}\nAvoid: {negative_prompt}"
+    reference_records = []
+    reference_urls = []
+    task_root = task_dir(task_id).resolve()
+    for raw_path in sheet.get("input", {}).get("reference_images") or []:
+        reference_path = (task_root / str(raw_path)).resolve()
+        if task_root not in reference_path.parents or not reference_path.is_file():
+            raise ValueError(f"Invalid task reference image: {raw_path}")
+        upload = provider.upload_image(api_key=api_key, image_path=reference_path)
+        reference_urls.append(upload["url"])
+        reference_records.append(
+            {
+                "local_path": str(reference_path.relative_to(task_root)),
+                "sha256": hashlib.sha256(reference_path.read_bytes()).hexdigest(),
+                "uploaded_url": upload["url"],
+            }
+        )
     response = provider.submit_generation(
         api_key=api_key,
         model=model_id,
         prompt=prompt,
         aspect_ratio=runtime.get("image_aspect_ratio", "1:1"),
         resolution=runtime.get("image_resolution", "1K"),
+        image_urls=reference_urls,
     )
     sheet["status"] = "generating"
     sheet["provider"] = provider_id
@@ -525,6 +737,7 @@ def submit_grid_sheet_generation(task_id: str, sheet_id: str, *, source: str = "
         "submitted_at": utc_now(),
     }
     sheet["selected_runtime"] = selected_runtime
+    sheet["reference_inputs"] = reference_records
     save_sheet(task_id, sheet)
     append_event(
         task_id,

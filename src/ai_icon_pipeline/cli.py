@@ -1189,6 +1189,16 @@ def build_parser() -> argparse.ArgumentParser:
     task_update.add_argument("--grid-cols", type=int)
     task_update.add_argument("--grid-padding", type=int)
     task_update.add_argument("--grid-gap", type=int)
+    task_update.add_argument(
+        "--grid-slot-strategy",
+        choices=["targets_then_emergent", "single_target_variants"],
+    )
+    task_update.add_argument(
+        "--sheet-reference-image",
+        action="append",
+        dest="sheet_reference_images",
+        help="Task-relative reference image path; repeat for multiple images",
+    )
     task_metrics = task_subparsers.add_parser("metrics", help="Show batch workflow metrics", parents=[common_parser])
     task_metrics.set_defaults(command="task-metrics")
     task_metrics.add_argument("task_id")
@@ -1532,6 +1542,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.grid_cols,
                 args.grid_padding,
                 args.grid_gap,
+                args.grid_slot_strategy,
+                args.sheet_reference_images,
             )
             if any(value is not None for value in runtime_fields):
                 runtime_config = update_runtime_config(
@@ -1543,6 +1555,8 @@ def main(argv: list[str] | None = None) -> int:
                     grid_cols=args.grid_cols,
                     grid_padding=args.grid_padding,
                     grid_gap=args.grid_gap,
+                    grid_slot_strategy=args.grid_slot_strategy,
+                    sheet_reference_images=args.sheet_reference_images,
                 )
                 task["runtime_config"] = runtime_config
             _emit(task, as_json=args.json)

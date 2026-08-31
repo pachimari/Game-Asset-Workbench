@@ -1400,7 +1400,11 @@ export default function BatchDashboard({
                                 {reviewLabel(selectedTile.review_status)}
                               </span>
                               <span className="rounded-full border border-outline-variant/16 px-2 py-0.5 text-[11px] text-on-surface-variant">
-                                {selectedTileSlot?.kind === 'emergent' ? '涌现格位' : '固定目标格位'}
+                                {selectedTileSlot?.kind === 'emergent'
+                                  ? '涌现格位'
+                                  : selectedTileSlot?.kind === 'variant'
+                                    ? '同目标候选'
+                                    : '固定目标格位'}
                               </span>
                               {selectedTile.promoted_version ? (
                                 <span className="rounded-full border border-emerald-300/35 bg-emerald-300/12 px-2 py-0.5 text-[11px] font-bold text-emerald-100">

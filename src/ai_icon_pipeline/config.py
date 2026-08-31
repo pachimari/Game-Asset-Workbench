@@ -82,9 +82,12 @@ DEFAULT_RUNTIME_CONFIG = {
     "grid_cols": 8,
     "grid_padding": 0,
     "grid_gap": 0,
+    "grid_slot_strategy": "targets_then_emergent",
+    "sheet_reference_images": [],
 }
 
 IMAGE_GENERATION_MODE_OPTIONS = ["single", "grid_sheet"]
+GRID_SLOT_STRATEGY_OPTIONS = ["targets_then_emergent", "single_target_variants"]
 IMAGE_ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"]
 IMAGE_RESOLUTION_OPTIONS = ["auto", "512", "1K", "2K", "4K"]
 

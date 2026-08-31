@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 import unittest
@@ -362,6 +363,7 @@ class StorageSafetyTests(unittest.TestCase):
                 prompt="prompt",
                 aspect_ratio="16:9",
                 resolution="2K",
+                image_urls=["https://example.com/reference.png"],
             )
             poll = provider.poll_generation(api_key="secret", task_id="task_123")
 
@@ -375,8 +377,61 @@ class StorageSafetyTests(unittest.TestCase):
         submit_payload = request_mock.call_args_list[0].kwargs["payload"]
         self.assertEqual(submit_payload["resolution"], "2k")
         self.assertEqual(submit_payload["size"], "16:9")
+        self.assertEqual(submit_payload["image_urls"], ["https://example.com/reference.png"])
         self.assertEqual(request_mock.call_args_list[1].kwargs["path"], "/images/generations/task_123")
         self.assertEqual(request_mock.call_args_list[2].kwargs["path"], "/tasks/task_123")
+
+    def test_grid_sheet_single_target_variants_reuses_one_item_for_every_slot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            settings_path = Path(tmpdir) / "app_settings.json"
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                with patch.object(settings, "SETTINGS_DIR", Path(tmpdir)):
+                    with patch.object(settings, "APP_SETTINGS_PATH", settings_path):
+                        settings.set_global_default("brief_generation", provider="mock", model="mock-brief-v1")
+                        task = storage.create_task(task_name="Variant Grid")
+                        item = storage.create_item(
+                            task["task_id"],
+                            title="Qixi City Avatar",
+                            description="one themed city avatar",
+                        )
+                        storage.update_runtime_config(
+                            task["task_id"],
+                            image_generation_mode="grid_sheet",
+                            grid_rows=2,
+                            grid_cols=2,
+                            grid_slot_strategy="single_target_variants",
+                        )
+                        fake_provider = Mock()
+                        fake_provider.generate_json.return_value = {
+                            "variants": [
+                                {
+                                    "variant_direction": f"direction {index}",
+                                    "visual_focus": f"focus {index}",
+                                }
+                                for index in range(1, 5)
+                            ]
+                        }
+                        with patch.object(sheets, "get_provider", return_value=fake_provider):
+                            with patch.object(
+                                sheets,
+                                "resolve_stage_selection",
+                                return_value={"provider": "deepseek", "model": "deepseek-chat", "source": "global"},
+                            ):
+                                sheet = sheets.plan_grid_sheet(task["task_id"])
+
+        self.assertEqual(sheet["input"]["variant_count"], 4)
+        self.assertEqual(sheet["input"]["emergent_item_count"], 0)
+        self.assertEqual({slot["kind"] for slot in sheet["slots"]}, {"variant"})
+        self.assertEqual({slot["item_id"] for slot in sheet["slots"]}, {item["item_id"]})
+        self.assertEqual(sheet["variant_planner"]["provider"], "deepseek")
+        self.assertIn("Every cell is a candidate for the same target asset", sheet["prompt"]["prompt"])
+        planner_call = fake_provider.generate_json.call_args.kwargs
+        planner_request = json.loads(planner_call["user_prompt"])
+        self.assertIn(
+            "keep thematic decoration natural and coherent with believable structural support and placement",
+            planner_request["requirements"],
+        )
+        self.assertIn("Decorations must follow believable structural support", planner_call["system_prompt"])
 
     def test_local_request_rejects_external_forwarded_client(self) -> None:
         class DummyClient:

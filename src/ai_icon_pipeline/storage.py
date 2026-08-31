@@ -17,6 +17,7 @@ from .config import (
     DEFAULT_RUNTIME_CONFIG,
     DEFAULT_STYLE_SPEC,
     GENERATING_STALE_SECONDS,
+    GRID_SLOT_STRATEGY_OPTIONS,
     IMAGE_GENERATION_MODE_OPTIONS,
     STATUS_FAILED,
     STATUS_DRAFT,
@@ -75,6 +76,14 @@ def normalize_runtime_config(runtime_config: dict | None) -> dict:
     merged["candidate_count"] = 1
     if merged.get("image_generation_mode") not in IMAGE_GENERATION_MODE_OPTIONS:
         merged["image_generation_mode"] = DEFAULT_RUNTIME_CONFIG["image_generation_mode"]
+    if merged.get("grid_slot_strategy") not in GRID_SLOT_STRATEGY_OPTIONS:
+        merged["grid_slot_strategy"] = DEFAULT_RUNTIME_CONFIG["grid_slot_strategy"]
+    raw_references = merged.get("sheet_reference_images")
+    if not isinstance(raw_references, list):
+        raw_references = []
+    merged["sheet_reference_images"] = [
+        str(value).strip() for value in raw_references if isinstance(value, str) and str(value).strip()
+    ][:16]
     merged["grid_rows"] = _bounded_int(merged.get("grid_rows"), default=8, minimum=1, maximum=12)
     merged["grid_cols"] = _bounded_int(merged.get("grid_cols"), default=8, minimum=1, maximum=12)
     merged["grid_padding"] = _bounded_int(merged.get("grid_padding"), default=0, minimum=0, maximum=512)
@@ -375,6 +384,8 @@ def update_runtime_config(
     grid_cols: int | None = None,
     grid_padding: int | None = None,
     grid_gap: int | None = None,
+    grid_slot_strategy: str | None = None,
+    sheet_reference_images: list[str] | None = None,
 ) -> dict:
     current = load_runtime_config(task_id)
     merged = normalize_runtime_config(current)
@@ -396,6 +407,12 @@ def update_runtime_config(
         merged["grid_padding"] = grid_padding
     if grid_gap is not None:
         merged["grid_gap"] = grid_gap
+    if grid_slot_strategy is not None:
+        if grid_slot_strategy not in GRID_SLOT_STRATEGY_OPTIONS:
+            raise ValueError(f"Unsupported grid_slot_strategy: {grid_slot_strategy}")
+        merged["grid_slot_strategy"] = grid_slot_strategy
+    if sheet_reference_images is not None:
+        merged["sheet_reference_images"] = sheet_reference_images
     merged = normalize_runtime_config(merged)
     write_json(task_dir(task_id) / "configs" / "runtime_config.json", merged)
     append_event(
@@ -414,6 +431,8 @@ def update_runtime_config(
             "grid_padding": merged["grid_padding"],
             "grid_gap": merged["grid_gap"],
             "grid_cell_count": merged["grid_cell_count"],
+            "grid_slot_strategy": merged["grid_slot_strategy"],
+            "sheet_reference_image_count": len(merged["sheet_reference_images"]),
         },
     )
     return merged

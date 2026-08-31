@@ -9,7 +9,7 @@ from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from .config import (
@@ -94,6 +94,8 @@ class TaskCreatePayload(BaseModel):
     grid_cols: int = 8
     grid_padding: int = 0
     grid_gap: int = 0
+    grid_slot_strategy: str = "targets_then_emergent"
+    sheet_reference_images: list[str] = Field(default_factory=list)
 
 
 class TaskUpdatePayload(BaseModel):
@@ -114,6 +116,8 @@ class TaskUpdatePayload(BaseModel):
     grid_cols: Optional[int] = None
     grid_padding: Optional[int] = None
     grid_gap: Optional[int] = None
+    grid_slot_strategy: Optional[str] = None
+    sheet_reference_images: Optional[list[str]] = None
 
 
 class ItemCreatePayload(BaseModel):
@@ -695,6 +699,8 @@ def create_app() -> FastAPI:
                 "grid_cols": payload.grid_cols,
                 "grid_padding": payload.grid_padding,
                 "grid_gap": payload.grid_gap,
+                "grid_slot_strategy": payload.grid_slot_strategy,
+                "sheet_reference_images": payload.sheet_reference_images,
             },
         )
         return _task_payload(task["task_id"])
@@ -719,6 +725,8 @@ def create_app() -> FastAPI:
                 payload.grid_cols,
                 payload.grid_padding,
                 payload.grid_gap,
+                payload.grid_slot_strategy,
+                payload.sheet_reference_images,
             )
             if any(value is not None for value in runtime_fields):
                 await run_in_threadpool(
@@ -731,6 +739,8 @@ def create_app() -> FastAPI:
                     grid_cols=payload.grid_cols,
                     grid_padding=payload.grid_padding,
                     grid_gap=payload.grid_gap,
+                    grid_slot_strategy=payload.grid_slot_strategy,
+                    sheet_reference_images=payload.sheet_reference_images,
                 )
             return _task_payload(task_id)
         except Exception as exc:

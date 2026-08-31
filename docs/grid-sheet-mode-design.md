@@ -227,6 +227,16 @@ tile review 状态：
 
 `grid_sheet` 不能复用单 item prompt，但仍然应该复用 brief / 意图识别。
 
+### Single Target Variants
+
+`grid_sheet` 还支持 `single_target_variants` 槽位策略：一个明确 item 占满整张 sheet，所有格子都是该 item 的候选变体，不属于 emergent pool。产品 planner 根据 item brief 生成每格差异维度，并保留同一资产身份、用途、视角和主体类别；差异只用于候选探索，例如轮廓、材质、配色、主题装饰组合和光效强度。
+
+- Agent 不手工逐格命题或改写 variant brief。
+- variant brief 必须由产品 planner 生成并保存 provider/model provenance。
+- 所有 variant tile 的 `target_item_id` 指向同一个 item，可分别采纳并进入该 item 候选池。
+- 参考图属于 sheet run 输入；provider 提交前先上传并以真实 `image_urls` 参数传入，不能只在 prompt 中声称使用参考图。
+- 参考图默认只约束资产类型、视角、构图、比例和材质语言，不要求复制参考图中的具体城池。
+
 规划 sheet 时，既定目标 item 必须先生成 brief。sheet prompt 的输入是一组 slots，其中 bound slots 来自明确 item，emergent slots 只来自本轮 sheet 的空余容量：
 
 ```json
@@ -454,6 +464,8 @@ item 工作台只增加来源展示：
 | 2026-05-08 | sheet 容量不等于 item 数量；emergent slots 不预创建 item，涌现好图进入批次级涌现池。 | 用户可能只要 10 个明确图标，却用 6x6 生成 36 个槽位；把 26 个空余槽位膨胀成 item 会让产品心智失真。 |
 | 2026-05-08 | Sheet Review 需要支持 crop box 调整后等距重切。 | 图像模型经常画出“看起来像网格”的装饰边界，但它不保证和数学裁切线对齐；校准层比只靠 prompt 更可靠。 |
 | 2026-05-08 | Sheet Review 支持逐条拖动 x/y 切线，外框也作为可拖动切线保存。 | 只调外框无法修正某一行或某一列的局部偏移；真实切片必须以用户校准后的数学线为准。 |
+| 2026-08-12 | 新增 `single_target_variants` 槽位策略；一个 item 可占满整张 sheet 作为多候选变体。 | “同一主题出 16 个版本择优”不是 15 个涌现资产，也不应膨胀成 16 个 item。 |
+| 2026-08-12 | Grid Sheet i2i 参考图必须通过 provider 的上传与 `image_urls` 字段真实提交。 | 仅把本地路径或“参考此图”写进文本不构成图生图。 |
 
 ## Update Log
 
@@ -468,6 +480,7 @@ item 工作台只增加来源展示：
 | 2026-05-07 | grid sheet 规划改为 brief-first，并自动生成 emergent slots 填满 sheet 容量。 |
 | 2026-05-08 | grid sheet brief 补齐支持已有候选图 item，不再因 `image_generated` 状态阻断规划。 |
 | 2026-05-08 | 新增 [Grid Sheet Mode PRD](./grid-sheet-mode-prd.md)，用于指导下一阶段 UI 心智和验收标准。 |
+| 2026-08-12 | 设计补充单目标多变体与 Grid Sheet i2i 参考图输入。 |
 | 2026-05-08 | Web grid sheet 工作区改成 Targets / Sheet Runs / Tile Review 三列结构，减少 item 流程和 sheet 流程的心智混淆。 |
 | 2026-05-08 | 更新 PRD 和设计记录：固定目标 item 数量与 sheet 容量拆开，新增批次级涌现池作为涌现 tile 的归属。 |
 | 2026-05-08 | 新增切图校准要求：prompt 禁止装饰网格倾向，UI 支持 crop box 外框调整和重切。 |
