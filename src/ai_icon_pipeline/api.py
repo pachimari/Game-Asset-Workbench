@@ -765,7 +765,7 @@ def create_app() -> FastAPI:
         try:
             archive_path = await run_in_threadpool(export_starred_images_zip, task_id)
             task = load_task(task_id)
-            filename = f"{_download_filename_fragment(task.get('task_name', task_id))}_starred-images.zip"
+            filename = f"{_download_filename_fragment(task_id)}-starred-images.zip"
             return FileResponse(
                 archive_path,
                 media_type="application/zip",

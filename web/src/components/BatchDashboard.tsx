@@ -361,6 +361,20 @@ export default function BatchDashboard({
       : selectedSheetBoundSlots
   const selectedTileSlot = selectedSheet?.slots.find((slot) => slot.cell_id === selectedTile?.cell_id)
   const selectedTileLinkedItem = items.find((item) => item.item_id === selectedTileTarget)
+  const emergentFavorites = sheets.flatMap((sheet) =>
+    sheet.tiles
+      .filter((tile) => tile.review_status === 'emergent' && tile.image_url)
+      .map((tile) => ({ sheet, tile })),
+  )
+
+  function openEmergentFavorite(sheetId: string, cellId: string) {
+    setSheetSelection({ taskId: task.task_id, sheetId })
+    setSelectedTileCellId(cellId)
+    window.requestAnimationFrame(() => {
+      document.getElementById('grid-sheet-workflow')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   function updateSelectedSheetLine(axis: 'x' | 'y', index: number, value: number) {
     if (!selectedSheet) return
     setLineDrafts((current) => {
@@ -862,7 +876,7 @@ export default function BatchDashboard({
       </section>
 
       {gridSheetEnabled ? (
-        <section className="mb-4 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
+        <section id="grid-sheet-workflow" className="mb-4 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
           <div className="border-b border-outline-variant/10 px-4 py-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
@@ -1506,6 +1520,42 @@ export default function BatchDashboard({
         </section>
       ) : null}
 
+      {gridSheetEnabled && emergentFavorites.length > 0 ? (
+        <section className="mb-4 overflow-hidden rounded-xl border border-amber-300/18 bg-surface-container-low">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Icon name="auto_awesome" className="text-[18px] text-amber-200" />
+                <span className="text-sm font-black text-on-surface">涌现收藏</span>
+                <span className="rounded-full bg-amber-300/12 px-2 py-0.5 text-[11px] font-black text-amber-100">
+                  {emergentFavorites.length}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                这里汇总当前批次所有整图中标记为“涌现好图”的切片；收藏压缩包也会包含它们。
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 p-4 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-8">
+            {emergentFavorites.map(({ sheet, tile }) => (
+              <button
+                key={`${sheet.sheet_id}-${tile.cell_id}`}
+                type="button"
+                onClick={() => openEmergentFavorite(sheet.sheet_id, tile.cell_id)}
+                className="group overflow-hidden rounded-xl border border-amber-300/18 bg-surface-container-highest text-left transition-colors hover:border-amber-300/50"
+                title={`打开 ${sheet.sheet_id} · ${tile.cell_id}`}
+              >
+                <img src={tile.image_url ?? ''} alt={`${sheet.sheet_id} ${tile.cell_id}`} className="aspect-square w-full object-cover" />
+                <div className="px-2.5 py-2">
+                  <div className="truncate font-mono text-[11px] font-black text-on-surface">{tile.cell_id}</div>
+                  <div className="mt-0.5 truncate text-[10px] text-amber-100">{sheet.sheet_id} · 点击查看</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -1549,7 +1599,7 @@ export default function BatchDashboard({
               onClick={() => void onExportStarredImages()}
               className="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-container disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {actionBusy ? '处理中…' : '导出星标压缩包'}
+              {actionBusy ? '处理中…' : '导出收藏压缩包'}
             </button>
             <button
               type="button"

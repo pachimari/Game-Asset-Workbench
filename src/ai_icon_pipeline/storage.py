@@ -1155,6 +1155,7 @@ def export_starred_images_zip(task_id: str) -> Path:
         "task_name": task.get("task_name", task_id),
         "exported_at": utc_now(),
         "items": [],
+        "emergent_tiles": [],
     }
     flat_rows: list[dict[str, str]] = []
     exported_count = 0
@@ -1201,12 +1202,15 @@ def export_starred_images_zip(task_id: str) -> Path:
                     exported_files.append(archive_name)
                     flat_rows.append(
                         {
+                            "source_type": "item_starred_version",
                             "item_id": item["item_id"],
                             "title": item.get("title", ""),
                             "version": version,
                             "provider": str(artifact.get("provider") or ""),
                             "model": str(artifact.get("model") or ""),
                             "candidate_id": str(candidate_id),
+                            "sheet_id": str(candidate.get("sheet_id") or ""),
+                            "cell_id": str(candidate.get("cell_id") or ""),
                             "grouped_path": archive_name,
                             "flat_path": flat_archive_name,
                         }
@@ -1227,6 +1231,66 @@ def export_starred_images_zip(task_id: str) -> Path:
             if item_manifest["starred_versions"]:
                 manifest["items"].append(item_manifest)
 
+        sheets_root = task_dir(task_id) / "sheets"
+        if sheets_root.exists():
+            for current_sheet_dir in sorted(sheets_root.iterdir()):
+                sheet_path = current_sheet_dir / "sheet.json"
+                if not current_sheet_dir.is_dir() or not sheet_path.exists():
+                    continue
+                try:
+                    sheet = read_json(sheet_path)
+                except (OSError, ValueError, json.JSONDecodeError):
+                    continue
+                sheet_id = str(sheet.get("sheet_id") or current_sheet_dir.name)
+                for tile in sheet.get("tiles") or []:
+                    if tile.get("review_status") != "emergent":
+                        continue
+                    image_path = tile.get("image_path")
+                    if not image_path:
+                        continue
+                    source_path = (current_sheet_dir / str(image_path)).resolve()
+                    try:
+                        source_path.relative_to(current_sheet_dir.resolve())
+                    except ValueError:
+                        continue
+                    if not source_path.is_file():
+                        continue
+
+                    cell_id = str(tile.get("cell_id") or "unknown_cell")
+                    safe_sheet_id = _safe_path_fragment(sheet_id)
+                    safe_cell_id = _safe_path_fragment(cell_id)
+                    suffix = source_path.suffix or ".png"
+                    file_name = f"{safe_sheet_id}_{safe_cell_id}_emergent{suffix}"
+                    archive_name = f"emergent/{safe_sheet_id}/{file_name}"
+                    flat_archive_name = f"flat/{file_name}"
+                    archive.write(source_path, arcname=archive_name)
+                    archive.write(source_path, arcname=flat_archive_name)
+                    manifest["emergent_tiles"].append(
+                        {
+                            "sheet_id": sheet_id,
+                            "cell_id": cell_id,
+                            "review_status": "emergent",
+                            "model": sheet.get("model"),
+                            "files": [archive_name],
+                        }
+                    )
+                    flat_rows.append(
+                        {
+                            "source_type": "emergent_tile",
+                            "item_id": "",
+                            "title": f"涌现好图 {cell_id}",
+                            "version": "",
+                            "provider": "grid_sheet",
+                            "model": str(sheet.get("model") or ""),
+                            "candidate_id": f"{sheet_id}_{cell_id}",
+                            "sheet_id": sheet_id,
+                            "cell_id": cell_id,
+                            "grouped_path": archive_name,
+                            "flat_path": flat_archive_name,
+                        }
+                    )
+                    exported_count += 1
+
         if exported_count == 0:
             raise ValueError("当前批次还没有星标图可导出")
 
@@ -1238,12 +1302,15 @@ def export_starred_images_zip(task_id: str) -> Path:
         writer = csv.DictWriter(
             csv_buffer,
             fieldnames=[
+                "source_type",
                 "item_id",
                 "title",
                 "version",
                 "provider",
                 "model",
                 "candidate_id",
+                "sheet_id",
+                "cell_id",
                 "grouped_path",
                 "flat_path",
             ],

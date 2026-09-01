@@ -30,7 +30,7 @@ Game Asset Workbench 用来把一批游戏资产需求，跑过一条完整的�
 4. 在 Web UI 中查看候选图
 5. 星标你觉得好的结果
 6. 确认当前采用图
-7. 导出整批星标图为 ZIP
+7. 导出整批收藏图为 ZIP（包含正式目标星标图与 Grid Sheet 涌现好图）
 
 这个项目最重要的几个关键词是：
 
@@ -229,7 +229,7 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.api_launcher --host 0.0.0.0 --port 80
 5. 在 Web UI 的候选池里筛图
 6. 星标你觉得好的图
 7. 确认当前候选
-8. 导出整批星标图
+8. 导出整批收藏图；Grid Sheet 中标记的涌现好图也会一起导出
 
 如果你更喜欢手动操作，也可以直接在 Web UI 里逐步推进，而不是强制走 CLI。
 
@@ -288,7 +288,9 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli task metrics task_001 --json
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli runtime resolve task_001 item_001 --step image_generation --json
 ```
 
-### 查看和导出星标图
+### 查看和导出收藏图
+
+批次导出会同时收集正式目标的星标候选，以及 Grid Sheet 中尚未创建正式目标、但已标记为“涌现好图”的切片。
 
 ```bash
 PYTHONPATH=src python3 -m ai_icon_pipeline.cli image starred task_001 --json

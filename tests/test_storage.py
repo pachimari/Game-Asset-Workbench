@@ -103,6 +103,7 @@ class StorageSafetyTests(unittest.TestCase):
         headers = api._download_headers("任务_星标图.zip", "task_starred-images.zip")
         self.assertIn('filename="task_starred-images.zip"', headers["Content-Disposition"])
         self.assertIn("filename*=UTF-8''%E4%BB%BB%E5%8A%A1_%E6%98%9F%E6%A0%87%E5%9B%BE.zip", headers["Content-Disposition"])
+        headers["Content-Disposition"].encode("latin-1")
 
     def test_create_custom_provider_accepts_none_api_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -903,6 +904,46 @@ class StorageSafetyTests(unittest.TestCase):
                 self.assertIn("item_001_锐锋阵·暴击/item_001_锐锋阵·暴击_v001_candidate_01.png", names)
                 self.assertIn("flat/item_001_锐锋阵·暴击_v001_candidate_01.png", names)
                 self.assertIn("manifest.csv", names)
+
+    def test_export_starred_images_includes_emergent_sheet_tiles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
+                task = storage.create_task(task_name="涌现收藏")
+                current_sheet_dir = storage.task_dir(task["task_id"]) / "sheets" / "sheet_v001"
+                tile_dir = current_sheet_dir / "images" / "tiles"
+                tile_dir.mkdir(parents=True, exist_ok=True)
+                (tile_dir / "r02c02.png").write_bytes(b"png")
+                storage.write_json(
+                    current_sheet_dir / "sheet.json",
+                    {
+                        "sheet_id": "sheet_v001",
+                        "model": "mock-image-v1",
+                        "tiles": [
+                            {
+                                "cell_id": "r02c02",
+                                "review_status": "emergent",
+                                "image_path": "images/tiles/r02c02.png",
+                            },
+                            {
+                                "cell_id": "r02c03",
+                                "review_status": "pending",
+                                "image_path": "images/tiles/r02c03.png",
+                            },
+                        ],
+                    },
+                )
+
+                archive_path = storage.export_starred_images_zip(task["task_id"])
+                with zipfile.ZipFile(archive_path) as archive:
+                    names = archive.namelist()
+                    manifest = json.loads(archive.read("manifest.json"))
+                    csv_text = archive.read("manifest.csv").decode("utf-8")
+
+                self.assertIn("emergent/sheet_v001/sheet_v001_r02c02_emergent.png", names)
+                self.assertIn("flat/sheet_v001_r02c02_emergent.png", names)
+                self.assertEqual(len(manifest["emergent_tiles"]), 1)
+                self.assertEqual(manifest["emergent_tiles"][0]["cell_id"], "r02c02")
+                self.assertIn("emergent_tile", csv_text)
 
     def test_provider_set_default_updates_global_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
