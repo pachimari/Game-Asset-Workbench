@@ -72,6 +72,7 @@ from .settings import (
 )
 
 PROVIDER_TYPE_CHOICES = ["openai_compatible", "async_image", "gemini_native"]
+PROTOCOL_VARIANT_CHOICES = ["generic", "nanoback_v1"]
 
 
 STEP_CHOICES = [STEP_BRIEF_GENERATION, STEP_IMAGE_PROMPT, STEP_IMAGE_GENERATION]
@@ -169,6 +170,8 @@ COMMAND_SPECS = {
             "--grid-cols",
             "--grid-padding",
             "--grid-gap",
+            "--grid-slot-strategy",
+            "--sheet-reference-image",
         ],
         "supports_json": True,
         "output": {"type": "object", "keys": ["task_id", "task_name", "project_background", "style_requirements", "asset_domain"]},
@@ -297,7 +300,7 @@ COMMAND_SPECS = {
     "provider-add": {
         "group": "provider",
         "description": "Add one custom provider",
-        "args": ["--label", "--provider-type", "--base-url", "--api-key", "--image-max-concurrency"],
+        "args": ["--label", "--provider-type", "--protocol-variant", "--base-url", "--api-key", "--image-max-concurrency"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["providers", "custom_providers"]},
         "errors": ["VALIDATION_ERROR"],
@@ -305,7 +308,7 @@ COMMAND_SPECS = {
     "provider-update": {
         "group": "provider",
         "description": "Update one provider config",
-        "args": ["provider_id", "--label", "--provider-type", "--base-url", "--api-key", "--image-max-concurrency"],
+        "args": ["provider_id", "--label", "--provider-type", "--protocol-variant", "--base-url", "--api-key", "--image-max-concurrency"],
         "supports_json": True,
         "output": {"type": "object", "keys": ["providers", "custom_providers"]},
         "errors": ["PROVIDER_NOT_FOUND", "VALIDATION_ERROR"],
@@ -712,6 +715,7 @@ def _list_provider_entries() -> list[dict]:
                 "id": provider_id,
                 "label": config.get("label", provider_id),
                 "provider_type": config.get("provider_type"),
+                "protocol_variant": config.get("protocol_variant", "generic"),
                 "base_url": config.get("base_url", ""),
                 "model_count": len(config.get("models", [])),
                 "builtin": True,
@@ -726,6 +730,7 @@ def _list_provider_entries() -> list[dict]:
                 "id": provider_id,
                 "label": config.get("label", provider_id),
                 "provider_type": config.get("provider_type"),
+                "protocol_variant": config.get("protocol_variant", "generic"),
                 "base_url": config.get("base_url", ""),
                 "model_count": len(config.get("models", [])),
                 "builtin": False,
@@ -1005,6 +1010,16 @@ def build_parser() -> argparse.ArgumentParser:
     update_task_parser.add_argument("--grid-cols", type=int)
     update_task_parser.add_argument("--grid-padding", type=int)
     update_task_parser.add_argument("--grid-gap", type=int)
+    update_task_parser.add_argument(
+        "--grid-slot-strategy",
+        choices=["targets_then_emergent", "single_target_variants"],
+    )
+    update_task_parser.add_argument(
+        "--sheet-reference-image",
+        action="append",
+        dest="sheet_reference_images",
+        help="Task-relative reference image path; repeat for multiple images",
+    )
     task_metrics_parser = subparsers.add_parser("task-metrics", help="Show batch workflow metrics", parents=[common_parser])
     task_metrics_parser.add_argument("task_id")
 
@@ -1084,6 +1099,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_add = subparsers.add_parser("provider-add", help="Add one custom provider", parents=[common_parser])
     provider_add.add_argument("--label", required=True)
     provider_add.add_argument("--provider-type", required=True, choices=PROVIDER_TYPE_CHOICES)
+    provider_add.add_argument("--protocol-variant", choices=PROTOCOL_VARIANT_CHOICES, default="generic")
     provider_add.add_argument("--base-url", required=True)
     provider_add.add_argument("--api-key", default="")
     provider_add.add_argument("--image-max-concurrency", type=int)
@@ -1091,6 +1107,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_update.add_argument("provider_id")
     provider_update.add_argument("--label")
     provider_update.add_argument("--provider-type", choices=PROVIDER_TYPE_CHOICES)
+    provider_update.add_argument("--protocol-variant", choices=PROTOCOL_VARIANT_CHOICES)
     provider_update.add_argument("--base-url")
     provider_update.add_argument("--api-key")
     provider_update.add_argument("--image-max-concurrency", type=int)
@@ -1315,6 +1332,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_add_group.set_defaults(command="provider-add")
     provider_add_group.add_argument("--label", required=True)
     provider_add_group.add_argument("--provider-type", required=True, choices=PROVIDER_TYPE_CHOICES)
+    provider_add_group.add_argument("--protocol-variant", choices=PROTOCOL_VARIANT_CHOICES, default="generic")
     provider_add_group.add_argument("--base-url", required=True)
     provider_add_group.add_argument("--api-key", default="")
     provider_add_group.add_argument("--image-max-concurrency", type=int)
@@ -1323,6 +1341,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_update_group.add_argument("provider_id")
     provider_update_group.add_argument("--label")
     provider_update_group.add_argument("--provider-type", choices=PROVIDER_TYPE_CHOICES)
+    provider_update_group.add_argument("--protocol-variant", choices=PROTOCOL_VARIANT_CHOICES)
     provider_update_group.add_argument("--base-url")
     provider_update_group.add_argument("--api-key")
     provider_update_group.add_argument("--image-max-concurrency", type=int)
@@ -1677,6 +1696,7 @@ def main(argv: list[str] | None = None) -> int:
             result = create_custom_provider(
                 label=args.label,
                 provider_type=args.provider_type,
+                protocol_variant=args.protocol_variant,
                 base_url=args.base_url,
                 api_key=args.api_key,
                 image_max_concurrency=max(1, args.image_max_concurrency)
@@ -1695,6 +1715,7 @@ def main(argv: list[str] | None = None) -> int:
             result = update_provider_settings(
                 args.provider_id,
                 provider_type=args.provider_type,
+                protocol_variant=args.protocol_variant,
                 label=args.label,
                 base_url=args.base_url,
                 api_key=args.api_key,

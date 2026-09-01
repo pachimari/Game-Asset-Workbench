@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+from uuid import uuid4
 
 from PIL import Image
 
@@ -725,12 +726,14 @@ def submit_grid_sheet_generation(task_id: str, sheet_id: str, *, source: str = "
         aspect_ratio=runtime.get("image_aspect_ratio", "1:1"),
         resolution=runtime.get("image_resolution", "1K"),
         image_urls=reference_urls,
+        request_id=f"workbench-{uuid4()}",
     )
     sheet["status"] = "generating"
     sheet["provider"] = provider_id
     sheet["model"] = model_id
     sheet["async_job"] = {
         "provider_type": provider_settings.get("provider_type"),
+        "protocol_variant": provider_settings.get("protocol_variant", "generic"),
         "status": response.get("status", "queued"),
         "task_id": response.get("id"),
         "progress": response.get("progress", 0),
@@ -779,7 +782,7 @@ def poll_grid_sheet_generation(task_id: str, sheet_id: str, *, source: str = "cl
         save_sheet(task_id, sheet)
         return sheet
 
-    if remote_status == "completed":
+    if remote_status in {"completed", "succeeded", "success"}:
         urls = []
         result = response.get("result", {})
         if isinstance(result, dict):
@@ -791,7 +794,11 @@ def poll_grid_sheet_generation(task_id: str, sheet_id: str, *, source: str = "cl
         image_root = sheet_dir(task_id, sheet_id) / "images"
         ensure_dir(image_root)
         source_path = image_root / "source.png"
-        provider.download_result(url=urls[0], destination=source_path)
+        provider.download_result(
+            api_key=provider_settings.get("api_key", ""),
+            url=urls[0],
+            destination=source_path,
+        )
         sheet["status"] = "generated"
         sheet["source_image_path"] = "images/source.png"
         sheet["source_url"] = urls[0]

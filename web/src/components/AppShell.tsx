@@ -158,6 +158,7 @@ type Props = {
   onCreateProvider: (payload: {
     label: string
     provider_type: string
+    protocol_variant: string
     base_url: string
     api_key: string
   }) => Promise<string>
@@ -166,6 +167,7 @@ type Props = {
     payload: {
       label: string
       provider_type: string
+      protocol_variant: string
       base_url: string
       api_key?: string
     },

@@ -183,6 +183,7 @@ class ImagePollPayload(BaseModel):
 class ProviderCreatePayload(BaseModel):
     label: str
     provider_type: str
+    protocol_variant: str = "generic"
     base_url: str = ""
     api_key: Optional[str] = None
     image_max_concurrency: Optional[int] = None
@@ -191,6 +192,7 @@ class ProviderCreatePayload(BaseModel):
 class ProviderUpdatePayload(BaseModel):
     label: Optional[str] = None
     provider_type: Optional[str] = None
+    protocol_variant: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     image_max_concurrency: Optional[int] = None
@@ -303,6 +305,7 @@ def _settings_payload() -> dict:
                 "id": provider_id,
                 "label": config.get("label", provider_id),
                 "provider_type": config.get("provider_type"),
+                "protocol_variant": config.get("protocol_variant", "generic"),
                 "base_url": config.get("base_url", ""),
                 "builtin": True,
                 "api_key_masked": _mask_api_key(config.get("api_key", "")),
@@ -318,6 +321,7 @@ def _settings_payload() -> dict:
                 "id": config.get("id"),
                 "label": config.get("label", config.get("id")),
                 "provider_type": config.get("provider_type"),
+                "protocol_variant": config.get("protocol_variant", "generic"),
                 "base_url": config.get("base_url", ""),
                 "builtin": False,
                 "api_key_masked": _mask_api_key(config.get("api_key", "")),
@@ -584,6 +588,7 @@ def _provider_rows() -> list[dict]:
                 "id": provider_id,
                 "label": config.get("label", provider_id),
                 "provider_type": config.get("provider_type"),
+                "protocol_variant": config.get("protocol_variant", "generic"),
                 "base_url": config.get("base_url", ""),
                 "model_count": len(config.get("models", [])),
                 "image_max_concurrency": config.get("image_max_concurrency"),
@@ -599,6 +604,7 @@ def _provider_rows() -> list[dict]:
                 "id": provider_id,
                 "label": config.get("label", provider_id),
                 "provider_type": config.get("provider_type"),
+                "protocol_variant": config.get("protocol_variant", "generic"),
                 "base_url": config.get("base_url", ""),
                 "model_count": len(config.get("models", [])),
                 "image_max_concurrency": config.get("image_max_concurrency"),
@@ -1162,6 +1168,7 @@ def create_app() -> FastAPI:
                 create_custom_provider,
                 label=payload.label,
                 provider_type=payload.provider_type,
+                protocol_variant=payload.protocol_variant,
                 base_url=payload.base_url,
                 api_key=payload.api_key,
                 image_max_concurrency=max(1, payload.image_max_concurrency)
@@ -1179,6 +1186,7 @@ def create_app() -> FastAPI:
                 update_provider_settings,
                 provider_id,
                 provider_type=payload.provider_type,
+                protocol_variant=payload.protocol_variant,
                 label=payload.label,
                 base_url=payload.base_url,
                 api_key=payload.api_key,

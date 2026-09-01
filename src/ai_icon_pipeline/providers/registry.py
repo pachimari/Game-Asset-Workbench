@@ -3,6 +3,7 @@ from __future__ import annotations
 from .gemini_native import GeminiNativeProvider
 from .openai_compatible import OpenAICompatibleProvider, ProviderRequestError
 from .async_image import AsyncImageProvider
+from .nanoback import NanobackAsyncImageProvider
 from ..config import (
     ASYNC_IMAGE_SUPPLEMENTAL_MODELS,
     STEP_BRIEF_GENERATION,
@@ -77,6 +78,11 @@ def get_native_image_provider(provider_id: str, provider_config: dict | None = N
 
 def get_async_image_provider(provider_id: str, provider_config: dict | None = None):
     if provider_config and provider_config.get("provider_type") == "async_image":
+        if provider_config.get("protocol_variant") == "nanoback_v1":
+            return NanobackAsyncImageProvider(
+                label=provider_config.get("label", provider_id),
+                base_url=provider_config.get("base_url", ""),
+            )
         return AsyncImageProvider(
             label=provider_config.get("label", provider_id),
             base_url=provider_config.get("base_url", ""),

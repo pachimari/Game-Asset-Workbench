@@ -87,6 +87,7 @@ export type ProviderSummary = {
   id: string
   label: string
   provider_type: string
+  protocol_variant: string
   base_url: string
   model_count: number
   image_max_concurrency: number | null
@@ -263,6 +264,7 @@ export type ProviderDetail = {
   id: string
   label: string
   provider_type: string
+  protocol_variant: string
   base_url: string
   builtin: boolean
   api_key_masked: string

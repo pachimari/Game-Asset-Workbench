@@ -336,6 +336,27 @@ PYTHONPATH=src python3 -m ai_icon_pipeline.cli sheet backfill task_001 sheet_v00
 - async image provider
 - Gemini-native provider
 
+异步图片 Provider 还可以通过 `protocol_variant` 选择具体协议变体。Nanoback 应配置为：
+
+- `provider_type`: `async_image`
+- `protocol_variant`: `nanoback_v1`
+- `base_url`: `https://nanoback.jimiha.xyz/api/v1`
+
+`nanoback_v1` 适配器会完成客户端 `request_id` 生成、任务提交、状态轮询和带 Bearer 鉴权的结果下载。它使用 Nanoback 原生异步接口，不要求服务端伪装成 OpenAI Images API。当前 Nanoback v1 不支持参考图上传，因此有参考图的生成任务会明确报错，不会静默忽略输入。
+
+也可以通过 CLI 创建：
+
+```bash
+python -m ai_icon_pipeline.cli provider add \
+  --label Nanoback \
+  --provider-type async_image \
+  --protocol-variant nanoback_v1 \
+  --base-url https://nanoback.jimiha.xyz/api/v1 \
+  --api-key YOUR_KEY
+```
+
+在 Windows PowerShell 中，可将上述命令写成一行执行。API Key 建议在网页设置中录入，不要写入仓库文件或命令历史。
+
 ## CSV / TSV 导入
 
 批次页支持：

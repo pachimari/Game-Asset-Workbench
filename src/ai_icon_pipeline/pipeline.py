@@ -5,6 +5,8 @@ from contextlib import contextmanager
 from threading import BoundedSemaphore, Lock
 import shutil
 import time
+from urllib.parse import urlparse
+from uuid import uuid4
 
 from .config import (
     STATUS_ARCHIVED,
@@ -69,7 +71,17 @@ DOWNSTREAM_STEPS = {
     STEP_IMAGE_GENERATION: [],
 }
 
-PENDING_ASYNC_STATUSES = {"queued", "submitted", "processing", "pending", "running", "in_progress"}
+PENDING_ASYNC_STATUSES = {
+    "queued",
+    "submitted",
+    "processing",
+    "pending",
+    "running",
+    "in_progress",
+    "unknown",
+}
+SUCCESS_ASYNC_STATUSES = {"completed", "succeeded", "success"}
+SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 _IMAGE_PROVIDER_LIMITER_LOCK = Lock()
 _IMAGE_PROVIDER_LIMITERS: dict[str, tuple[int, BoundedSemaphore]] = {}
 IMAGE_GENERATION_MAX_RETRIES = 3
@@ -84,6 +96,10 @@ RETRYABLE_IMAGE_ERROR_MARKERS = (
     "负载已饱和",
     "temporarily unavailable",
     "remote end closed connection without response",
+    "empty reply",
+    "timed out",
+    "timeout",
+    "http/2",
 )
 PARALLEL_SAFE_STOP_STATUSES = {
     STATUS_BRIEF_GENERATED,
@@ -269,6 +285,14 @@ def _image_retry_delay(attempt_index: int) -> float:
     return IMAGE_GENERATION_RETRY_DELAYS[-1]
 
 
+def _image_suffix_for_url(url: str) -> str:
+    path = urlparse(str(url)).path.lower()
+    for suffix in SUPPORTED_IMAGE_SUFFIXES:
+        if path.endswith(suffix):
+            return suffix
+    return ".jpg"
+
+
 def _build_image_generation_payload(
     task_id: str,
     item_id: str,
@@ -293,6 +317,7 @@ def _build_image_generation_payload(
         composed_prompt += f"\nAvoid: {negative_prompt}"
 
     attempts = 0
+    async_request_id = f"workbench-{uuid4()}"
     while True:
         try:
             with _image_generation_slot(provider_id, provider_settings):
@@ -304,6 +329,7 @@ def _build_image_generation_payload(
                         prompt=composed_prompt,
                         aspect_ratio=runtime_config.get("image_aspect_ratio", "1:1"),
                         resolution=runtime_config.get("image_resolution", "1K"),
+                        request_id=async_request_id,
                     )
                     payload = {
                         "step": STEP_IMAGE_GENERATION,
@@ -320,6 +346,7 @@ def _build_image_generation_payload(
                         },
                         "async_job": {
                             "provider_type": provider_settings.get("provider_type"),
+                            "protocol_variant": provider_settings.get("protocol_variant", "generic"),
                             "status": response.get("status", "queued"),
                             "task_id": response.get("id"),
                             "progress": response.get("progress", 0),
@@ -689,7 +716,7 @@ def poll_image_generation_version(task_id: str, item_id: str, version: str, *, s
         refresh_task_summary(task_id)
         return {"task_id": task_id, "item_id": item_id, "step": STEP_IMAGE_GENERATION, "version": version, "status": STATUS_IMAGE_GENERATING}
 
-    if remote_status == "completed":
+    if remote_status in SUCCESS_ASYNC_STATUSES:
         result = response.get("result", {})
         urls = []
         if isinstance(result, dict):
@@ -701,9 +728,9 @@ def poll_image_generation_version(task_id: str, item_id: str, version: str, *, s
         candidates = []
         image_root = item_dir(task_id, item_id) / "images"
         for index, url in enumerate(urls, start=1):
-            filename = f"{version}_candidate_{index:02d}.jpg"
+            filename = f"{version}_candidate_{index:02d}{_image_suffix_for_url(url)}"
             destination = image_root / filename
-            async_provider.download_result(url=url, destination=destination)
+            async_provider.download_result(api_key=api_key, url=url, destination=destination)
             candidates.append({"candidate_id": f"candidate_{index:02d}", "image_path": filename, "source_url": url})
         artifact["async_job"] = async_job
         artifact["output"] = {"candidates": candidates}

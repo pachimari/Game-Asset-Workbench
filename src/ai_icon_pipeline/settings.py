@@ -154,6 +154,7 @@ def _default_custom_provider(
     provider_id: str | None = None,
     label: str = "自定义 Provider",
     provider_type: str = "openai_compatible",
+    protocol_variant: str = "generic",
     base_url: str = "",
     api_key: str = "",
     models: list[dict] | None = None,
@@ -162,6 +163,7 @@ def _default_custom_provider(
     return {
         "id": provider_id or f"custom_{_slugify_provider_name(label)}_{uuid4().hex[:8]}",
         "provider_type": provider_type,
+        "protocol_variant": protocol_variant or "generic",
         "label": label,
         "base_url": base_url,
         "api_key": api_key,
@@ -184,6 +186,7 @@ def _sanitize_custom_provider(provider: dict) -> dict:
         provider_id=provider.get("id"),
         label=provider.get("label", "自定义 Provider"),
         provider_type=provider.get("provider_type", "openai_compatible"),
+        protocol_variant=provider.get("protocol_variant", "generic"),
         base_url=provider.get("base_url", ""),
         api_key=provider.get("api_key", ""),
         models=provider.get("models", []),
@@ -353,6 +356,7 @@ def update_provider_settings(
     provider_id: str,
     *,
     provider_type: str | None = None,
+    protocol_variant: str | None = None,
     label: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
@@ -375,6 +379,8 @@ def update_provider_settings(
             settings.setdefault("custom_providers", []).append(provider_settings)
     if provider_type is not None:
         provider_settings["provider_type"] = provider_type
+    if protocol_variant is not None:
+        provider_settings["protocol_variant"] = protocol_variant or "generic"
     if label is not None:
         provider_settings["label"] = label
     if base_url is not None:
@@ -397,6 +403,7 @@ def create_custom_provider(
     *,
     label: str,
     provider_type: str,
+    protocol_variant: str = "generic",
     base_url: str,
     api_key: str | None = None,
     models: list[dict] | None = None,
@@ -406,6 +413,7 @@ def create_custom_provider(
     provider = _default_custom_provider(
         label=label,
         provider_type=provider_type,
+        protocol_variant=protocol_variant,
         base_url=base_url,
         api_key=api_key or "",
         models=models,

@@ -451,6 +451,7 @@ export async function saveGlobalDefaults(payload: {
 export async function createProvider(payload: {
   label: string
   provider_type: string
+  protocol_variant: string
   base_url: string
   api_key: string
   image_max_concurrency?: number | null
@@ -466,6 +467,7 @@ export async function updateProvider(
   payload: {
     label?: string
     provider_type?: string
+    protocol_variant?: string
     base_url?: string
     api_key?: string
     image_max_concurrency?: number | null

@@ -7,6 +7,7 @@ type SettingsTab = 'providers' | 'defaults' | 'templates'
 type ProviderDraft = {
   label: string
   provider_type: string
+  protocol_variant: string
   base_url: string
   api_key: string
   image_max_concurrency: string
@@ -15,6 +16,7 @@ type ProviderDraft = {
 type ProviderPreset = {
   title: string
   provider_type: string
+  protocol_variant: string
   suggestedLabel: string
   suggestedBaseUrl: string
   description: string
@@ -81,6 +83,7 @@ const providerPresets: ProviderPreset[] = [
   {
     title: '通用第三方接口',
     provider_type: 'openai_compatible',
+    protocol_variant: 'generic',
     suggestedLabel: '新的 OpenAI 兼容接口',
     suggestedBaseUrl: 'https://your-provider.com/v1',
     description: 'OpenRouter、SiliconFlow、DeepInfra、火山方舟等大多都选这个。',
@@ -88,6 +91,7 @@ const providerPresets: ProviderPreset[] = [
   {
     title: '异步图片服务',
     provider_type: 'async_image',
+    protocol_variant: 'generic',
     suggestedLabel: '新的异步图片接口',
     suggestedBaseUrl: 'https://your-async-image-provider.com/v1',
     description: '用于候选图阶段的排队式异步图片生成。',
@@ -95,6 +99,7 @@ const providerPresets: ProviderPreset[] = [
   {
     title: 'Gemini 官方',
     provider_type: 'gemini_native',
+    protocol_variant: 'generic',
     suggestedLabel: 'Gemini 官方服务',
     suggestedBaseUrl: 'https://generativelanguage.googleapis.com',
     description: '官方 Gemini 原生接入。',
@@ -105,15 +110,25 @@ const asyncImageQuickPresets: ProviderPreset[] = [
   {
     title: 'APIMart 图片服务',
     provider_type: 'async_image',
+    protocol_variant: 'generic',
     suggestedLabel: 'APIMart GPT-Image-2',
     suggestedBaseUrl: 'https://api.apimart.ai/v1',
     description: '异步图片服务预设：预填 APIMart 接口地址，默认模型使用 gpt-image-2。',
+  },
+  {
+    title: 'Nanoback v1',
+    provider_type: 'async_image',
+    protocol_variant: 'nanoback_v1',
+    suggestedLabel: 'Nanoback 图片服务',
+    suggestedBaseUrl: 'https://nanoback.jimiha.xyz/api/v1',
+    description: '客户端 request_id 驱动的 Nanoback 异步生图协议。',
   },
 ]
 
 const EMPTY_PROVIDER: ProviderDraft = {
   label: '',
   provider_type: 'openai_compatible',
+  protocol_variant: 'generic',
   base_url: '',
   api_key: '',
   image_max_concurrency: '',
@@ -266,6 +281,7 @@ export default function GlobalSettings({
         ? {
             label: preset.suggestedLabel,
             provider_type: preset.provider_type,
+            protocol_variant: preset.protocol_variant,
             base_url: preset.suggestedBaseUrl,
           }
         : EMPTY_PROVIDER,
@@ -277,6 +293,7 @@ export default function GlobalSettings({
       ...current,
       label: current.label.trim() ? current.label : preset.suggestedLabel,
       provider_type: preset.provider_type,
+      protocol_variant: preset.protocol_variant,
       base_url: preset.suggestedBaseUrl,
     }))
   }
@@ -288,6 +305,7 @@ export default function GlobalSettings({
     setProviderDraft({
       label: provider.label,
       provider_type: provider.provider_type,
+      protocol_variant: provider.protocol_variant || 'generic',
       base_url: provider.base_url,
       api_key: '',
       image_max_concurrency:
@@ -436,6 +454,7 @@ export default function GlobalSettings({
                     setProviderDraft((current) => ({
                       ...current,
                       provider_type: event.target.value,
+                      protocol_variant: 'generic',
                     }))
                   }
                   className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3.5 py-3 text-sm text-on-surface outline-none transition-colors focus:border-primary/40"
@@ -446,6 +465,27 @@ export default function GlobalSettings({
                 </select>
               </div>
 
+              {providerDraft.provider_type === 'async_image' ? (
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
+                    异步协议变体
+                  </label>
+                  <select
+                    value={providerDraft.protocol_variant}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({
+                        ...current,
+                        protocol_variant: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3.5 py-3 text-sm text-on-surface outline-none transition-colors focus:border-primary/40"
+                  >
+                    <option value="generic">通用异步图片</option>
+                    <option value="nanoback_v1">Nanoback v1</option>
+                  </select>
+                </div>
+              ) : null}
+
               <div>
                 <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.18em] text-outline">
                   适用说明
@@ -454,7 +494,9 @@ export default function GlobalSettings({
                   {providerDraft.provider_type === 'openai_compatible'
                     ? '如果是第三方聚合平台，通常就选这个。'
                     : providerDraft.provider_type === 'async_image'
-                      ? '适合需要提交任务并检查生成结果的图片服务，包括 APIMart GPT-Image-2。'
+                      ? providerDraft.protocol_variant === 'nanoback_v1'
+                        ? '适配 Nanoback 的 request_id、轮询状态与 Bearer 鉴权下载。'
+                        : '适合需要提交任务并检查生成结果的通用图片服务，包括 APIMart GPT-Image-2。'
                       : '适合 Gemini 官方原生模型能力。'}
                 </div>
               </div>
@@ -476,7 +518,9 @@ export default function GlobalSettings({
                     providerDraft.provider_type === 'openai_compatible'
                       ? 'https://your-provider.com/v1'
                       : providerDraft.provider_type === 'async_image'
-                        ? 'https://your-async-image-provider.com/v1'
+                        ? providerDraft.protocol_variant === 'nanoback_v1'
+                          ? 'https://nanoback.jimiha.xyz/api/v1'
+                          : 'https://your-async-image-provider.com/v1'
                         : 'https://generativelanguage.googleapis.com'
                   }
                 />
@@ -488,7 +532,7 @@ export default function GlobalSettings({
                     <div>
                       <div className="text-xs font-bold text-on-surface">异步图片快捷预设</div>
                       <div className="mt-1 text-xs leading-5 text-on-surface-variant">
-                        APIMart 属于异步图片服务，这里只预填接口地址和服务名称，不改变协议类型。
+                        APIMart 使用通用异步图片协议；Nanoback 使用 request_id 驱动的 v1 协议变体。
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -689,6 +733,13 @@ export default function GlobalSettings({
                       <div className="text-xs text-on-surface">
                         <div className="font-bold">{meta.label}</div>
                         <div className="mt-1 text-[11px] text-on-surface-variant">{meta.hint}</div>
+                        {provider.provider_type === 'async_image' ? (
+                          <div className="mt-1 text-[11px] font-mono text-primary">
+                            {provider.protocol_variant === 'nanoback_v1'
+                              ? 'nanoback_v1'
+                              : 'generic'}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="min-w-0 text-xs">

@@ -754,6 +754,7 @@ export function useWorkbenchController() {
   async function handleCreateProvider(payload: {
     label: string
     provider_type: string
+    protocol_variant: string
     base_url: string
     api_key: string
   }) {
@@ -782,6 +783,7 @@ export function useWorkbenchController() {
     payload: {
       label: string
       provider_type: string
+      protocol_variant: string
       base_url: string
       api_key?: string
     },

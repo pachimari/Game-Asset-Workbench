@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import http.client
 import mimetypes
 from pathlib import Path
 from uuid import uuid4
@@ -42,6 +43,8 @@ class AsyncImageProvider:
             raise ProviderRequestError(f"{self.label} request failed: {exc.code} {body or exc.reason}") from exc
         except error.URLError as exc:
             raise ProviderRequestError(f"{self.label} request failed: {exc.reason}") from exc
+        except (TimeoutError, ConnectionError, http.client.HTTPException) as exc:
+            raise ProviderRequestError(f"{self.label} request failed: {exc}") from exc
         if int(payload.get("code", 200) or 200) >= 400:
             message = payload.get("error", {}).get("message") or payload
             raise ProviderRequestError(f"{self.label} request failed: {message}")
@@ -56,6 +59,7 @@ class AsyncImageProvider:
         aspect_ratio: str,
         resolution: str,
         image_urls: list[str] | None = None,
+        request_id: str | None = None,
     ) -> dict:
         normalized_resolution = {
             "auto": "1K",
@@ -188,7 +192,7 @@ class AsyncImageProvider:
             "raw": response,
         }
 
-    def download_result(self, *, url: str, destination: Path) -> None:
+    def download_result(self, *, api_key: str = "", url: str, destination: Path) -> None:
         req = request.Request(url, headers={"User-Agent": "ai-icon-pipeline/0.1"}, method="GET")
         try:
             with request.urlopen(req, timeout=120) as response:

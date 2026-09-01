@@ -24,6 +24,21 @@ from ai_icon_pipeline.providers.registry import ProviderRequestError
 
 
 class StorageSafetyTests(unittest.TestCase):
+    def test_flat_update_task_parser_includes_grid_sheet_options(self) -> None:
+        args = cli.build_parser().parse_args(
+            [
+                "update-task",
+                "task_001",
+                "--grid-slot-strategy",
+                "targets_then_emergent",
+                "--sheet-reference-image",
+                "references/item.png",
+            ]
+        )
+
+        self.assertEqual(args.grid_slot_strategy, "targets_then_emergent")
+        self.assertEqual(args.sheet_reference_images, ["references/item.png"])
+
     def test_delete_task_rejects_invalid_task_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(storage, "TASKS_DIR", Path(tmpdir)):
@@ -683,6 +698,12 @@ class StorageSafetyTests(unittest.TestCase):
 
         self.assertTrue(version.startswith("v"))
         self.assertEqual(fake_provider.submit_generation.call_count, 2)
+        request_ids = [
+            call.kwargs["request_id"]
+            for call in fake_provider.submit_generation.call_args_list
+        ]
+        self.assertEqual(request_ids[0], request_ids[1])
+        self.assertTrue(request_ids[0].startswith("workbench-"))
         sleep_mock.assert_called_once_with(5.0)
         self.assertEqual(payload["async_job"]["task_id"], "remote_123")
         self.assertEqual(payload["meta"]["submit_attempts"], 2)

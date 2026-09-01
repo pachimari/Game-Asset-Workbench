@@ -58,6 +58,20 @@ description: Manage provider setup inside Game Asset Workbench, including protoc
 
 它通常只参与候选图阶段。
 
+已知协议变体：
+
+- `generic`：通用异步图片接口，沿用可配置的提交、轮询与下载约定。
+- `nanoback_v1`：Nanoback 原生异步协议。配置 `base_url=https://nanoback.jimiha.xyz/api/v1`，由客户端生成稳定的 `request_id`，提交后轮询 `/generations/{request_id}`，最终使用同一 Bearer Token 下载 `/images/` 结果。
+
+Nanoback v1 接入时还要注意：
+
+- `queued`、`pending`、`running`、`processing`、`unknown` 都属于未完成状态。
+- `succeeded`、`completed`、`success` 都按成功状态处理。
+- 提交遇到超时或连接中断时，重试必须复用同一个 `request_id`，避免重复扣费或重复任务。
+- `images` 中空的 URL 字段必须忽略，只下载非空的鉴权图片地址。
+- 当前接口没有参考图上传能力；带参考图的任务应明确失败，不得悄悄退化为纯文生图。
+- 新接入先保持 `image_max_concurrency=1`，确认服务端并发与限流表现后再逐步提高。
+
 ### `gemini_native`
 
 适用于：
@@ -128,6 +142,7 @@ description: Manage provider setup inside Game Asset Workbench, including protoc
 - [`../../src/ai_icon_pipeline/providers/registry.py`](../../src/ai_icon_pipeline/providers/registry.py)
 - [`../../src/ai_icon_pipeline/providers/openai_compatible.py`](../../src/ai_icon_pipeline/providers/openai_compatible.py)
 - [`../../src/ai_icon_pipeline/providers/async_image.py`](../../src/ai_icon_pipeline/providers/async_image.py)
+- [`../../src/ai_icon_pipeline/providers/nanoback.py`](../../src/ai_icon_pipeline/providers/nanoback.py)
 - [`../../src/ai_icon_pipeline/providers/gemini_native.py`](../../src/ai_icon_pipeline/providers/gemini_native.py)
 - [`../../web/src/components/GlobalSettings.tsx`](../../web/src/components/GlobalSettings.tsx)
 
